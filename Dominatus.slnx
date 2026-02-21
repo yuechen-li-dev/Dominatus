@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="samples/Dominatus.SimConsole/Dominatus.SimConsole.csproj" Id="8741215a-1ee9-4090-823d-b2860b51c3e1" />
+  <Project Path="src/Dominatus.Core/Dominatus.Core.csproj" />
+  <Project Path="src/Dominatus.OptFlow/Dominatus.OptFlow.csproj" Id="31fe4a4a-c059-4ea0-a3c8-2837b15f8b77" />
+</Solution>
