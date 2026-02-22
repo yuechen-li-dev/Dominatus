@@ -53,7 +53,31 @@ public sealed class HfsmInstance
 
         // 1) transitions / interrupts (can unwind)
         if (TryApplyFirstTransition(world, agent))
-            return; // M0: one structural change per tick keeps it simple & debuggable
+            return;
+
+        // 1.5) Root overlay tick (IntentRoot) when KeepRootFrame is enabled
+        if (Options.KeepRootFrame && _stack.Count >= 1 && _stack[0].Id.Equals(RootId))
+        {
+            var root = _stack[0];
+            var rootRes = root.Runner.Tick(world, agent);
+
+            if (rootRes.HasEmittedStep && rootRes.EmittedStep is not null)
+            {
+                Trace?.OnYield(root.Id, world.Clock.Time, rootRes.EmittedStep);
+                ApplyEmittedStep(world, agent, root.Id, rootRes.EmittedStep);
+                return; // one structural change per tick
+            }
+
+            if (rootRes.CompletedStatus is NodeStatus.Succeeded)
+            {
+                // Root should not naturally complete; re-enter it if it does
+                root.Runner.Enter(world, agent);
+            }
+            else if (rootRes.CompletedStatus is NodeStatus.Failed)
+            {
+                root.Runner.Enter(world, agent);
+            }
+        }
 
         // 2) tick leaf
         var leaf = _stack[^1];
@@ -225,16 +249,32 @@ public sealed class HfsmInstance
 
         var best = scores[bestIndex];
 
-        // Determine current "intent": we treat the frame above Root as the intent.
-        // With KeepRootFrame=true, stack is typically [Root, Intent...].
+        // Determine current "intent": we treat the decision ID as the current option ID.
         string? currentId = _currentDecisionId;
         float currentScore = _currentDecisionScore;
 
         // If we don't have memory yet, seed it from current top (if any).
         if (currentId is null && _stack.Count >= 2)
         {
+            // NOTE: stack state ids may not match option ids; ideally option id is separate.
+            //  currentId = _stack[^1].Id.Value;
+            // For now, keep your existing behavior:
             currentId = _stack[^1].Id.Value;
             currentScore = 0f;
+        }
+
+        // IMPORTANT: Recompute currentScore from *this tick's* evaluated scores,
+        // so hysteresis compares against the current option's real score (not stale cached score).
+        if (currentId is not null)
+        {
+            for (int i = 0; i < scores.Length; i++)
+            {
+                if (string.Equals(scores[i].Id, currentId, StringComparison.Ordinal))
+                {
+                    currentScore = scores[i].Score;
+                    break;
+                }
+            }
         }
 
         // Policy checks.
@@ -279,6 +319,9 @@ public sealed class HfsmInstance
                 Scores = scores
             });
 
+            _currentDecisionId = currentId;
+            _currentDecisionScore = currentScore;
+
             return;
         }
 
@@ -298,6 +341,9 @@ public sealed class HfsmInstance
                     Reason = "HysteresisBlock",
                     Scores = scores
                 });
+
+                _currentDecisionId = currentId;
+                _currentDecisionScore = currentScore;
 
                 return;
             }
@@ -322,6 +368,9 @@ public sealed class HfsmInstance
                     Reason = "TiePreferCurrent",
                     Scores = scores
                 });
+
+                _currentDecisionId = currentId;
+                _currentDecisionScore = currentScore;
 
                 return;
             }
