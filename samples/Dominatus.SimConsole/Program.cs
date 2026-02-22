@@ -10,7 +10,7 @@ using Dominatus.OptFlow;
 var world = new AiWorld();
 
 var graph = BuildGraph();
-var brain = new HfsmInstance(graph)
+var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true })
 {
     Trace = new ConsoleTrace()
 };

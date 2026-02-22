@@ -119,4 +119,28 @@ public class HfsmInstanceTests
             while (true) yield return new Dominatus.Core.Nodes.Steps.WaitSeconds(999f);
         }
     }
+
+    [Fact]
+    public void RootInterrupt_KeepsRootFrame_WhenOptionEnabled()
+    {
+        var world = new AiWorld();
+        bool alerted = false;
+
+        var graph = TestGraphs.InterruptGraph((w, a) => alerted);
+        var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
+        var agent = new AiAgent(brain);
+
+        world.Add(agent);
+
+        // init + Root pushes Idle
+        world.Tick(0.01f);
+        Assert.Equal(new[] { (StateId)"Root", (StateId)"Idle" }, brain.GetActivePath());
+
+        // trigger interrupt
+        alerted = true;
+        world.Tick(0.01f);
+
+        // With KeepRootFrame enabled, Root stays and Combat is pushed above it.
+        Assert.Equal(new[] { (StateId)"Root", (StateId)"Combat" }, brain.GetActivePath());
+    }
 }

@@ -10,9 +10,22 @@ public sealed class HfsmInstance
     public HfsmGraph Graph { get; }
     public IAiTraceSink? Trace { get; set; }
 
+    public HfsmOptions Options { get; }
+
+    private StateId RootId => Graph.Root;
+
     private readonly List<ActiveState> _stack = new();
 
-    public HfsmInstance(HfsmGraph graph) => Graph = graph;
+    public HfsmInstance(HfsmGraph graph)
+        : this(graph, new HfsmOptions())
+    {
+    }
+
+    public HfsmInstance(HfsmGraph graph, HfsmOptions options)
+    {
+        Graph = graph ?? throw new ArgumentNullException(nameof(graph));
+        Options = options ?? new HfsmOptions(); // safe even if caller passes null
+    }
 
     public void Initialize(AiWorld world, AiAgent agent)
     {
@@ -78,7 +91,18 @@ public sealed class HfsmInstance
                 if (SafeWhen(tr, world, agent))
                 {
                     UnwindAbove(world, agent, i, $"Interrupt:{tr.Reason}");
-                    ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
+
+                    if (Options.KeepRootFrame && i == 0 && frame.Id.Equals(RootId))
+                    {
+                        // Keep Root, just push the target above it.
+                        PushState(world, agent, tr.Target, tr.Reason);
+                        Trace?.OnTransition(frame.Id, tr.Target, world.Clock.Time, tr.Reason);
+                    }
+                    else
+                    {
+                        ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
+                    }
+
                     return true;
                 }
             }
@@ -90,7 +114,18 @@ public sealed class HfsmInstance
                 if (SafeWhen(tr, world, agent))
                 {
                     UnwindAbove(world, agent, i, $"Transition:{tr.Reason}");
-                    ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
+
+                    if (Options.KeepRootFrame && i == 0 && frame.Id.Equals(RootId))
+                    {
+                        // Keep Root, just push the target above it.
+                        PushState(world, agent, tr.Target, tr.Reason);
+                        Trace?.OnTransition(frame.Id, tr.Target, world.Clock.Time, tr.Reason);
+                    }
+                    else
+                    {
+                        ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
+                    }
+
                     return true;
                 }
             }
@@ -110,7 +145,18 @@ public sealed class HfsmInstance
         switch (step)
         {
             case Goto g:
-                ReplaceTopWith(world, agent, g.Target, g.Reason ?? "Goto", fromState);
+                var reason = g.Reason ?? "Goto";
+
+                if (Options.KeepRootFrame && _stack.Count == 1 && _stack[0].Id.Equals(RootId))
+                {
+                    // If we're only at Root, treat Goto as "push above Root"
+                    PushState(world, agent, g.Target, reason);
+                    Trace?.OnTransition(_stack[0].Id, g.Target, world.Clock.Time, reason);
+                }
+                else
+                {
+                    ReplaceTopWith(world, agent, g.Target, reason, fromState);
+                }
                 break;
 
             case Push p:
