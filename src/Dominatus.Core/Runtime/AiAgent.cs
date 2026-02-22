@@ -6,6 +6,8 @@ namespace Dominatus.Core.Runtime;
 public sealed class AiAgent
 {
     public Blackboard.Blackboard Bb { get; } = new();
+    public AiEventBus Events { get; } = new();
+
     public HfsmInstance Brain { get; }
 
     public AiAgent(HfsmInstance brain) => Brain = brain;

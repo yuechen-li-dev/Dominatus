@@ -30,4 +30,9 @@ public static class Ai
         float minCommitSeconds = 0.75f,
         float tieEpsilon = 0.0001f)
         => new(options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
+
+    public static WaitEvent<T> Event<T>(
+    Func<T, bool>? filter = null,
+    Action<AiAgent, T>? onConsumed = null) where T : notnull
+    => new(filter, onConsumed);
 }

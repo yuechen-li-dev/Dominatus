@@ -1,3 +1,8 @@
-﻿namespace Dominatus.Core.Runtime;
+﻿using System.Threading;
 
-public readonly record struct AiCtx(AiWorld World, AiAgent Agent);
+namespace Dominatus.Core.Runtime;
+public readonly record struct AiCtx(
+    AiWorld World,
+    AiAgent Agent,
+    AiEventBus Events,
+    CancellationToken Cancel);

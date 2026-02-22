@@ -19,3 +19,6 @@ public sealed record Fail(string? Reason = null) : AiStep;
 public sealed record Decide(
     IReadOnlyList<UtilityOption> Options,
     DecisionPolicy Policy) : AiStep;
+public sealed record WaitEvent<T>(
+    Func<T, bool>? Filter = null,
+    Action<AiAgent, T>? OnConsumed = null) : AiStep where T : notnull;
