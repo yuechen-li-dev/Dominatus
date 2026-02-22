@@ -29,10 +29,18 @@ public static class Ai
         float hysteresis = 0.10f,
         float minCommitSeconds = 0.75f,
         float tieEpsilon = 0.0001f)
-        => new(options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
+        => new(new DecisionSlot("Default"), options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
+
+    public static Decide Decide(
+        DecisionSlot slot,
+        IReadOnlyList<UtilityOption> options,
+        float hysteresis = 0.10f,
+        float minCommitSeconds = 0.75f,
+        float tieEpsilon = 0.0001f)
+        => new(slot, options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
 
     public static WaitEvent<T> Event<T>(
-    Func<T, bool>? filter = null,
-    Action<AiAgent, T>? onConsumed = null) where T : notnull
-    => new(filter, onConsumed);
+        Func<T, bool>? filter = null,
+        Action<AiAgent, T>? onConsumed = null) where T : notnull
+        => new(filter, onConsumed);
 }

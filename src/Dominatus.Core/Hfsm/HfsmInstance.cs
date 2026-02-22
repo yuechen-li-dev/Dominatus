@@ -18,9 +18,14 @@ public sealed class HfsmInstance
     private readonly List<ActiveState> _stack = new();
 
     // Decisions
-    private string? _currentDecisionId;
-    private float _currentDecisionScore;
-    private float _lastDecisionSwitchTime;
+    private sealed class DecisionMemory
+    {
+        public string? CurrentOptionId;
+        public float CurrentScore;
+        public float LastSwitchTime;
+    }
+
+    private readonly Dictionary<DecisionSlot, DecisionMemory> _decisionMem = new();
 
     // Cadence gate + dirty filtering
     private float _nextInterruptScanTime;
@@ -310,18 +315,13 @@ public sealed class HfsmInstance
         var best = scores[bestIndex];
 
         // Determine current "intent": we treat the decision ID as the current option ID.
-        string? currentId = _currentDecisionId;
-        float currentScore = _currentDecisionScore;
+        var mem = _decisionMem.TryGetValue(d.Slot, out var m)
+            ? m
+            : (_decisionMem[d.Slot] = new DecisionMemory());
 
-        // If we don't have memory yet, seed it from current top (if any).
-        if (currentId is null && _stack.Count >= 2)
-        {
-            // NOTE: stack state ids may not match option ids; ideally option id is separate.
-            //  currentId = _stack[^1].Id.Value;
-            // For now, keep your existing behavior:
-            currentId = _stack[^1].Id.Value;
-            currentScore = 0f;
-        }
+        string? currentId = mem.CurrentOptionId;
+        float currentScore = mem.CurrentScore;
+        float lastSwitchTime = mem.LastSwitchTime;
 
         // IMPORTANT: Recompute currentScore from *this tick's* evaluated scores,
         // so hysteresis compares against the current option's real score (not stale cached score).
@@ -341,13 +341,13 @@ public sealed class HfsmInstance
         var policy = d.Policy;
         var now = world.Clock.Time;
 
-        bool canSwitchByTime = (now - _lastDecisionSwitchTime) >= policy.MinCommitSeconds;
+        bool canSwitchByTime = (world.Clock.Time - lastSwitchTime) >= policy.MinCommitSeconds;
 
         // If current is same as best, refresh memory and don't switch.
         if (currentId is not null && string.Equals(currentId, best.Id, StringComparison.Ordinal))
         {
-            _currentDecisionId = best.Id;
-            _currentDecisionScore = best.Score;
+            mem.CurrentOptionId = best.Id;
+            mem.CurrentScore = best.Score;
 
             Trace?.OnYield(fromState, now, new DecisionReport
             {
@@ -379,8 +379,8 @@ public sealed class HfsmInstance
                 Scores = scores
             });
 
-            _currentDecisionId = currentId;
-            _currentDecisionScore = currentScore;
+            mem.CurrentOptionId = currentId;
+            mem.CurrentScore = currentScore;
 
             return;
         }
@@ -402,8 +402,8 @@ public sealed class HfsmInstance
                     Scores = scores
                 });
 
-                _currentDecisionId = currentId;
-                _currentDecisionScore = currentScore;
+                mem.CurrentOptionId = currentId;
+                mem.CurrentScore = currentScore;
 
                 return;
             }
@@ -429,8 +429,8 @@ public sealed class HfsmInstance
                     Scores = scores
                 });
 
-                _currentDecisionId = currentId;
-                _currentDecisionScore = currentScore;
+                mem.CurrentOptionId = currentId;
+                mem.CurrentScore = currentScore;
 
                 return;
             }
@@ -447,8 +447,8 @@ public sealed class HfsmInstance
             // If top is already target, just refresh memory.
             if (_stack.Count >= 2 && _stack[^1].Id.Equals(best.Target))
             {
-                _currentDecisionId = best.Id;
-                _currentDecisionScore = best.Score;
+                mem.CurrentOptionId = best.Id;
+                mem.CurrentScore = best.Score;
 
                 Trace?.OnYield(fromState, now, new DecisionReport
                 {
@@ -474,9 +474,9 @@ public sealed class HfsmInstance
             ReplaceTopWith(world, agent, best.Target, $"Decide:{best.Id}", fromState);
         }
 
-        _currentDecisionId = best.Id;
-        _currentDecisionScore = best.Score;
-        _lastDecisionSwitchTime = now;
+        mem.CurrentOptionId = best.Id;
+        mem.CurrentScore = best.Score;
+        mem.LastSwitchTime = now;
 
         Trace?.OnYield(fromState, now, new DecisionReport
         {

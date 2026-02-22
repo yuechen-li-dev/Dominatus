@@ -17,6 +17,7 @@ public sealed record Succeed(string? Reason = null) : AiStep;
 
 public sealed record Fail(string? Reason = null) : AiStep;
 public sealed record Decide(
+    DecisionSlot Slot,
     IReadOnlyList<UtilityOption> Options,
     DecisionPolicy Policy) : AiStep;
 public sealed record WaitEvent<T>(
