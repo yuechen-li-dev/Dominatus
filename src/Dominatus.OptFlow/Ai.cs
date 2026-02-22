@@ -1,6 +1,7 @@
 ﻿using Dominatus.Core;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
+using Dominatus.Core.Decision;
 
 namespace Dominatus.OptFlow;
 
@@ -19,4 +20,14 @@ public static class Ai
     public static Succeed Succeed(string? reason = null) => new(reason);
 
     public static Fail Fail(string? reason = null) => new(reason);
+
+    public static UtilityOption Option(string id, Consideration score, StateId target)
+    => new(id, target, score);
+
+    public static Decide Decide(
+        IReadOnlyList<UtilityOption> options,
+        float hysteresis = 0.10f,
+        float minCommitSeconds = 0.75f,
+        float tieEpsilon = 0.0001f)
+        => new(options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
 }

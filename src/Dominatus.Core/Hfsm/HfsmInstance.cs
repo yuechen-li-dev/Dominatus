@@ -2,6 +2,7 @@
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
 using Dominatus.Core.Trace;
+using Dominatus.Core.Decision;
 
 namespace Dominatus.Core.Hfsm;
 
@@ -15,6 +16,11 @@ public sealed class HfsmInstance
     private StateId RootId => Graph.Root;
 
     private readonly List<ActiveState> _stack = new();
+
+    //Decisions
+    private string? _currentDecisionId;
+    private float _currentDecisionScore;
+    private float _lastDecisionSwitchTime;
 
     public HfsmInstance(HfsmGraph graph)
         : this(graph, new HfsmOptions())
@@ -183,10 +189,197 @@ public sealed class HfsmInstance
                     Initialize(world, agent);
                 break;
 
+            case Decide d:
+                ApplyDecision(world, agent, fromState, d);
+                break;
+
             default:
                 // Unknown emitted step: ignore in M0
                 break;
         }
+    }
+
+    private void ApplyDecision(AiWorld world, AiAgent agent, StateId fromState, Decide d)
+    {
+        // If no options, do nothing.
+        if (d.Options is null || d.Options.Count == 0)
+            return;
+
+        // Evaluate options.
+        var scores = new (string Id, float Score, StateId Target)[d.Options.Count];
+        int bestIndex = 0;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < d.Options.Count; i++)
+        {
+            var opt = d.Options[i];
+            float s = opt.Score.Eval(world, agent);
+            scores[i] = (opt.Id, s, opt.Target);
+
+            if (s > bestScore)
+            {
+                bestScore = s;
+                bestIndex = i;
+            }
+        }
+
+        var best = scores[bestIndex];
+
+        // Determine current "intent": we treat the frame above Root as the intent.
+        // With KeepRootFrame=true, stack is typically [Root, Intent...].
+        string? currentId = _currentDecisionId;
+        float currentScore = _currentDecisionScore;
+
+        // If we don't have memory yet, seed it from current top (if any).
+        if (currentId is null && _stack.Count >= 2)
+        {
+            currentId = _stack[^1].Id.Value;
+            currentScore = 0f;
+        }
+
+        // Policy checks.
+        var policy = d.Policy;
+        var now = world.Clock.Time;
+
+        bool canSwitchByTime = (now - _lastDecisionSwitchTime) >= policy.MinCommitSeconds;
+
+        // If current is same as best, refresh memory and don't switch.
+        if (currentId is not null && string.Equals(currentId, best.Id, StringComparison.Ordinal))
+        {
+            _currentDecisionId = best.Id;
+            _currentDecisionScore = best.Score;
+
+            Trace?.OnYield(fromState, now, new DecisionReport
+            {
+                Phase = "Decide",
+                CurrentId = currentId,
+                CurrentScore = best.Score,
+                BestId = best.Id,
+                BestScore = best.Score,
+                Switched = false,
+                Reason = "BestIsCurrent",
+                Scores = scores
+            });
+
+            return;
+        }
+
+        // If we are inside commit window, do not switch (even if better).
+        if (!canSwitchByTime && currentId is not null)
+        {
+            Trace?.OnYield(fromState, now, new DecisionReport
+            {
+                Phase = "Decide",
+                CurrentId = currentId,
+                CurrentScore = currentScore,
+                BestId = best.Id,
+                BestScore = best.Score,
+                Switched = false,
+                Reason = "MinCommitActive",
+                Scores = scores
+            });
+
+            return;
+        }
+
+        // Hysteresis: require best to beat current by margin.
+        if (currentId is not null)
+        {
+            if (best.Score < (currentScore + policy.Hysteresis))
+            {
+                Trace?.OnYield(fromState, now, new DecisionReport
+                {
+                    Phase = "Decide",
+                    CurrentId = currentId,
+                    CurrentScore = currentScore,
+                    BestId = best.Id,
+                    BestScore = best.Score,
+                    Switched = false,
+                    Reason = "HysteresisBlock",
+                    Scores = scores
+                });
+
+                return;
+            }
+        }
+
+        // Tie-handling: if within epsilon, prefer staying if current exists among top ties.
+        // (We only do this if currentId exists and scores are close.)
+        if (currentId is not null)
+        {
+            float tieMax = best.Score;
+            if (MathF.Abs(tieMax - currentScore) <= policy.TieEpsilon)
+            {
+                // prefer current (no switch)
+                Trace?.OnYield(fromState, now, new DecisionReport
+                {
+                    Phase = "Decide",
+                    CurrentId = currentId,
+                    CurrentScore = currentScore,
+                    BestId = best.Id,
+                    BestScore = best.Score,
+                    Switched = false,
+                    Reason = "TiePreferCurrent",
+                    Scores = scores
+                });
+
+                return;
+            }
+        }
+
+        // Apply switch: keep Root if configured; clear everything above Root and push best target.
+        bool keepRoot = Options.KeepRootFrame && _stack.Count > 0 && _stack[0].Id.Equals(RootId);
+
+        if (keepRoot)
+        {
+            // Unwind everything above Root (index 0), then push best target.
+            UnwindAbove(world, agent, 0, $"Decide:{best.Id}");
+
+            // If top is already target, just refresh memory.
+            if (_stack.Count >= 2 && _stack[^1].Id.Equals(best.Target))
+            {
+                _currentDecisionId = best.Id;
+                _currentDecisionScore = best.Score;
+
+                Trace?.OnYield(fromState, now, new DecisionReport
+                {
+                    Phase = "Decide",
+                    CurrentId = best.Id,
+                    CurrentScore = best.Score,
+                    BestId = best.Id,
+                    BestScore = best.Score,
+                    Switched = false,
+                    Reason = "AlreadyAtTarget",
+                    Scores = scores
+                });
+
+                return;
+            }
+
+            PushState(world, agent, best.Target, $"Decide:{best.Id}");
+            Trace?.OnTransition(_stack[0].Id, best.Target, now, $"Decide:{best.Id}");
+        }
+        else
+        {
+            // No special root: replace top with best target.
+            ReplaceTopWith(world, agent, best.Target, $"Decide:{best.Id}", fromState);
+        }
+
+        _currentDecisionId = best.Id;
+        _currentDecisionScore = best.Score;
+        _lastDecisionSwitchTime = now;
+
+        Trace?.OnYield(fromState, now, new DecisionReport
+        {
+            Phase = "Decide",
+            CurrentId = currentId,
+            CurrentScore = currentScore,
+            BestId = best.Id,
+            BestScore = best.Score,
+            Switched = true,
+            Reason = "Switched",
+            Scores = scores
+        });
     }
 
     private void ReplaceTopWith(AiWorld world, AiAgent agent, StateId target, string reason, StateId from)
