@@ -7,6 +7,9 @@ using Dominatus.Core.Runtime;
 using Dominatus.Core.Trace;
 using Dominatus.OptFlow;
 
+using Dominatus.Core.Decision;
+using Dominatus.UtilityLite;
+
 var world = new AiWorld();
 
 var graph = BuildGraph();
@@ -40,52 +43,53 @@ static HfsmGraph BuildGraph()
 {
     var g = new HfsmGraph { Root = "Root" };
 
-    var root = new HfsmStateDef { Id = "Root", Node = GuardNodes.Root };
-    var idle = new HfsmStateDef { Id = "Idle", Node = GuardNodes.Idle };
-    var combat = new HfsmStateDef { Id = "Combat", Node = GuardNodes.Combat };
+    g.Add(new HfsmStateDef { Id = "Root", Node = GuardNodes.Root });
+    g.Add(new HfsmStateDef { Id = "Patrol", Node = GuardNodes.Patrol });
+    g.Add(new HfsmStateDef { Id = "Combat", Node = GuardNodes.Combat });
+    g.Add(new HfsmStateDef { Id = "Reload", Node = GuardNodes.Reload });
 
-    // Example: global-ish interrupt from any state -> Combat when Alerted.
-    // Put it on Root so it always participates (stack scan includes Root).
-    root.Interrupts.Add(new HfsmTransition(
-        When: (w, a) => a.Bb.GetOrDefault(Keys.Alerted, false),
-        Target: "Combat",
-        Reason: "RootInterrupt:Alerted"));
-
-    // Example: transition Combat -> Idle when not Alerted anymore
-    combat.Transitions.Add(new HfsmTransition(
-        When: (w, a) => !a.Bb.GetOrDefault(Keys.Alerted, false),
-        Target: "Idle",
-        Reason: "CalmDown"));
-
-    g.Add(root);
-    g.Add(idle);
-    g.Add(combat);
     return g;
 }
 static class Keys
 {
     public static readonly BbKey<bool> Alerted = new("Alerted");
+    public static readonly BbKey<bool> UnderFire = new("UnderFire");
+    public static readonly BbKey<bool> LowAmmo = new("LowAmmo");
+}
+
+static class When
+{
+    public static Consideration Always => Utility.Always;
+    public static Consideration Alerted => Utility.Bool((w, a) => a.Bb.GetOrDefault(Keys.Alerted, false));
+    public static Consideration UnderFire => Utility.Bool((w, a) => a.Bb.GetOrDefault(Keys.UnderFire, false));
+    public static Consideration LowAmmo => Utility.Bool((w, a) => a.Bb.GetOrDefault(Keys.LowAmmo, false));
 }
 
 static class GuardNodes
 {
     public static IEnumerator<AiStep> Root(AiWorld w, AiAgent a)
     {
-        // Root immediately pushes Idle, then just idles forever.
-        yield return Ai.Push("Idle", "Boot");
+        // 10Hz cadence decision loop
         while (true)
-            yield return Ai.Wait(999f);
+        {
+            yield return Ai.Wait(0.10f);
+
+            yield return Ai.Decide([
+                Ai.Option("Combat", When.Alerted, "Combat"),
+                Ai.Option("Reload", When.LowAmmo, "Reload"),
+                Ai.Option("Patrol", When.Always, "Patrol"),
+            ], hysteresis: 0.10f, minCommitSeconds: 0.75f);
+        }
     }
 
-    public static IEnumerator<AiStep> Idle(AiWorld w, AiAgent a)
+    public static IEnumerator<AiStep> Patrol(AiWorld w, AiAgent a)
     {
         while (true)
         {
-            // heartbeat
             yield return Ai.Wait(0.25f);
-
-            if (a.Bb.GetOrDefault(Keys.Alerted, false))
-                yield return Ai.Goto("Combat", "Alerted");
+            // Demo: flip alert at t≈2
+            if (w.Clock.Time >= 2.0f)
+                a.Bb.Set(Keys.Alerted, true);
         }
     }
 
@@ -93,14 +97,24 @@ static class GuardNodes
     {
         while (true)
         {
-            // pretend attack loop
-            yield return Ai.Wait(1.5f);
-            yield return Ai.Wait(0.5f);
+            yield return Ai.Wait(0.25f);
 
-            // demo: auto-clear alerted after a while (simulating target lost)
-            if (w.Clock.Time > 6.0f)
+            // Demo: calm down at t≈6
+            if (w.Clock.Time >= 6.0f)
                 a.Bb.Set(Keys.Alerted, false);
+
+            // Demo: low ammo at t≈3.5 (to show min-commit/hysteresis interplay)
+            if (w.Clock.Time >= 3.5f)
+                a.Bb.Set(Keys.LowAmmo, true);
         }
+    }
+
+    public static IEnumerator<AiStep> Reload(AiWorld w, AiAgent a)
+    {
+        // Simple one-shot action: wait, then clear low ammo and return
+        yield return Ai.Wait(1.0f);
+        a.Bb.Set(Keys.LowAmmo, false);
+        yield return Ai.Succeed("Reloaded");
     }
 }
 
