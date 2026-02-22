@@ -21,4 +21,15 @@ public sealed record Decide(
     DecisionPolicy Policy) : AiStep;
 public sealed record WaitEvent<T>(
     Func<T, bool>? Filter = null,
-    Action<AiAgent, T>? OnConsumed = null) : AiStep where T : notnull;
+    Action<AiAgent, T>? OnConsumed = null
+) : AiStep, IWaitEvent where T : notnull
+{
+    public bool TryConsume(AiCtx ctx)
+    {
+        if (!ctx.Events.TryConsume<T>(Filter, out var value))
+            return false;
+
+        OnConsumed?.Invoke(ctx.Agent, value);
+        return true;
+    }
+}

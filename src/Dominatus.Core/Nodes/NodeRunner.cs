@@ -31,14 +31,7 @@ public sealed class NodeRunner
     private WaitUntil? _waitUntil;
 
     private CancellationTokenSource? _cts;
-    private WaitEventState? _waitEvent;
-
-    private sealed class WaitEventState
-    {
-        public required Type EventType { get; init; }
-        public required Func<object, bool> Match { get; init; }
-        public required Action<object>? OnConsumed { get; init; }
-    }
+    private IWaitEvent? _waitEvent;
 
     public NodeRunner(AiNode node) => _node = node;
 
@@ -74,50 +67,6 @@ public sealed class NodeRunner
 
         _cts?.Dispose();
         _cts = null;
-    }
-
-    private NodeTickResult HandleWaitEvent(AiStep step, AiAgent agent)
-    {
-        var t = step.GetType();
-        if (!t.IsGenericType || t.GetGenericTypeDefinition() != typeof(WaitEvent<>))
-            return NodeTickResult.Emitted(step);
-
-        var eventType = t.GetGenericArguments()[0];
-
-        // Extract Filter and OnConsumed via reflection
-        var filterProp = t.GetProperty(nameof(WaitEvent<int>.Filter))!;
-        var onConsumedProp = t.GetProperty(nameof(WaitEvent<int>.OnConsumed))!;
-
-        var filter = filterProp.GetValue(step);         // Delegate? (Func<T,bool>?)
-        var onConsumed = onConsumedProp.GetValue(step); // Delegate? (Action<AiAgent,T>?)
-
-        Func<object, bool> match = obj =>
-        {
-            if (obj is null || obj.GetType() != eventType) return false;
-            if (filter is null) return true;
-
-            // invoke filter(obj)
-            return (bool)filter.DynamicInvoke(obj)!;
-        };
-
-        Action<object>? onConsumedObj = null;
-        if (onConsumed is not null)
-        {
-            onConsumedObj = obj =>
-            {
-                // invoke (agent, obj)
-                onConsumed.DynamicInvoke(agent, obj);
-            };
-        }
-
-        _waitEvent = new WaitEventState
-        {
-            EventType = eventType,
-            Match = match,
-            OnConsumed = onConsumedObj
-        };
-
-        return NodeTickResult.Running();
     }
 
     public NodeTickResult Tick(AiWorld world, AiAgent agent)
@@ -160,12 +109,10 @@ public sealed class NodeRunner
 
         if (_waitEvent is not null)
         {
-            if (cancel.IsCancellationRequested)
+            if (ctx.Cancel.IsCancellationRequested)
                 return NodeTickResult.Completed(NodeStatus.Failed);
 
-            // Consume from bus if possible
-            bool consumed = TryConsumeEvent(ctx, _waitEvent);
-            if (!consumed)
+            if (!_waitEvent.TryConsume(ctx))
                 return NodeTickResult.Running();
 
             _waitEvent = null;
@@ -207,60 +154,13 @@ public sealed class NodeRunner
             case Goto or Push or Pop or Succeed or Fail:
                 return NodeTickResult.Emitted(step);
 
-            case WaitEvent<>:
-                // Can't pattern match open generic directly; handle via reflection below
-                return HandleWaitEvent(step, agent);
+            case IWaitEvent we:
+                _waitEvent = we;
+                return NodeTickResult.Running();
 
             default:
                 // Unknown step: treat as emitted so brain can decide later (future-proof)
                 return NodeTickResult.Emitted(step);
         }
-    }
-
-    private static bool TryConsumeEvent(AiCtx ctx, WaitEventState st)
-    {
-        // We must route by event type. This is a simple reflection-free switch via object matching.
-        // We stored a Match delegate that checks type+filter.
-        // But AiEventBus is typed at compile time, so we use its object queue and our Match function.
-
-        // We'll use a small trick: TryConsume<T> needs T at compile time, so we do dynamic dispatch here.
-        // Still fine for M2b.
-
-        return TryConsumeEventDynamic(ctx, st);
-    }
-
-    private static bool TryConsumeEventDynamic(AiCtx ctx, WaitEventState st)
-    {
-        // Use reflection to call AiEventBus.TryConsume<T> once per wait type.
-        // This is M2b acceptable; later we can specialize / cache delegates.
-        var bus = ctx.Events;
-        var method = typeof(AiEventBus).GetMethod(nameof(AiEventBus.TryConsume))!;
-        var generic = method.MakeGenericMethod(st.EventType);
-
-        object?[] args =
-        {
-        // filter: Func<T,bool>?
-        null,
-        // out T value
-        null!
-        };
-
-        // We can't pass the filter strongly typed here; instead we do Match(object).
-        // So set filter to a wrapper: (T t) => st.Match(t)
-        var funcType = typeof(Func<,>).MakeGenericType(st.EventType, typeof(bool));
-        args[0] = Delegate.CreateDelegate(
-            funcType,
-            st.Match.Target!,
-            st.Match.Method);
-
-        bool ok = (bool)generic.Invoke(bus, args)!;
-
-        if (!ok) return false;
-
-        var valueObj = args[1];
-        if (valueObj is null) return false;
-
-        st.OnConsumed?.Invoke(valueObj);
-        return true;
     }
 }
