@@ -17,10 +17,15 @@ public sealed class HfsmInstance
 
     private readonly List<ActiveState> _stack = new();
 
-    //Decisions
+    // Decisions
     private string? _currentDecisionId;
     private float _currentDecisionScore;
     private float _lastDecisionSwitchTime;
+
+    // Cadence gate + dirty filtering
+    private float _nextInterruptScanTime;
+    private float _nextTransitionScanTime;
+    private uint _lastRevisionScanned;
 
     public HfsmInstance(HfsmGraph graph)
         : this(graph, new HfsmOptions())
@@ -37,6 +42,10 @@ public sealed class HfsmInstance
     {
         ClearStack(world, agent, "Init");
         PushState(world, agent, Graph.Root, "Init");
+        _nextInterruptScanTime = 0f;
+        _nextTransitionScanTime = 0f;
+        _lastRevisionScanned = agent.Bb.Revision;
+        agent.Bb.ClearDirty();
     }
 
     public IReadOnlyList<StateId> GetActivePath()
@@ -51,9 +60,35 @@ public sealed class HfsmInstance
         if (_stack.Count == 0)
             Initialize(world, agent);
 
-        // 1) transitions / interrupts (can unwind)
-        if (TryApplyFirstTransition(world, agent))
-            return;
+        var now = world.Clock.Time;
+
+        bool scanInterrupts = Options.InterruptScanIntervalSeconds <= 0f || now >= _nextInterruptScanTime;
+        bool scanTransitions = Options.TransitionScanIntervalSeconds <= 0f || now >= _nextTransitionScanTime;
+
+        // If nothing changed in BB since last scan, and we’re not forced by cadence,
+        // you can skip scanning entirely.
+        // (This matters if you set intervals > 0, but BB unchanged.)
+        bool bbChanged = agent.Bb.Revision != _lastRevisionScanned;
+        if (!bbChanged && !scanInterrupts && !scanTransitions)
+        {
+            // No scan this tick
+        }
+        else
+        {
+            // 1) transitions / interrupts (can unwind)
+            if (TryApplyFirstTransition(world, agent, scanInterrupts, scanTransitions))
+                return;
+
+            // Update cadence timers only if scans were permitted
+            if (scanInterrupts && Options.InterruptScanIntervalSeconds > 0f)
+                _nextInterruptScanTime = now + Options.InterruptScanIntervalSeconds;
+
+            if (scanTransitions && Options.TransitionScanIntervalSeconds > 0f)
+                _nextTransitionScanTime = now + Options.TransitionScanIntervalSeconds;
+
+            _lastRevisionScanned = agent.Bb.Revision;
+            agent.Bb.ClearDirty();
+        }
 
         // 1.5) Root overlay tick (IntentRoot) when KeepRootFrame is enabled
         if (Options.KeepRootFrame && _stack.Count >= 1 && _stack[0].Id.Equals(RootId))
@@ -106,7 +141,7 @@ public sealed class HfsmInstance
         // else Running: do nothing
     }
 
-    private bool TryApplyFirstTransition(AiWorld world, AiAgent agent)
+    private bool TryApplyFirstTransition(AiWorld world, AiAgent agent, bool scanInterrupts, bool scanTransitions)
     {
         // Scan from top -> bottom
         for (int i = _stack.Count - 1; i >= 0; i--)
@@ -114,52 +149,74 @@ public sealed class HfsmInstance
             var frame = _stack[i];
             var def = frame.Def;
 
-            // Interrupts first
-            for (int t = 0; t < def.Interrupts.Count; t++)
+            var dirty = agent.Bb.DirtyKeys;
+
+            if (scanInterrupts)
             {
-                var tr = def.Interrupts[t];
-                if (SafeWhen(tr, world, agent))
+                // Interrupts first
+                for (int t = 0; t < def.Interrupts.Count; t++)
                 {
-                    UnwindAbove(world, agent, i, $"Interrupt:{tr.Reason}");
-
-                    if (Options.KeepRootFrame && i == 0 && frame.Id.Equals(RootId))
+                    var tr = def.Interrupts[t];
+                    if (!ShouldEval(dirty, tr.DependsOnKeys)) continue;
+                    if (SafeWhen(tr, world, agent))
                     {
-                        // Keep Root, just push the target above it.
-                        PushState(world, agent, tr.Target, tr.Reason);
-                        Trace?.OnTransition(frame.Id, tr.Target, world.Clock.Time, tr.Reason);
-                    }
-                    else
-                    {
-                        ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
-                    }
+                        UnwindAbove(world, agent, i, $"Interrupt:{tr.Reason}");
 
-                    return true;
+                        if (Options.KeepRootFrame && i == 0 && frame.Id.Equals(RootId))
+                        {
+                            // Keep Root, just push the target above it.
+                            PushState(world, agent, tr.Target, tr.Reason);
+                            Trace?.OnTransition(frame.Id, tr.Target, world.Clock.Time, tr.Reason);
+                        }
+                        else
+                        {
+                            ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
+                        }
+
+                        return true;
+                    }
                 }
             }
 
             // Then normal transitions
-            for (int t = 0; t < def.Transitions.Count; t++)
+            if (scanTransitions)
             {
-                var tr = def.Transitions[t];
-                if (SafeWhen(tr, world, agent))
+                for (int t = 0; t < def.Transitions.Count; t++)
                 {
-                    UnwindAbove(world, agent, i, $"Transition:{tr.Reason}");
-
-                    if (Options.KeepRootFrame && i == 0 && frame.Id.Equals(RootId))
+                    var tr = def.Transitions[t];
+                    if (!ShouldEval(dirty, tr.DependsOnKeys)) continue;
+                    if (SafeWhen(tr, world, agent))
                     {
-                        // Keep Root, just push the target above it.
-                        PushState(world, agent, tr.Target, tr.Reason);
-                        Trace?.OnTransition(frame.Id, tr.Target, world.Clock.Time, tr.Reason);
-                    }
-                    else
-                    {
-                        ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
-                    }
+                        UnwindAbove(world, agent, i, $"Transition:{tr.Reason}");
 
-                    return true;
+                        if (Options.KeepRootFrame && i == 0 && frame.Id.Equals(RootId))
+                        {
+                            // Keep Root, just push the target above it.
+                            PushState(world, agent, tr.Target, tr.Reason);
+                            Trace?.OnTransition(frame.Id, tr.Target, world.Clock.Time, tr.Reason);
+                        }
+                        else
+                        {
+                            ReplaceTopWith(world, agent, tr.Target, tr.Reason, from: frame.Id);
+                        }
+
+                        return true;
+                    }
                 }
             }
         }
+
+        return false;
+    }
+
+    private static bool ShouldEval(IReadOnlyCollection<string> dirty, IReadOnlyList<string>? deps)
+    {
+        if (deps is null || deps.Count == 0) return true;
+        if (dirty.Count == 0) return false;
+
+        for (int i = 0; i < deps.Count; i++)
+            if (dirty.Contains(deps[i]))
+                return true;
 
         return false;
     }

@@ -5,4 +5,5 @@ namespace Dominatus.Core.Hfsm;
 public sealed record HfsmTransition(
     Func<AiWorld, AiAgent, bool> When,
     StateId Target,
-    string Reason);
+    string Reason,
+    IReadOnlyList<string>? DependsOnKeys = null);

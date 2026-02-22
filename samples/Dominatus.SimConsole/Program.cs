@@ -13,7 +13,7 @@ using Dominatus.UtilityLite;
 var world = new AiWorld();
 
 var graph = BuildGraph();
-var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true })
+var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true, InterruptScanIntervalSeconds = 0.05f, TransitionScanIntervalSeconds = 0.10f, })
 {
     Trace = new ConsoleTrace()
 };
