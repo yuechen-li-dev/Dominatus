@@ -79,7 +79,6 @@ public sealed class NodeRunner
         var cts = _cts;
         var cancel = cts?.Token ?? CancellationToken.None;
         var ctx = new AiCtx(world, agent, agent.Events, cancel, world.View, world.Mail);
-        _it = _node(ctx);
 
         // If canceled, treat as failed completion so HFSM can pop/unwind.
         if (cancel.IsCancellationRequested)
