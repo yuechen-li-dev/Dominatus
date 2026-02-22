@@ -75,19 +75,22 @@ public sealed class HfsmInstance
         }
         else
         {
-            // 1) transitions / interrupts (can unwind)
-            if (TryApplyFirstTransition(world, agent, scanInterrupts, scanTransitions))
-                return;
+            if (scanInterrupts || scanTransitions)
+            {
+                // 1) transitions / interrupts (can unwind)
+                if (TryApplyFirstTransition(world, agent, scanInterrupts, scanTransitions))
+                    return;
 
-            // Update cadence timers only if scans were permitted
-            if (scanInterrupts && Options.InterruptScanIntervalSeconds > 0f)
-                _nextInterruptScanTime = now + Options.InterruptScanIntervalSeconds;
+                // Update cadence timers only if scans were permitted
+                if (scanInterrupts && Options.InterruptScanIntervalSeconds > 0f)
+                    _nextInterruptScanTime = now + Options.InterruptScanIntervalSeconds;
 
-            if (scanTransitions && Options.TransitionScanIntervalSeconds > 0f)
-                _nextTransitionScanTime = now + Options.TransitionScanIntervalSeconds;
+                if (scanTransitions && Options.TransitionScanIntervalSeconds > 0f)
+                    _nextTransitionScanTime = now + Options.TransitionScanIntervalSeconds;
 
-            _lastRevisionScanned = agent.Bb.Revision;
-            agent.Bb.ClearDirty();
+                _lastRevisionScanned = agent.Bb.Revision;
+                agent.Bb.ClearDirty();
+            }
         }
 
         // 1.5) Root overlay tick (IntentRoot) when KeepRootFrame is enabled
