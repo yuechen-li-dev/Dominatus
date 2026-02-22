@@ -15,7 +15,7 @@ public static class TestGraphs
         g.Add(new HfsmStateDef
         {
             Id = "Root",
-            Node = static (w, a) => EmptyForever()
+            Node = static _ => EmptyForever()
         });
         return new HfsmInstance(g);
 
@@ -32,19 +32,19 @@ public static class TestGraphs
         g.Add(new HfsmStateDef
         {
             Id = "Root",
-            Node = static (w, a) => Root()
+            Node = static _ => Root()
         });
 
         g.Add(new HfsmStateDef
         {
             Id = "A",
-            Node = static (w, a) => A()
+            Node = static _ => A()
         });
 
         g.Add(new HfsmStateDef
         {
             Id = "B",
-            Node = static (w, a) => B()
+            Node = static _ => B()
         });
 
         return g;
@@ -72,9 +72,9 @@ public static class TestGraphs
     {
         var g = new HfsmGraph { Root = "Root" };
 
-        var root = new HfsmStateDef { Id = "Root", Node = static (w, a) => Root() };
-        var idle = new HfsmStateDef { Id = "Idle", Node = static (w, a) => Idle() };
-        var combat = new HfsmStateDef { Id = "Combat", Node = static (w, a) => Combat() };
+        var root = new HfsmStateDef { Id = "Root", Node = static _ => Root() };
+        var idle = new HfsmStateDef { Id = "Idle", Node = static _ => Idle() };
+        var combat = new HfsmStateDef { Id = "Combat", Node = static _ => Combat() };
 
         root.Interrupts.Add(new HfsmTransition(interruptWhen, "Combat", "Alerted"));
 

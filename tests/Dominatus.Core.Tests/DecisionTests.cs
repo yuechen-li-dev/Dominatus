@@ -18,7 +18,7 @@ public class DecisionTests
     static Consideration FromKey(BbKey<float> key)
         => new((w, a) => a.Bb.GetOrDefault(key, 0f));
 
-    static IEnumerator<AiStep> Root(AiWorld w, AiAgent a)
+    static IEnumerator<AiStep> Root(AiCtx ctx)
     {
         while (true)
         {
@@ -30,7 +30,7 @@ public class DecisionTests
         }
     }
 
-    static IEnumerator<AiStep> Loop(AiWorld w, AiAgent a)
+    static IEnumerator<AiStep> Loop(AiCtx ctx)
     {
         while (true) yield return new WaitSeconds(999f);
     }

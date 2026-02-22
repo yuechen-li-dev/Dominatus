@@ -67,7 +67,7 @@ static class When
 
 static class GuardNodes
 {
-    public static IEnumerator<AiStep> Root(AiWorld w, AiAgent a)
+    public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
         // 10Hz cadence decision loop
         while (true)
@@ -82,8 +82,10 @@ static class GuardNodes
         }
     }
 
-    public static IEnumerator<AiStep> Patrol(AiWorld w, AiAgent a)
+    public static IEnumerator<AiStep> Patrol(AiCtx ctx)
     {
+        var w = ctx.World;
+        var a = ctx.Agent;
         while (true)
         {
             yield return Ai.Wait(0.25f);
@@ -93,8 +95,11 @@ static class GuardNodes
         }
     }
 
-    public static IEnumerator<AiStep> Combat(AiWorld w, AiAgent a)
+    public static IEnumerator<AiStep> Combat(AiCtx ctx)
     {
+        var w = ctx.World;
+        var a = ctx.Agent;
+
         while (true)
         {
             yield return Ai.Wait(0.25f);
@@ -109,8 +114,10 @@ static class GuardNodes
         }
     }
 
-    public static IEnumerator<AiStep> Reload(AiWorld w, AiAgent a)
+    public static IEnumerator<AiStep> Reload(AiCtx ctx)
     {
+        var w = ctx.World;
+        var a = ctx.Agent;
         // Simple one-shot action: wait, then clear low ammo and return
         yield return Ai.Wait(1.0f);
         a.Bb.Set(Keys.LowAmmo, false);

@@ -9,7 +9,7 @@ public static class Ai
 {
     public static WaitSeconds Wait(float seconds) => new(seconds);
 
-    public static WaitUntil Until(Func<AiWorld, AiAgent, bool> pred) => new(pred);
+    public static WaitUntil Until(Func<AiCtx, bool> pred) => new(pred);
 
     public static Goto Goto(StateId target, string? reason = null) => new(target, reason);
 

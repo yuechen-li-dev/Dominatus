@@ -14,7 +14,7 @@ public class NodeRunnerTests
         var brain = TestGraphs.MakeBareBrain(); // unused here
         var agent = new AiAgent(brain);
 
-        static IEnumerator<AiStep> Node(AiWorld w, AiAgent a)
+        static IEnumerator<AiStep> Node(AiCtx ctx)
         {
             yield return new WaitSeconds(1.0f);
             yield return new Succeed("done");
@@ -48,9 +48,9 @@ public class NodeRunnerTests
 
         bool ready = false;
 
-        IEnumerator<AiStep> Node(AiWorld w, AiAgent a)
+        IEnumerator<AiStep> Node(AiCtx ctx)
         {
-            yield return new WaitUntil((ww, aa) => ready);
+            yield return new WaitUntil((ctx => ready));
             yield return new Succeed("ok");
         }
 
@@ -80,7 +80,7 @@ public class NodeRunnerTests
         var brain = TestGraphs.MakeBareBrain();
         var agent = new AiAgent(brain);
 
-        static IEnumerator<AiStep> Node(AiWorld w, AiAgent a)
+        static IEnumerator<AiStep> Node(AiCtx ctx)
         {
             yield return new WaitSeconds(0.1f);
             // end without Succeed()

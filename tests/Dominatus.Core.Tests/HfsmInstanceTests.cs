@@ -68,19 +68,19 @@ public class HfsmInstanceTests
         var root = new HfsmStateDef
         {
             Id = "Root",
-            Node = static (w, a) => Root()
+            Node = static _ => Root()
         };
 
         var idle = new HfsmStateDef
         {
             Id = "Idle",
-            Node = static (w, a) => Idle()
+            Node = static _ => Idle()
         };
 
         g.Add(root);
         g.Add(idle);
-        g.Add(new HfsmStateDef { Id = "InterruptTarget", Node = static (w, a) => Loop() });
-        g.Add(new HfsmStateDef { Id = "TransitionTarget", Node = static (w, a) => Loop() });
+        g.Add(new HfsmStateDef { Id = "InterruptTarget", Node = static _ => Loop() });
+        g.Add(new HfsmStateDef { Id = "TransitionTarget", Node = static _ => Loop() });
 
         idle.Interrupts.Add(new HfsmTransition((w, a) => fireInterrupt, "InterruptTarget", "I"));
         idle.Transitions.Add(new HfsmTransition((w, a) => fireTransition, "TransitionTarget", "T"));
