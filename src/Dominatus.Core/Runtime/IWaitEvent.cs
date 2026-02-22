@@ -1,7 +1,6 @@
-﻿namespace Dominatus.Core.Runtime
+﻿namespace Dominatus.Core.Runtime;
+
+public interface IWaitEvent
 {
-    public interface IWaitEvent
-    {
-        bool TryConsume(AiCtx ctx);
-    }
+    bool TryConsume(AiCtx ctx, ref EventCursor cursor);
 }

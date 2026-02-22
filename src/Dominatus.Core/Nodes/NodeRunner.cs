@@ -32,6 +32,7 @@ public sealed class NodeRunner
 
     private CancellationTokenSource? _cts;
     private IWaitEvent? _waitEvent;
+    private EventCursor _waitEventCursor;
 
     public NodeRunner(AiNode node) => _node = node;
 
@@ -63,6 +64,7 @@ public sealed class NodeRunner
         _waitSeconds = null;
         _waitUntil = null;
         _waitEvent = null;
+        _waitEventCursor = default;
         _waitStartTime = 0;
 
         _cts?.Dispose();
@@ -112,10 +114,11 @@ public sealed class NodeRunner
             if (ctx.Cancel.IsCancellationRequested)
                 return NodeTickResult.Completed(NodeStatus.Failed);
 
-            if (!_waitEvent.TryConsume(ctx))
+            if (!_waitEvent.TryConsume(ctx, ref _waitEventCursor))
                 return NodeTickResult.Running();
 
             _waitEvent = null;
+            _waitEventCursor = default;
         }
 
         // Advance enumerator
@@ -156,6 +159,7 @@ public sealed class NodeRunner
 
             case IWaitEvent we:
                 _waitEvent = we;
+                _waitEventCursor = default;
                 return NodeTickResult.Running();
 
             default:

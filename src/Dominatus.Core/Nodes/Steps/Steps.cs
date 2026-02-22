@@ -24,9 +24,9 @@ public sealed record WaitEvent<T>(
     Action<AiAgent, T>? OnConsumed = null
 ) : AiStep, IWaitEvent where T : notnull
 {
-    public bool TryConsume(AiCtx ctx)
+    public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
     {
-        if (!ctx.Events.TryConsume<T>(Filter, out var value))
+        if (!ctx.Events.TryConsume(ref cursor, Filter, out T value))
             return false;
 
         OnConsumed?.Invoke(ctx.Agent, value);
