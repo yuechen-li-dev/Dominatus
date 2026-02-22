@@ -5,7 +5,7 @@ namespace Dominatus.Core.Nodes.Steps;
 
 public sealed record WaitSeconds(float Seconds) : AiStep;
 
-public sealed record WaitUntil(Func<AiWorld, AiAgent, bool> Predicate) : AiStep;
+public sealed record WaitUntil(Func<AiCtx, bool> Predicate) : AiStep;
 
 public sealed record Goto(StateId Target, string? Reason = null) : AiStep;
 

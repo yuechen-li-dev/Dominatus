@@ -35,7 +35,7 @@ public sealed class NodeRunner
     public void Enter(AiWorld world, AiAgent agent)
     {
         Exit();
-        _it = _node(world, agent);
+        _it = _node(new AiCtx(world, agent));
     }
 
     public void Exit()
@@ -68,7 +68,7 @@ public sealed class NodeRunner
         if (_waitUntil is not null)
         {
             bool done;
-            try { done = _waitUntil.Predicate(world, agent); }
+            try { done = _waitUntil.Predicate(new AiCtx(world, agent)); }
             catch { done = false; }
 
             if (done)
