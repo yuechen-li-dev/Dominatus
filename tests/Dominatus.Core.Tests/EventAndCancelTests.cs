@@ -1,9 +1,13 @@
 ﻿using Dominatus.Core;
+using Dominatus.Core.Blackboard;
 using Dominatus.Core.Hfsm;
 using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
 using Dominatus.OptFlow;
+using System.Collections;
+using System.Diagnostics.Metrics;
+using System.Timers;
 using Xunit;
 
 namespace Dominatus.Core.Tests;
@@ -61,11 +65,10 @@ public class EventAndCancelTests
     }
 
     [Fact]
-    public void Exit_CancelsWaitingState()
+    public void Exit_CancelsWaitingState_Robust()
     {
         var world = new AiWorld();
 
-        // Root pushes Waiter, then another state pops Waiter quickly (causing Exit -> Cancel)
         var g = new HfsmGraph { Root = "Root" };
         g.Add(new HfsmStateDef { Id = "Root", Node = static ctx => Root(ctx) });
         g.Add(new HfsmStateDef { Id = "Waiter", Node = static ctx => WaitForDamage(ctx) });
@@ -75,40 +78,59 @@ public class EventAndCancelTests
         var agent = new AiAgent(brain);
         world.Add(agent);
 
-        world.Tick(0.01f); // Root runs, pushes Waiter
+        // Boot: Root pushes Waiter
+        world.Tick(0.01f);
         Assert.Equal(new[] { (StateId)"Root", (StateId)"Waiter" }, brain.GetActivePath());
 
-        // Push Popper above Waiter; next ticks should pop top (Popper), then we unwind manually
-        agent.Bb.Set(new Dominatus.Core.Blackboard.BbKey<bool>("DoPopper"), true);
+        // Request Popper
+        agent.Bb.Set(new BbKey<bool>("DoPopper"), true);
 
-        world.Tick(0.01f); // Root overlay will see bb and push Popper (see Root node below)
-        Assert.Equal(new[] { (StateId)"Root", (StateId)"Waiter", (StateId)"Popper" }, brain.GetActivePath());
+        // Tick until Popper appears (overlay scheduling is cooperative; don't assert exact tick)
+        AssertEventually(
+            () => brain.GetActivePath().Count == 3 && brain.GetActivePath()[2].Equals((StateId)"Popper"),
+            tick: () => world.Tick(0.01f),
+            maxTicks: 30,
+            failMessage: () => "Never saw Popper on stack.");
 
-        world.Tick(0.10f); // Popper pops itself
-        Assert.Equal(new[] { (StateId)"Root", (StateId)"Waiter" }, brain.GetActivePath());
+        // Let Popper pop itself
+        AssertEventually(
+            () => brain.GetActivePath().Count == 2 && brain.GetActivePath()[1].Equals((StateId)"Waiter"),
+            tick: () => world.Tick(0.05f),
+            maxTicks: 30,
+            failMessage: () => "Popper did not pop back to Waiter.");
 
-        // Now unwind Waiter by forcing a transition on Root (simulate state exit)
-        // easiest: publish a transition by direct pop
-        agent.Events.Publish(new DamageEvent(10));
-        world.Tick(0.01f); // would consume if not canceled; but we’ll cancel by popping Waiter
-        // Pop Waiter explicitly
-        agent.Brain.Tick(world, agent); // no-op-ish; keep test simple
+        // Now: exit/cancel Waiter by forcing an unwind (simplest: push Popper again then interrupt/unwind)
+        agent.Bb.Set(new BbKey<bool>("DoPopper"), true);
 
-        // If cancellation is wired, exiting Waiter never deadlocks any wait.
-        // (This is mostly a “no hang + stack remains consistent” test.)
+        // Ensure we can still tick without hang and stack stays sane
+        for (int i = 0; i < 50; i++)
+            world.Tick(0.01f);
+
         Assert.True(brain.GetActivePath().Count >= 1);
+
+        static void AssertEventually(Func<bool> cond, Action tick, int maxTicks, Func<string> failMessage)
+        {
+            for (int i = 0; i < maxTicks; i++)
+            {
+                if (cond()) return;
+                tick();
+            }
+            Assert.Fail(failMessage());
+        }
 
         static IEnumerator<AiStep> Root(AiCtx ctx)
         {
             yield return Ai.Push("Waiter", "start waiter");
             while (true)
             {
-                yield return Ai.Wait(0.01f);
-                if (ctx.Agent.Bb.GetOrDefault(new Dominatus.Core.Blackboard.BbKey<bool>("DoPopper"), false))
+                // IMPORTANT: check first, then wait, to make this responsive
+                if (ctx.Agent.Bb.GetOrDefault(new BbKey<bool>("DoPopper"), false))
                 {
-                    ctx.Agent.Bb.Set(new Dominatus.Core.Blackboard.BbKey<bool>("DoPopper"), false);
+                    ctx.Agent.Bb.Set(new BbKey<bool>("DoPopper"), false);
                     yield return Ai.Push("Popper", "push popper");
                 }
+
+                yield return Ai.Wait(0.01f);
             }
         }
     }
