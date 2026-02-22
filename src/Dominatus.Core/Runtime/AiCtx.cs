@@ -5,4 +5,6 @@ public readonly record struct AiCtx(
     AiWorld World,
     AiAgent Agent,
     AiEventBus Events,
-    CancellationToken Cancel);
+    CancellationToken Cancel,
+    IAiWorldView View,
+    IAiMailbox Mail);

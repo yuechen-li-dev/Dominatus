@@ -5,6 +5,7 @@ namespace Dominatus.Core.Runtime;
 
 public sealed class AiAgent
 {
+    public AgentId Id { get; internal set; } // set by AiWorld.Add
     public Blackboard.Blackboard Bb { get; } = new();
     public AiEventBus Events { get; } = new();
 
