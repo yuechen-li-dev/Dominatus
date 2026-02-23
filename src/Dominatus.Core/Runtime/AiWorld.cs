@@ -15,10 +15,13 @@ public sealed class AiWorld
 
     public AiClock Clock { get; } = new();
 
-    public AiWorld()
+    public IAiActuator Actuator { get; }
+
+    public AiWorld(IAiActuator? actuator = null)
     {
         View = new DefaultWorldView(this);
         Mail = new DefaultMailbox(this);
+        Actuator = actuator ?? new NullActuator();
     }
 
     public void Add(AiAgent agent)

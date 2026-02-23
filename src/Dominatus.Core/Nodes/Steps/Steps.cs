@@ -1,5 +1,6 @@
-﻿using Dominatus.Core.Runtime;
+﻿using Dominatus.Core.Blackboard;
 using Dominatus.Core.Decision;
+using Dominatus.Core.Runtime;
 
 namespace Dominatus.Core.Nodes.Steps;
 
@@ -16,10 +17,12 @@ public sealed record Pop(string? Reason = null) : AiStep;
 public sealed record Succeed(string? Reason = null) : AiStep;
 
 public sealed record Fail(string? Reason = null) : AiStep;
+
 public sealed record Decide(
     DecisionSlot Slot,
     IReadOnlyList<UtilityOption> Options,
     DecisionPolicy Policy) : AiStep;
+
 public sealed record WaitEvent<T>(
     Func<T, bool>? Filter = null,
     Action<AiAgent, T>? OnConsumed = null
@@ -34,3 +37,10 @@ public sealed record WaitEvent<T>(
         return true;
     }
 }
+
+public sealed record Act(
+    IActuationCommand Command,
+    BbKey<ActuationId>? StoreIdAs = null) : AiStep;
+
+public sealed record AwaitActuation(
+    BbKey<ActuationId> IdKey) : AiStep;

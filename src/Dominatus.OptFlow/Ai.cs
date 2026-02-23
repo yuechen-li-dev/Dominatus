@@ -1,7 +1,8 @@
 ﻿using Dominatus.Core;
+using Dominatus.Core.Blackboard;
+using Dominatus.Core.Decision;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
-using Dominatus.Core.Decision;
 
 namespace Dominatus.OptFlow;
 
@@ -43,4 +44,10 @@ public static class Ai
         Func<T, bool>? filter = null,
         Action<AiAgent, T>? onConsumed = null) where T : notnull
         => new(filter, onConsumed);
+
+    public static Act Act(IActuationCommand cmd, BbKey<ActuationId>? storeIdAs = null)
+    => new(cmd, storeIdAs);
+
+    public static AwaitActuation Await(BbKey<ActuationId> idKey)
+        => new(idKey);
 }

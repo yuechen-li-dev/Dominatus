@@ -1,5 +1,7 @@
-﻿using Dominatus.Core.Nodes.Steps;
+﻿using Dominatus.Core.Blackboard;
+using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
+using System.Threading.Channels;
 using System.Xml.Linq;
 
 namespace Dominatus.Core.Nodes;
@@ -41,7 +43,7 @@ public sealed class NodeRunner
         Exit();
 
         _cts = new CancellationTokenSource();
-        var ctx = new AiCtx(world, agent, agent.Events, _cts.Token, world.View, world.Mail);
+        var ctx = new AiCtx(world, agent, agent.Events, _cts.Token, world.View, world.Mail, world.Actuator);
         _it = _node(ctx);
     }
 
@@ -78,7 +80,7 @@ public sealed class NodeRunner
 
         var cts = _cts;
         var cancel = cts?.Token ?? CancellationToken.None;
-        var ctx = new AiCtx(world, agent, agent.Events, cancel, world.View, world.Mail);
+        var ctx = new AiCtx(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator);
 
         // If canceled, treat as failed completion so HFSM can pop/unwind.
         if (cancel.IsCancellationRequested)
@@ -161,6 +163,38 @@ public sealed class NodeRunner
                 _waitEvent = we;
                 _waitEventCursor = default;
                 return NodeTickResult.Running();
+
+            case Act act:
+                {
+                    var res = ctx.Act.Dispatch(ctx, act.Command);
+
+                    // Store id if requested
+                    if (act.StoreIdAs is BbKey<ActuationId> key)
+                        agent.Bb.Set(key, res.Id);
+
+                    // If it completed immediately, publish completion event so Await works uniformly
+                    if (res.Completed)
+                        agent.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
+
+                    // If not accepted, you can choose to fail immediately or just keep going.
+                    // I recommend: if not accepted AND completed, let the node handle it via Await/logic.
+                    // So we just keep running.
+                    return NodeTickResult.Running();
+                }
+
+            case AwaitActuation await:
+                {
+                    // Implement Await as a wait-for-event with a stable cursor
+                    var id = agent.Bb.GetOrDefault(await.IdKey, default);
+
+                    _waitEvent = new WaitEvent<ActuationCompleted>(
+                        Filter: e => e.Id.Equals(id),
+                        OnConsumed: null
+                    );
+
+                    _waitEventCursor = default;
+                    return NodeTickResult.Running();
+                }
 
             default:
                 // Unknown step: treat as emitted so brain can decide later (future-proof)
