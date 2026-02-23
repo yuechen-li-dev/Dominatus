@@ -51,6 +51,17 @@ public sealed class ActuationTests
         while (true) yield return Ai.Wait(999f);
     }
 
+    static void TickUntil(AiWorld world, Func<bool> cond, int maxTicks = 20, float dt = 0.01f)
+    {
+        for (int i = 0; i < maxTicks; i++)
+        {
+            if (cond()) return;
+            world.Tick(dt);
+        }
+        Assert.Fail("Condition not reached in time.");
+    }
+
+
     [Fact]
     public void Act_StoresId_AndAwaitReceivesCompletionEvent()
     {
@@ -68,9 +79,11 @@ public sealed class ActuationTests
         world.Add(agent);
 
         // Tick a few times to progress Do -> Done
-        world.Tick(0.01f);
-        world.Tick(0.01f);
-        world.Tick(0.01f);
+        TickUntil(world, () =>
+        {
+            var path = brain.GetActivePath();
+            return path.Count == 2 && path[1].Equals((StateId)"Done");
+        });
 
         Assert.Equal(new[] { (StateId)"Root", (StateId)"Done" }, brain.GetActivePath());
 
