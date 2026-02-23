@@ -46,6 +46,10 @@ public sealed class AiWorld
     public void Tick(float dt)
     {
         Clock.Advance(dt);
+
+        if (Actuator is ITickableActuator tickable)
+            tickable.Tick(this);
+
         for (int i = 0; i < _agents.Count; i++)
             _agents[i].Tick(this);
     }
