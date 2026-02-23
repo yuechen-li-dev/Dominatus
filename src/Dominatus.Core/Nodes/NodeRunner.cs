@@ -23,9 +23,8 @@ public readonly record struct NodeTickResult(
     public static NodeTickResult Completed(NodeStatus status) => new(false, null, status);
 }
 
-public sealed class NodeRunner
+public sealed class NodeRunner(AiNode node)
 {
-    private readonly AiNode _node;
     private IEnumerator<AiStep>? _it;
 
     private float _waitStartTime;
@@ -35,16 +34,16 @@ public sealed class NodeRunner
     private CancellationTokenSource? _cts;
     private IWaitEvent? _waitEvent;
     private EventCursor _waitEventCursor;
-
-    public NodeRunner(AiNode node) => _node = node;
+    private static AiCtx MakeCtx(AiWorld world, AiAgent agent, CancellationToken cancel)
+    => new(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator);
 
     public void Enter(AiWorld world, AiAgent agent)
     {
         Exit();
 
         _cts = new CancellationTokenSource();
-        var ctx = new AiCtx(world, agent, agent.Events, _cts.Token, world.View, world.Mail, world.Actuator);
-        _it = _node(ctx);
+        var ctx = MakeCtx(world, agent, _cts.Token);
+        _it = node(ctx);
     }
 
     public void Exit()
@@ -80,7 +79,7 @@ public sealed class NodeRunner
 
         var cts = _cts;
         var cancel = cts?.Token ?? CancellationToken.None;
-        var ctx = new AiCtx(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator);
+        var ctx = MakeCtx(world, agent, cancel);
 
         // If canceled, treat as failed completion so HFSM can pop/unwind.
         if (cancel.IsCancellationRequested)

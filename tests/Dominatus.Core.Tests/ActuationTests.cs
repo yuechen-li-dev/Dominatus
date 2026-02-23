@@ -61,7 +61,6 @@ public sealed class ActuationTests
         Assert.Fail("Condition not reached in time.");
     }
 
-
     [Fact]
     public void Act_StoresId_AndAwaitReceivesCompletionEvent()
     {
@@ -85,7 +84,7 @@ public sealed class ActuationTests
             return path.Count == 2 && path[1].Equals((StateId)"Done");
         });
 
-        Assert.Equal(new[] { (StateId)"Root", (StateId)"Done" }, brain.GetActivePath());
+        Assert.Equal([(StateId)"Root", (StateId)"Done"], brain.GetActivePath());
 
         var id = agent.Bb.GetOrDefault(LastActId, default);
         Assert.NotEqual(default, id);
