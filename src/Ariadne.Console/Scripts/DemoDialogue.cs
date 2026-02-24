@@ -14,29 +14,19 @@ public static class DemoDialogue
 
     public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
-        // Line() / Ask() / Choose() return IEnumerable<AiStep>, so we "yield from" manually.
-        foreach (var s in Diag.Line("Don’t blink.", speaker: "Scarlett"))
-            yield return s;
-
-        foreach (var s in Diag.Ask("Name?", storeAs: PlayerName))
-            yield return s;
-
-        foreach (var s in Diag.Line($"Nice to meet you, {ctx.Agent.Bb.GetOrDefault(PlayerName, "")}.", speaker: "Scarlett"))
-            yield return s;
-
-        foreach (var s in Diag.Choose(
-                     "Pick one:",
-                     options: new[]
-                     {
-                         Diag.Option("a", "Open the door"),
-                         Diag.Option("b", "Run"),
-                     },
-                     storeAs: Choice))
-            yield return s;
+        yield return Diag.Line("Don’t blink.", speaker: "Scarlett");
+        yield return Diag.Ask("Name?", storeAs: PlayerName);
+        yield return Diag.Line($"Nice to meet you, {ctx.Agent.Bb.GetOrDefault(PlayerName, "")}.", speaker: "Scarlett");
+        yield return Diag.Choose("Pick one:",
+            options:
+            [
+                Diag.Option("a", "Open the door"),
+                Diag.Option("b", "Run")
+            ],
+            storeAs: Choice);
 
         var c = ctx.Agent.Bb.GetOrDefault(Choice, "");
-        foreach (var s in Diag.Line($"You picked: {c}", speaker: "Narrator"))
-            yield return s;
+        yield return Diag.Line($"You picked: {c}", speaker: "Narrator");
 
         while (true)
             yield return Ai.Wait(999f);
