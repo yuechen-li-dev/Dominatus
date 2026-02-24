@@ -16,7 +16,7 @@ public static class DemoDialogue
     {
         yield return Diag.Line("Don’t blink.", speaker: "Scarlett");
         yield return Diag.Ask("Name?", storeAs: PlayerName);
-        yield return Diag.Line($"Nice to meet you, {ctx.Agent.Bb.GetOrDefault(PlayerName, "")}.", speaker: "Scarlett");
+        yield return Diag.Line($"Nice to meet you, {ctx.Bb.GetOrDefault(PlayerName, "")}.", speaker: "Scarlett");
         yield return Diag.Choose("Pick one:",
             options:
             [
@@ -25,7 +25,7 @@ public static class DemoDialogue
             ],
             storeAs: Choice);
 
-        var c = ctx.Agent.Bb.GetOrDefault(Choice, "");
+        var c = ctx.Bb.GetOrDefault(Choice, "");
         yield return Diag.Line($"You picked: {c}", speaker: "Narrator");
 
         while (true)

@@ -9,4 +9,7 @@ public readonly record struct AiCtx(
     CancellationToken Cancel,
     IAiWorldView View,
     IAiMailbox Mail,
-    IAiActuator Act);
+    IAiActuator Act)
+{
+    public Blackboard.Blackboard Bb => Agent.Bb;
+}
