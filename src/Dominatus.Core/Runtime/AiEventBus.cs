@@ -88,6 +88,18 @@ public sealed class AiEventBus
         }
     }
 
+    public void PublishObject(object evt)
+    {
+        if (evt is null) return;
+        var t = evt.GetType();
+        if (!_buckets.TryGetValue(t, out var bucket))
+        {
+            bucket = new Bucket();
+            _buckets.Add(t, bucket);
+        }
+        bucket.Events.Add(evt);
+    }
+
     /// <summary>For debugging only.</summary>
     public int CountForType<T>() where T : notnull
         => _buckets.TryGetValue(typeof(T), out var b) ? b.Events.Count : 0;

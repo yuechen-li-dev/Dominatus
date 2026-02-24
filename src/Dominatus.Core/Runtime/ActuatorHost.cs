@@ -15,24 +15,16 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     // Deferred completions: emitted later as ActuationCompleted into the target agent's event bus.
     private readonly List<PendingCompletion> _pending = new();
 
-    private readonly struct PendingCompletion
+    
+    private readonly struct PendingCompletion(AgentId agentId, ActuationId id, float dueTime, bool ok, string? error, object? payload, Type? payloadType)
     {
-        public readonly AgentId AgentId;
-        public readonly ActuationId Id;
-        public readonly float DueTime;
-        public readonly bool Ok;
-        public readonly string? Error;
-        public readonly object? Payload;
-
-        public PendingCompletion(AgentId agentId, ActuationId id, float dueTime, bool ok, string? error, object? payload)
-        {
-            AgentId = agentId;
-            Id = id;
-            DueTime = dueTime;
-            Ok = ok;
-            Error = error;
-            Payload = payload;
-        }
+        public readonly AgentId AgentId = agentId;
+        public readonly ActuationId Id = id;
+        public readonly float DueTime = dueTime;
+        public readonly bool Ok = ok;
+        public readonly string? Error = error;
+        public readonly object? Payload = payload;
+        public readonly Type? PayloadType = payloadType;
     }
 
     public void Register<TCmd>(IActuationHandler<TCmd> handler) where TCmd : notnull, IActuationCommand
@@ -71,9 +63,21 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     /// Schedule a deferred completion. This is the "async-ish await" mechanism:
     /// complete later by publishing ActuationCompleted at/after dueTime.
     /// </summary>
-    public void CompleteLater(AiCtx ctx, ActuationId id, float dueTime, bool ok, string? error = null, object? payload = null)
+    public void CompleteLater(AiCtx ctx, ActuationId id, float dueTime, bool ok, string? error = null, object? payload = null, Type? payloadType = default)
     {
-        _pending.Add(new PendingCompletion(ctx.Agent.Id, id, dueTime, ok, error, payload));
+        _pending.Add(new PendingCompletion(ctx.Agent.Id, id, dueTime, ok, error, payload, payloadType));
+    }
+
+    public void CompleteLater<T>(AiCtx ctx, ActuationId id, float dueTime, bool ok, string? error = null, T? payload = default)
+    {
+        _pending.Add(new PendingCompletion(
+            ctx.Agent.Id,
+            id,
+            dueTime,
+            ok,
+            error,
+            payload,
+            typeof(T)));
     }
 
     public void Tick(AiWorld world)
@@ -91,7 +95,20 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
             {
                 var agent = FindAgent(world, p.AgentId);
                 if (agent is not null)
+                {
                     agent.Events.Publish(new ActuationCompleted(p.Id, p.Ok, p.Error, p.Payload));
+                    if (p.PayloadType is not null)
+                    {
+                        var completedT = typeof(ActuationCompleted<>).MakeGenericType(p.PayloadType);
+
+                        // ctor args must match ActuationCompleted<T>(ActuationId id, bool ok, string? error, T? payload)
+                        var typedEvt = Activator.CreateInstance(
+                            completedT,
+                            new object?[] { p.Id, p.Ok, p.Error, p.Payload });
+
+                        agent.Events.PublishObject(typedEvt!);
+                    }
+                }
                 continue;
             }
 

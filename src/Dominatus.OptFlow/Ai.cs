@@ -49,5 +49,13 @@ public static class Ai
     => new(cmd, storeIdAs);
 
     public static AwaitActuation Await(BbKey<ActuationId> idKey)
-        => new(idKey);
+        => new(idKey);    
+    
+    //Not sure if this still is needed...
+    public static AwaitActuation<T> Await<T>(BbKey<ActuationId> idKey, BbKey<T>? storePayloadAs = null)
+    => new(idKey, storePayloadAs);
+
+    // (the inference-friendly overload)
+    public static AwaitActuation<T> Await<T>(BbKey<ActuationId> idKey, BbKey<T> storePayloadAs)
+        => new(idKey, storePayloadAs);
 }

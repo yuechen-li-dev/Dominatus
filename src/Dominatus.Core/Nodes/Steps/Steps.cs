@@ -44,3 +44,22 @@ public sealed record Act(
 
 public sealed record AwaitActuation(
     BbKey<ActuationId> IdKey) : AiStep;
+
+public sealed record AwaitActuation<T>(
+    BbKey<ActuationId> IdKey,
+    BbKey<T>? StorePayloadAs = null
+) : AiStep, IWaitEvent
+{
+    public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
+    {
+        var id = ctx.Agent.Bb.GetOrDefault(IdKey, default);
+
+        if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted<T> e) => e.Id.Equals(id), out var got))
+            return false;
+
+        if (StorePayloadAs is BbKey<T> key)
+            ctx.Agent.Bb.Set(key, got.Payload!);
+
+        return true;
+    }
+}
