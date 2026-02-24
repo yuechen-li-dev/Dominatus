@@ -54,7 +54,21 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
 
         // Normalize: immediate completion publishes an ActuationCompleted event.
         if (res.Completed)
+        {
+            // Always publish untyped completion
             ctx.Agent.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
+
+            // Publish typed completion if handler provided a payload type
+            if (r.PayloadType is not null)
+            {
+                var completedT = typeof(ActuationCompleted<>).MakeGenericType(r.PayloadType);
+                var typedEvt = Activator.CreateInstance(
+                    completedT,
+                    new object?[] { res.Id, res.Ok, res.Error, res.Payload });
+
+                ctx.Agent.Events.PublishObject(typedEvt!);
+            }
+        }
 
         return res;
     }
@@ -136,7 +150,13 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, IActuationCommand cmd);
     }
 
-    public readonly record struct HandlerResult(bool Accepted, bool Completed, bool Ok, string? Error = null, object? Payload = null);
+    public readonly record struct HandlerResult(
+    bool Accepted,
+    bool Completed,
+    bool Ok,
+    string? Error = null,
+    object? Payload = null,
+    Type? PayloadType = null);
 
     private sealed class HandlerAdapter<TCmd> : IHandler where TCmd : notnull, IActuationCommand
     {
