@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="samples/Dominatus.SimConsole/Dominatus.SimConsole.csproj" Id="8741215a-1ee9-4090-823d-b2860b51c3e1" />
+  <Project Path="src/Ariadne.Console/Ariadne.ConsoleApp.csproj" Id="4ffe8ebb-8ad5-4faa-bdad-afddf42b99e7" />
+  <Project Path="src/Ariadne.OptFlow/Ariadne.OptFlow.csproj" Id="7f70086a-7f3d-4fcf-a681-49c83963a640" />
   <Project Path="src/Dominatus.Core/Dominatus.Core.csproj" />
   <Project Path="src/Dominatus.OptFlow/Dominatus.OptFlow.csproj" Id="31fe4a4a-c059-4ea0-a3c8-2837b15f8b77" />
   <Project Path="src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj" Id="467f35b4-f8be-4770-a516-75c2afb21db9" />
