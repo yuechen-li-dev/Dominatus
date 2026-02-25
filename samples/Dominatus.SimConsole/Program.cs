@@ -57,6 +57,12 @@ static class Keys
     public static readonly BbKey<bool> LowAmmo = new("LowAmmo");
 }
 
+/// <summary>
+/// - Can I take you from this place? <br/>
+/// - Is the word but a sigh? <br/>
+/// - Is death our lone beholder? <br/>
+/// - Do we walk the final steps? <br/>
+/// </summary>
 static class When
 {
     public static Consideration Always => Utility.Always;
@@ -67,7 +73,7 @@ static class When
 
 static class GuardNodes
 {
-    public static IEnumerator<AiStep> Root(AiCtx ctx)
+    public static IEnumerator<AiStep> Root(AiCtx _)
     {
         // 10Hz cadence decision loop
         while (true)

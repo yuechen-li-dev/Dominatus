@@ -13,7 +13,11 @@ namespace Ariadne.OptFlow;
 public static class DiagSteps
 {
     // Base helper to normalize immediate completions in case the actuator doesn't publish events.
-    // (ActuatorHost does publish; this makes the step robust against other IAiActuator impls.)
+    // (ActuatorHost does publish; this makes the step robust against other IAiActuator impls.
+    // To avoid boilerplate foreach code in diag as Csharp doesn't have "yield from",
+    // This combined both the act/await step of dialogue into one clean "yield return" and replicates VN behavior expected from dialogues
+    // However, a consenquence of that is that the immutable record AiStep now has mutable temp. stateid in it
+    // This is benign as it's unlikely that the stateIds will be accessible.
     private static void EnsureCompletionEvents(AiCtx ctx, ActuationDispatchResult res, Type? payloadType)
     {
         if (!res.Completed) return;

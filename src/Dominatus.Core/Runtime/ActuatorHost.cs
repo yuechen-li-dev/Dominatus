@@ -62,6 +62,7 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
             if (r.PayloadType is not null)
             {
                 var completedT = typeof(ActuationCompleted<>).MakeGenericType(r.PayloadType);
+                //TODO: Typed actuator completion uses reflection. Not hot path, but worth replacing.
                 var typedEvt = Activator.CreateInstance(
                     completedT,
                     new object?[] { res.Id, res.Ok, res.Error, res.Payload });
