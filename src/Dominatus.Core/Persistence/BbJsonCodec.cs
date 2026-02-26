@@ -4,20 +4,29 @@ using System.Text.Json;
 namespace Dominatus.Core.Persistence;
 
 /// <summary>
-/// Deliverance-lite v0: JSON snapshot for BB.
-/// Supported types v0: bool/int/long/float/double/string/Guid.
+/// Deliverance-lite v0: JSON snapshot and delta-log codec for the Blackboard.
+/// Supported types v0: bool / int / long / float / double / string / Guid.
 /// </summary>
 public static class BbJsonCodec
 {
     public const int SnapshotVersion = 1;
     public const int DeltaVersion = 1;
 
-    public static byte[] SerializeSnapshot(IEnumerable<(string keyId, object value)> entries)
+    // -----------------------------------------------------------------------
+    // Snapshot
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Serializes a flat sequence of (keyId, value) pairs to a UTF-8 JSON blob.
+    /// Entries whose runtime type is not in the supported type table are silently skipped.
+    /// </summary>
+    public static byte[] SerializeSnapshot(IEnumerable<(string Key, object? Value)> entries)
     {
         var list = new List<BbEntryJson>();
 
         foreach (var (k, val) in entries)
         {
+            if (val is null) continue;
             if (!TryToTyped(val, out var tv)) continue;
             list.Add(new BbEntryJson(k, tv.t, tv.v));
         }
@@ -26,6 +35,10 @@ public static class BbJsonCodec
         return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snap));
     }
 
+    /// <summary>
+    /// Deserializes a blob produced by <see cref="SerializeSnapshot"/> into a
+    /// string → CLR-typed-value dictionary ready for <c>Blackboard.SetRaw</c>.
+    /// </summary>
     public static Dictionary<string, object> DeserializeSnapshot(byte[] blob)
     {
         var json = Encoding.UTF8.GetString(blob);
@@ -34,15 +47,22 @@ public static class BbJsonCodec
 
         var map = new Dictionary<string, object>();
         foreach (var e in snap.entries)
-        {
             map[e.k] = FromTyped(e.t, e.v);
-        }
+
         return map;
     }
 
+    // -----------------------------------------------------------------------
+    // Delta log
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Serializes an ordered sequence of <see cref="BbDeltaEntry"/> records to a UTF-8 JSON blob.
+    /// </summary>
     public static byte[] SerializeDeltaLog(IEnumerable<BbDeltaEntry> entries)
     {
         var list = new List<BbDeltaEntryJson>();
+
         foreach (var e in entries)
         {
             BbTypedValue? oldTv = null;
@@ -61,25 +81,29 @@ public static class BbJsonCodec
         return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(log));
     }
 
+    /// <summary>
+    /// Deserializes a blob produced by <see cref="SerializeDeltaLog"/>.
+    /// </summary>
     public static BbDeltaEntry[] DeserializeDeltaLog(byte[] blob)
     {
         var json = Encoding.UTF8.GetString(blob);
         var log = JsonSerializer.Deserialize<BbDeltaLogJson>(json)
-                  ?? throw new InvalidOperationException("Bad BB delta json.");
+                   ?? throw new InvalidOperationException("Bad BB delta json.");
 
         var outList = new List<BbDeltaEntry>(log.entries.Length);
         foreach (var e in log.entries)
         {
             object? oldV = e.old is null ? null : FromTyped(e.old.t, e.old.v);
             object? newV = e.@new is null ? null : FromTyped(e.@new.t, e.@new.v);
-
             outList.Add(new BbDeltaEntry(e.ts, e.k, e.op, oldV, newV));
         }
 
         return outList.ToArray();
     }
 
-    // ---- type table ----
+    // -----------------------------------------------------------------------
+    // Type table
+    // -----------------------------------------------------------------------
 
     private static bool TryToTyped(object val, out (string t, object v) typed)
     {
@@ -98,17 +122,32 @@ public static class BbJsonCodec
         }
     }
 
+    /// <summary>
+    /// Converts a (type-tag, raw-value) pair back to a CLR value.
+    /// <para>
+    /// <b>Why the JsonElement unwrap?</b>
+    /// <c>System.Text.Json</c> deserializes <c>object</c>-typed properties as
+    /// <see cref="JsonElement"/> rather than native CLR types. <c>Convert.ToInt32</c>
+    /// and friends require <c>IConvertible</c>, which <c>JsonElement</c> does not
+    /// implement, causing an <see cref="InvalidCastException"/> at runtime.
+    /// We therefore normalise the raw value to a string via <c>GetRawText()</c>
+    /// and parse from there, which is unambiguous for all supported types.
+    /// </para>
+    /// </summary>
     private static object FromTyped(string t, object v)
     {
+        // STJ deserialises object-typed fields as JsonElement — unwrap to string first.
+        string raw = v is JsonElement je ? je.GetRawText().Trim('"') : Convert.ToString(v) ?? "";
+
         return t switch
         {
-            "bool" => Convert.ToBoolean(v),
-            "int" => Convert.ToInt32(v),
-            "long" => Convert.ToInt64(v),
-            "float" => Convert.ToSingle(v),
-            "double" => Convert.ToDouble(v),
-            "string" => Convert.ToString(v) ?? "",
-            "guid" => Guid.Parse(Convert.ToString(v) ?? ""),
+            "bool" => bool.Parse(raw),
+            "int" => int.Parse(raw),
+            "long" => long.Parse(raw),
+            "float" => float.Parse(raw, System.Globalization.CultureInfo.InvariantCulture),
+            "double" => double.Parse(raw, System.Globalization.CultureInfo.InvariantCulture),
+            "string" => raw,
+            "guid" => Guid.Parse(raw),
             _ => throw new NotSupportedException($"Unsupported BB type '{t}'.")
         };
     }
