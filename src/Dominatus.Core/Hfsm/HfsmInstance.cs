@@ -60,6 +60,43 @@ public sealed class HfsmInstance
         return arr;
     }
 
+    /// <summary>
+    /// Restores the HFSM stack from a previously captured <see cref="GetActivePath"/> array.
+    /// Each entry must be a valid state id present in <see cref="Graph"/>.
+    /// <para>
+    /// All current frames are exited cleanly, then each state in <paramref name="stateIds"/>
+    /// is entered in order (index 0 = root, last = leaf), re-creating enumerators from scratch.
+    /// This is correct because enumerators are never serialized — nodes are always replayed
+    /// from their entry point after a restore.
+    /// </para>
+    /// </summary>
+    /// <param name="world">The current world context needed to enter nodes.</param>
+    /// <param name="agent">The agent whose stack is being restored.</param>
+    /// <param name="stateIds">Ordered path of state id strings, root → leaf.</param>
+    public void RestoreActivePath(AiWorld world, AiAgent agent, string[] stateIds)
+    {
+        // Exit all current frames without raising HFSM-level side effects.
+        // We call Runner.Exit() so CancellationTokenSource is disposed cleanly,
+        // but we do NOT fire OnExit traces — this is a restore, not a transition.
+        foreach (var frame in _stack)
+            frame.Runner.Exit();
+        _stack.Clear();
+
+        // Re-enter each state in order. PushState calls Runner.Enter(), which
+        // creates a fresh enumerator — correct for deterministic replay semantics.
+        foreach (var idStr in stateIds)
+        {
+            var stateId = new StateId(idStr);
+            PushState(world, agent, stateId, "Restore");
+        }
+
+        // Reset cadence timers so the first tick after restore scans immediately,
+        // giving transitions a chance to fire if the world has moved on.
+        _nextInterruptScanTime = 0f;
+        _nextTransitionScanTime = 0f;
+        _lastRevisionScanned = agent.Bb.Revision;
+    }
+
     public void Tick(AiWorld world, AiAgent agent)
     {
         if (_stack.Count == 0)
