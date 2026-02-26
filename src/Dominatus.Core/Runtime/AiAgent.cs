@@ -1,4 +1,4 @@
-﻿using Dominatus.Core.Blackboard;
+using Dominatus.Core.Blackboard;
 using Dominatus.Core.Hfsm;
 using Dominatus.Core.Persistence;
 
@@ -19,27 +19,39 @@ public sealed class AiAgent
 
     /// <summary>
     /// Tracks blackboard mutations for checkpoint delta journals.
-    /// Wired to <see cref="Bb.OnSet"/> at construction; no external plumbing required.
+    /// Wired to <see cref="Blackboard.Blackboard.OnSet"/> at construction; no external plumbing required.
     /// </summary>
     public BbChangeTracker BbTracker { get; } = new();
 
     /// <summary>
-    /// Constructs an agent with the given HFSM and wires change tracking automatically.
+    /// Actuations dispatched but not yet completed (deferred completions only).
+    /// <para>
+    /// Written by <see cref="ActuatorHost.Dispatch"/> when a command returns a deferred
+    /// result (<c>Completed = false</c>). Cleared by <see cref="ActuatorHost.Tick"/> when
+    /// the deferred completion fires, and by <see cref="ActuatorHost.Dispatch"/> for any
+    /// immediate completion that was also registered (defensive clear).
+    /// </para>
+    /// <para>
+    /// Read by <see cref="DominatusCheckpointBuilder.Capture"/> to populate
+    /// <see cref="AgentCheckpoint.EventCursorBlob"/>, giving the <see cref="ReplayDriver"/>
+    /// the actuation ids it needs to re-inject completion events after restore.
+    /// </para>
+    /// <para>
+    /// Immediate completions never enter this set — they publish synchronously and the
+    /// waiting step consumes them in the same tick.
+    /// </para>
     /// </summary>
+    public HashSet<PendingActuation> InFlightActuations { get; } = new(PendingActuationComparer.Instance);
+
     public AiAgent(HfsmInstance brain)
     {
         Brain = brain;
-
-        // Wire tracker — runs after equality check inside Bb.Set, so only real changes
-        // are journaled. Time is injected at call site via the world clock.
         Bb.OnSet = (key, oldVal, newVal) =>
-            BbTracker.MarkSet(0f, key, oldVal, newVal); // time patched below
+            BbTracker.MarkSet(0f, key, oldVal, newVal);
     }
 
-    /// <summary>Advances the agent one simulation tick.</summary>
     public void Tick(AiWorld world)
     {
-        // Patch OnSet with the real clock so journal entries carry correct timestamps.
         Bb.OnSet = (key, oldVal, newVal) =>
             BbTracker.MarkSet(world.Clock.Time, key, oldVal, newVal);
 

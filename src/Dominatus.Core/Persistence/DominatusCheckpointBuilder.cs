@@ -1,5 +1,4 @@
-﻿using Dominatus.Core.Runtime;
-using System.Text;
+using Dominatus.Core.Runtime;
 
 namespace Dominatus.Core.Persistence;
 
@@ -7,13 +6,16 @@ namespace Dominatus.Core.Persistence;
 /// Builds and restores <see cref="DominatusCheckpoint"/> snapshots for an entire
 /// <see cref="AiWorld"/>.
 /// <para>
-/// Capture/restore strategy (M5a/M5b):
+/// Capture/restore strategy (M5a/M5b/M5c):
 /// <list type="bullet">
-///   <item>HFSM stack is captured as an ordered string array (root → leaf state ids).</item>
-///   <item>Blackboard is serialized to a JSON blob via <see cref="BbJsonCodec"/>.</item>
-///   <item>Enumerator/iterator state is never serialized — nodes re-enter from scratch on restore,
-///         consistent with the deterministic-replay contract.</item>
-///   <item>Event cursor blob is a placeholder for M5c.</item>
+///   <item>HFSM stack captured as ordered string array (root → leaf state ids).</item>
+///   <item>Blackboard serialized to JSON blob via <see cref="BbJsonCodec"/>.</item>
+///   <item>Event cursor blob captures in-flight actuation ids from
+///         <see cref="AiAgent.InFlightActuations"/> — written automatically by
+///         <see cref="ActuatorHost"/> on deferred dispatch and cleared on completion.
+///         Bucket indices are NOT preserved (meaningless after restore).
+///         The <see cref="ReplayDriver"/> re-injects completions on load.</item>
+///   <item>Enumerator state is never serialized — nodes re-enter from scratch.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -21,13 +23,8 @@ public static class DominatusCheckpointBuilder
 {
     /// <summary>
     /// Captures a full snapshot of <paramref name="world"/> at the current simulation time.
-    /// Safe to call at any tick boundary; does not mutate any agent state.
+    /// In-flight actuations are read automatically from <see cref="AiAgent.InFlightActuations"/>.
     /// </summary>
-    /// <param name="world">The world to snapshot. All agents are captured.</param>
-    /// <returns>
-    /// A <see cref="DominatusCheckpoint"/> that can be round-tripped through
-    /// <see cref="Restore"/> to reproduce the same agent state.
-    /// </returns>
     public static DominatusCheckpoint Capture(AiWorld world)
     {
         var agents = new AgentCheckpoint[world.Agents.Count];
@@ -36,16 +33,18 @@ public static class DominatusCheckpointBuilder
         {
             var a = world.Agents[i];
 
-            // HFSM path: root → leaf as stable string ids.
             var path = a.Brain.GetActivePath()
                              .Select(s => s.ToString())
                              .ToArray();
 
-            // Blackboard blob: JSON v1 snapshot of all typed entries.
             var bbBlob = BbJsonCodec.SerializeSnapshot(a.Bb.EnumerateEntries());
 
-            // Event cursor blob: placeholder until M5c.
-            var curBlob = Encoding.UTF8.GetBytes("{\"v\":1}");
+            // Read in-flight actuations directly — no manual plumbing required by caller.
+            var cursorSnapshot = new EventCursorSnapshot(
+                EventCursorCodec.Version,
+                a.InFlightActuations.ToArray());
+
+            var curBlob = EventCursorCodec.Serialize(cursorSnapshot);
 
             agents[i] = new AgentCheckpoint(
                 AgentId: a.Id.ToString(),
@@ -63,40 +62,39 @@ public static class DominatusCheckpointBuilder
     /// <summary>
     /// Restores <paramref name="world"/> agent state from <paramref name="checkpoint"/>.
     /// Agents are matched by <see cref="AgentCheckpoint.AgentId"/> string.
-    /// Agents present in the world but absent from the checkpoint are left untouched.
     /// </summary>
-    /// <remarks>
-    /// Restore order:
-    /// <list type="number">
-    ///   <item>Clear the blackboard and write all snapshot entries via <c>SetRaw</c>
-    ///         (bypasses dirty tracking — the restored state is already canonical).</item>
-    ///   <item>Restore the HFSM active path, which re-enters each state node from scratch.</item>
-    /// </list>
-    /// The change tracker journal is intentionally left intact after restore so callers can
-    /// observe what changed. Call <see cref="BbChangeTracker.ClearJournal"/> if a clean
-    /// slate is required.
-    /// </remarks>
-    /// <param name="world">The world whose agents will be restored.</param>
-    /// <param name="checkpoint">The checkpoint previously produced by <see cref="Capture"/>.</param>
-    public static void Restore(AiWorld world, DominatusCheckpoint checkpoint)
+    /// <returns>
+    /// <see cref="EventCursorSnapshot"/> array parallel to <c>world.Agents</c>.
+    /// Pass to <see cref="ReplayDriver"/> constructor, then call
+    /// <see cref="ReplayDriver.ApplyAll"/> before ticking.
+    /// </returns>
+    public static EventCursorSnapshot[] Restore(AiWorld world, DominatusCheckpoint checkpoint)
     {
+        var cursorSnapshots = new EventCursorSnapshot[world.Agents.Count];
+
+        for (int i = 0; i < cursorSnapshots.Length; i++)
+            cursorSnapshots[i] = new EventCursorSnapshot(EventCursorCodec.Version, Array.Empty<PendingActuation>());
+
         foreach (var ac in checkpoint.Agents)
         {
-            var agent = world.Agents.FirstOrDefault(x => x.Id.ToString() == ac.AgentId);
-            if (agent is null) continue;
+            var idx = world.Agents.ToList().FindIndex(x => x.Id.ToString() == ac.AgentId);
+            if (idx < 0) continue;
 
-            // --- Blackboard restore ---
-            // Clear then SetRaw: bypasses OnSet hook, dirty tracking, and revision bump.
-            // The blackboard is in a known-good state from the snapshot; no change events
-            // should fire as a side-effect of the restore itself.
+            var agent = world.Agents[idx];
+
+            // Blackboard restore — bypasses OnSet, dirty tracking, revision bump.
             var map = BbJsonCodec.DeserializeSnapshot(ac.BlackboardBlob);
             agent.Bb.Clear();
             foreach (var kv in map)
                 agent.Bb.SetRaw(kv.Key, kv.Value);
 
-            // --- HFSM path restore ---
-            // Re-enters each state node from scratch (no enumerator serialization).
+            // HFSM path restore — cold re-enter from scratch.
             agent.Brain.RestoreActivePath(world, agent, ac.ActiveStatePath);
+
+            // Event cursor restore — returned for ReplayDriver wiring.
+            cursorSnapshots[idx] = EventCursorCodec.Deserialize(ac.EventCursorBlob);
         }
+
+        return cursorSnapshots;
     }
 }

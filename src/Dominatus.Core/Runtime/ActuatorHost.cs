@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Dominatus.Core.Persistence;
+using System.Runtime.CompilerServices;
 
 namespace Dominatus.Core.Runtime;
 
@@ -15,7 +16,6 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     // Deferred completions: emitted later as ActuationCompleted into the target agent's event bus.
     private readonly List<PendingCompletion> _pending = new();
 
-    
     private readonly struct PendingCompletion(AgentId agentId, ActuationId id, float dueTime, bool ok, string? error, object? payload, Type? payloadType)
     {
         public readonly AgentId AgentId = agentId;
@@ -37,7 +37,6 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         if (!_handlers.TryGetValue(command.GetType(), out var h))
         {
             var miss = new ActuationDispatchResult(id, Accepted: false, Completed: true, Ok: false, Error: "No handler registered.");
-            // Normalize: publish completion event for uniform Await behavior
             ctx.Agent.Events.Publish(new ActuationCompleted(miss.Id, miss.Ok, miss.Error, miss.Payload));
             return miss;
         }
@@ -52,30 +51,35 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
             Error: r.Error,
             Payload: r.Payload);
 
-        // Normalize: immediate completion publishes an ActuationCompleted event.
         if (res.Completed)
         {
-            // Always publish untyped completion
+            // Immediate completion — publish and ensure not lingering in in-flight set.
             ctx.Agent.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
 
-            // Publish typed completion if handler provided a payload type
             if (r.PayloadType is not null)
             {
                 var completedT = typeof(ActuationCompleted<>).MakeGenericType(r.PayloadType);
-                //TODO: Typed actuator completion uses reflection. Not hot path, but worth replacing.
+                // TODO: Typed actuator completion uses reflection. Not hot path, but worth replacing.
                 var typedEvt = Activator.CreateInstance(
                     completedT,
                     new object?[] { res.Id, res.Ok, res.Error, res.Payload });
-
                 ctx.Agent.Events.PublishObject(typedEvt!);
             }
+        }
+        else if (res.Accepted)
+        {
+            // Deferred completion — register as in-flight so checkpoint capture can record it.
+            // PayloadTypeTag mirrors BbJsonCodec's type table: "string" for string payload,
+            // null for untyped (e.g. DiagLine which has no payload).
+            var tag = PayloadTypeToTag(r.PayloadType);
+            ctx.Agent.InFlightActuations.Add(new PendingActuation(id.Value, tag));
         }
 
         return res;
     }
 
     /// <summary>
-    /// Schedule a deferred completion. This is the "async-ish await" mechanism:
+    /// Schedule a deferred completion. This is the async-ish await mechanism:
     /// complete later by publishing ActuationCompleted at/after dueTime.
     /// </summary>
     public void CompleteLater(AiCtx ctx, ActuationId id, float dueTime, bool ok, string? error = null, object? payload = null, Type? payloadType = default)
@@ -101,7 +105,6 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
 
         float now = world.Clock.Time;
 
-        // In-place compacting to avoid allocations
         int write = 0;
         for (int read = 0; read < _pending.Count; read++)
         {
@@ -112,17 +115,18 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
                 if (agent is not null)
                 {
                     agent.Events.Publish(new ActuationCompleted(p.Id, p.Ok, p.Error, p.Payload));
+
                     if (p.PayloadType is not null)
                     {
                         var completedT = typeof(ActuationCompleted<>).MakeGenericType(p.PayloadType);
-
-                        // ctor args must match ActuationCompleted<T>(ActuationId id, bool ok, string? error, T? payload)
                         var typedEvt = Activator.CreateInstance(
                             completedT,
                             new object?[] { p.Id, p.Ok, p.Error, p.Payload });
-
                         agent.Events.PublishObject(typedEvt!);
                     }
+
+                    // Deferred completion fired — remove from in-flight set.
+                    agent.InFlightActuations.Remove(new PendingActuation(p.Id.Value, null));
                 }
                 continue;
             }
@@ -134,15 +138,36 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
             _pending.RemoveRange(write, _pending.Count - write);
     }
 
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
     private static AiAgent? FindAgent(AiWorld world, AgentId id)
     {
         var agents = world.Agents;
         for (int i = 0; i < agents.Count; i++)
             if (agents[i].Id.Equals(id))
                 return agents[i];
-
         return null;
     }
+
+    /// <summary>
+    /// Maps a CLR payload type to the BbJsonCodec type tag string used in
+    /// <see cref="PendingActuation.PayloadTypeTag"/>. Returns null for untyped completions.
+    /// Extend this table if new payload types are added to the codec.
+    /// </summary>
+    private static string? PayloadTypeToTag(Type? t) => t switch
+    {
+        null => null,
+        _ when t == typeof(string) => "string",
+        _ when t == typeof(int) => "int",
+        _ when t == typeof(long) => "long",
+        _ when t == typeof(float) => "float",
+        _ when t == typeof(double) => "double",
+        _ when t == typeof(bool) => "bool",
+        _ when t == typeof(Guid) => "guid",
+        _ => null   // unsupported — treat as untyped
+    };
 
     // ----------------- handler plumbing -----------------
 
@@ -152,12 +177,12 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     }
 
     public readonly record struct HandlerResult(
-    bool Accepted,
-    bool Completed,
-    bool Ok,
-    string? Error = null,
-    object? Payload = null,
-    Type? PayloadType = null);
+        bool Accepted,
+        bool Completed,
+        bool Ok,
+        string? Error = null,
+        object? Payload = null,
+        Type? PayloadType = null);
 
     private sealed class HandlerAdapter<TCmd> : IHandler where TCmd : notnull, IActuationCommand
     {
