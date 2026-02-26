@@ -2,6 +2,7 @@
 using Dominatus.Core.Blackboard;
 using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
+using System.Runtime.CompilerServices;
 
 namespace Ariadne.OptFlow;
 
@@ -12,31 +13,57 @@ public static class Diag
     /// <summary>
     /// Show a dialogue line. Default contract: waits for "advance" (e.g. Enter/click).
     /// </summary>
-    /// <param name="callsiteId">
-    /// Stable unique string identifying this step within its dialogue node (e.g. <c>"intro"</c>,
-    /// <c>"farewell"</c>). Used to key BB-scoped synthetic state so the step survives
-    /// checkpoint restore without re-dispatching. Must be unique per node.
-    /// </param>
-    public static AiStep Line(string text, string callsiteId, string? speaker = null)
-        => new DiagSteps.LineStep(text, speaker, callsiteId);
+    /// <param name="text">The line of dialogue to display.</param>
+    /// <param name="speaker">Optional speaker name.</param>
+    /// <param name="callsiteFile">Auto-filled by compiler. Do not pass manually.</param>
+    /// <param name="callsiteLine">Auto-filled by compiler. Do not pass manually.</param>
+    /// <remarks>
+    /// The <c>callsiteFile</c> and <c>callsiteLine</c> parameters are combined into a stable
+    /// synthetic BB key (<c>__diag.{File}:{Line}.started</c> / <c>.pendingId</c>) used to
+    /// survive checkpoint restore without re-dispatching the actuation.
+    /// <para>
+    /// <b>Post-ship TODO:</b> Auto-generated ids are stable only while the source line does not
+    /// move. If a dialogue file is edited after saves exist in the wild, ids will shift and
+    /// in-flight steps will fail to recover their pending actuation id on restore — they will
+    /// re-dispatch, showing a duplicate line or re-prompting a choice. For shipped content
+    /// where mid-step saves must survive patching, pass an explicit stable string as
+    /// <c>callsiteFile</c> and <c>0</c> as <c>callsiteLine</c>, e.g.:
+    /// <code>Diag.Line("Hello.", callsiteFile: "intro", callsiteLine: 0)</code>
+    /// A cleaner API for explicit ids (e.g. <c>Diag.LineId</c>) is planned for M7.
+    /// </para>
+    /// </remarks>
+    public static AiStep Line(string text, string? speaker = null,
+        [CallerFilePath] string callsiteFile = "",
+        [CallerLineNumber] int callsiteLine = 0)
+        => new DiagSteps.LineStep(text, speaker,
+            $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
 
     /// <summary>
-    /// Prompt for free text and store into blackboard.
+    /// Prompt for free text and store the result into the blackboard.
     /// </summary>
-    /// <param name="callsiteId">
-    /// Stable unique string identifying this step within its dialogue node.
-    /// Must be unique per node. See <see cref="Line"/> for full contract.
-    /// </param>
-    public static AiStep Ask(string prompt, BbKey<string> storeAs, string callsiteId)
-        => new DiagSteps.AskStep(prompt, storeAs, callsiteId);
+    /// <param name="prompt">The prompt text shown to the player.</param>
+    /// <param name="storeAs">Blackboard key that will receive the player's answer.</param>
+    /// <param name="callsiteFile">Auto-filled by compiler. Do not pass manually.</param>
+    /// <param name="callsiteLine">Auto-filled by compiler. Do not pass manually.</param>
+    /// <remarks>See <see cref="Line"/> for full restore contract and post-ship TODO.</remarks>
+    public static AiStep Ask(string prompt, BbKey<string> storeAs,
+        [CallerFilePath] string callsiteFile = "",
+        [CallerLineNumber] int callsiteLine = 0)
+        => new DiagSteps.AskStep(prompt, storeAs,
+            $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
 
     /// <summary>
-    /// Present options and store chosen key string into blackboard.
+    /// Present a set of options and store the chosen key string into the blackboard.
     /// </summary>
-    /// <param name="callsiteId">
-    /// Stable unique string identifying this step within its dialogue node.
-    /// Must be unique per node. See <see cref="Line"/> for full contract.
-    /// </param>
-    public static AiStep Choose(string prompt, IReadOnlyList<DiagChoice> options, BbKey<string> storeAs, string callsiteId)
-        => new DiagSteps.ChooseStep(prompt, options, storeAs, callsiteId);
+    /// <param name="prompt">The prompt text shown above the options.</param>
+    /// <param name="options">The list of choices, built with <see cref="Option"/>.</param>
+    /// <param name="storeAs">Blackboard key that will receive the selected option key.</param>
+    /// <param name="callsiteFile">Auto-filled by compiler. Do not pass manually.</param>
+    /// <param name="callsiteLine">Auto-filled by compiler. Do not pass manually.</param>
+    /// <remarks>See <see cref="Line"/> for full restore contract and post-ship TODO.</remarks>
+    public static AiStep Choose(string prompt, IReadOnlyList<DiagChoice> options, BbKey<string> storeAs,
+        [CallerFilePath] string callsiteFile = "",
+        [CallerLineNumber] int callsiteLine = 0)
+        => new DiagSteps.ChooseStep(prompt, options, storeAs,
+            $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
 }
