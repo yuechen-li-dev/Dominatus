@@ -12,6 +12,7 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     private long _nextId = 1;
 
     private readonly Dictionary<Type, IHandler> _handlers = new();
+    private readonly List<IActuationPolicy> _policies = new();
 
     // Deferred completions: emitted later as ActuationCompleted into the target agent's event bus.
     private readonly List<PendingCompletion> _pending = new();
@@ -30,9 +31,32 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     public void Register<TCmd>(IActuationHandler<TCmd> handler) where TCmd : notnull, IActuationCommand
         => _handlers[typeof(TCmd)] = new HandlerAdapter<TCmd>(handler);
 
+    public void AddPolicy(IActuationPolicy policy)
+    {
+        if (policy is null) throw new ArgumentNullException(nameof(policy));
+        _policies.Add(policy);
+    }
+
     public ActuationDispatchResult Dispatch(AiCtx ctx, IActuationCommand command)
     {
         var id = new ActuationId(_nextId++);
+
+        for (int i = 0; i < _policies.Count; i++)
+        {
+            var d = _policies[i].Evaluate(ctx, command);
+            if (!d.Allowed)
+            {
+                var denied = new ActuationDispatchResult(
+                    id,
+                    Accepted: false,
+                    Completed: true,
+                    Ok: false,
+                    Error: d.Reason ?? "Blocked by actuation policy.");
+
+                ctx.Agent.Events.Publish(new ActuationCompleted(denied.Id, denied.Ok, denied.Error, denied.Payload));
+                return denied;
+            }
+        }
 
         if (!_handlers.TryGetValue(command.GetType(), out var h))
         {
