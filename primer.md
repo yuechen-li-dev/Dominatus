@@ -112,6 +112,7 @@ Primer {
     "Dominatus.Core.Runtime",
     "Dominatus.Core.Blackboard",
     "Dominatus.OptFlow",
+    "Dominatus.UtilityLite (optional utility authoring DSL)",
     "Ariadne.OptFlow (optional dialogue DSL)",
     "Dominatus.Llm.OptFlow (optional LLM tool-call DSL)"
   ];
@@ -141,7 +142,20 @@ StepFamilies {
   UtilityDecision: [
     "Ai.Option(id, consideration, target)",
     "Ai.Decide(options, hysteresis=0.10, minCommitSeconds=0.75, tieEpsilon=0.0001)",
-    "Ai.Decide(slot, options, ...)"
+    "Ai.Decide(slot, options, ...)",
+    "llm.Decide(options, hysteresis=0.10, minCommitSeconds=0.75, tieEpsilon=0.0001)",
+    "llm.Decide(slot, options, ...)"
+  ];
+
+  UtilityAuthoringSurface: [
+    "Utility.When((w,a)=>bool)",
+    "Utility.Score((w,a)=>float)",
+    "Utility.Bb(bool/float/int keys)",
+    "Utility.Not/All/Any",
+    "Utility.Curve/Pow/Remap/Threshold",
+    "Utility.Option(id, consideration, target)",
+    "Utility.Policy(...)",
+    "Utility.Slot(id)"
   ];
 
   EventWait: [
@@ -226,6 +240,50 @@ CodegenTemplate.ToolCallRoundTrip {
   """;
 }
 
+
+CodegenTemplate.UtilityDecisionNode {
+  CSharp: """
+  using Dominatus.Core;
+  using Dominatus.Core.Blackboard;
+  using Dominatus.Core.Decision;
+  using Dominatus.Core.Nodes;
+  using Dominatus.Core.Nodes.Steps;
+  using Dominatus.Core.Runtime;
+  using Dominatus.OptFlow;
+  using Dominatus.UtilityLite;
+
+  static class Keys
+  {
+      public static readonly BbKey<bool> Alerted = new("Alerted");
+      public static readonly BbKey<float> Threat = new("Threat");
+  }
+
+  static class When
+  {
+      public static Consideration Alerted => Utility.Bb(Keys.Alerted);
+      public static Consideration ThreatHigh => Utility.BbAtLeast(Keys.Threat, 0.7f);
+      public static Consideration Engage => Utility.All(When.Alerted, When.ThreatHigh);
+      public static Consideration Patrol => Utility.Not(When.Alerted);
+  }
+
+  static IEnumerator<AiStep> Root(AiCtx ctx)
+  {
+      while (true)
+      {
+          yield return Ai.Wait(0.10f);
+          yield return Ai.Decide(Utility.Slot("RootLoop"),
+          [
+              Utility.Option("Combat", When.Engage, "Combat"),
+              Utility.Option("Patrol", When.Patrol, "Patrol")
+          ],
+          hysteresis: Utility.Policy().Hysteresis,
+          minCommitSeconds: Utility.Policy().MinCommitSeconds,
+          tieEpsilon: Utility.Policy().TieEpsilon);
+      }
+  }
+  """;
+}
+
 CodegenTemplate.DialogueNode {
   CSharp: """
   using Ariadne.OptFlow;
@@ -289,4 +347,65 @@ QuickReference {
 - Keep node logic stepwise and explicit; if a condition needs polling, use `Ai.Until` or short `Ai.Wait` loops.
 - Use typed blackboard keys for all data shared across yields, transitions, or save/restore boundaries.
 - Use `Diag.*` for dialogue verticals and `llm.*` for model/tool bridge semantics.
+
+
+---
+
+## 4) Progress Update — UtilityLite + LLM Utility Decide (TOON)
+
+```toon
+KernelReportAppend {
+  report_id: "dominatus_kernel_progress_append_v2";
+  change_window: "post_primer_v1";
+
+  shipped_updates: [
+    {
+      id: "U1";
+      title: "UtilityLite decision authoring surface expanded";
+      details: [
+        "Added Utility.When/Score builders for readable When.* style declarations",
+        "Added compositional helpers: Not, All, Any",
+        "Added score-shaping helpers: Curve, Pow, Remap, Threshold",
+        "Added blackboard helpers for bool/float/int and threshold/equality checks",
+        "Added Utility.Option, Utility.Policy, Utility.Slot to unify option/policy authoring"
+      ];
+      impact: "AI nodes and generated flows can author utility logic declaratively with less boilerplate";
+    },
+    {
+      id: "U2";
+      title: "llm.Decide parity with Ai.Decide";
+      details: [
+        "Added llm.Decide(options, ...policy)",
+        "Added llm.Decide(slot, options, ...policy)"
+      ];
+      impact: "LLM-authored flows can perform utility transitions using identical policy semantics";
+    },
+    {
+      id: "U3";
+      title: "Tests expanded for utility authoring API";
+      details: [
+        "Utility composition and curve helpers validated",
+        "Utility.Option/Policy/Slot interop with Ai.Decide and llm.Decide validated"
+      ];
+      impact: "Reduces regression risk on utility authoring ergonomics";
+    }
+  ];
+
+  current_status: {
+    maturity: "foundational_plus_authoring_surface";
+    stable_now: [
+      "Deterministic HFSM execution + utility switching",
+      "Replay/checkpoint substrate",
+      "OptFlow step DSL for Ai/Diag/llm",
+      "UtilityLite surface for When-style decision authoring"
+    ];
+    remaining_gaps: [
+      "First-class LLM adapter package and provider integrations",
+      "Tool schema registry and governance middleware",
+      "Replay persistence for model I/O transcripts",
+      "Long-horizon memory subsystem"
+    ];
+  };
+}
+```
 

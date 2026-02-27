@@ -1,4 +1,5 @@
 using Dominatus.Core.Blackboard;
+using Dominatus.Core.Decision;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
 
@@ -26,6 +27,28 @@ public static class llm
     /// </summary>
     public static Act Call(string toolName, string? inputJson = null, BbKey<ActuationId>? storeIdAs = null)
         => new(new LlmToolCall(toolName, inputJson), storeIdAs);
+
+
+    /// <summary>
+    /// Utility decision step for LLM-authored flows (same semantics as <c>Ai.Decide</c>).
+    /// </summary>
+    public static Decide Decide(
+        IReadOnlyList<UtilityOption> options,
+        float hysteresis = 0.10f,
+        float minCommitSeconds = 0.75f,
+        float tieEpsilon = 0.0001f)
+        => new(new DecisionSlot("Default"), options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
+
+    /// <summary>
+    /// Utility decision step with explicit decision slot.
+    /// </summary>
+    public static Decide Decide(
+        DecisionSlot slot,
+        IReadOnlyList<UtilityOption> options,
+        float hysteresis = 0.10f,
+        float minCommitSeconds = 0.75f,
+        float tieEpsilon = 0.0001f)
+        => new(slot, options, new DecisionPolicy(hysteresis, minCommitSeconds, tieEpsilon));
 
     /// <summary>
     /// Waits for completion of a previously dispatched actuation id.
