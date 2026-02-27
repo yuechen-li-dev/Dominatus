@@ -165,6 +165,57 @@ static IEnumerator<AiStep> DoWork(AiCtx ctx)
 }
 ```
 
+
+## Ariadne dialogue layer (`Diag.*`)
+
+Ariadne is the dialogue-focused OptFlow layer in this repo. It adds dialogue steps on top of Dominatus actuation/event semantics, so dialogue remains deterministic and replay-compatible.
+
+Common authoring calls:
+
+- `Diag.Line(text, speaker?)`
+- `Diag.Ask(prompt, storeAs)`
+- `Diag.Choose(prompt, options, storeAs)`
+- `Diag.Option(key, text)`
+
+> Note: you may sometimes see this style written as `diag.*()` in prose. In current code, the helper type is `Diag` (capital D).
+
+### Sample Ariadne node
+
+```csharp
+using Ariadne.OptFlow;
+using Dominatus.Core.Blackboard;
+using Dominatus.Core.Nodes;
+using Dominatus.Core.Nodes.Steps;
+using Dominatus.Core.Runtime;
+using Dominatus.OptFlow;
+
+static class Keys
+{
+    public static readonly BbKey<string> PlayerName = new("PlayerName");
+    public static readonly BbKey<string> Choice = new("Choice");
+}
+
+static IEnumerator<AiStep> DialogueRoot(AiCtx ctx)
+{
+    yield return Diag.Line("Don't blink.", speaker: "Scarlett");
+    yield return Diag.Ask("Name?", storeAs: Keys.PlayerName);
+    yield return Diag.Line($"Nice to meet you, {ctx.Bb.GetOrDefault(Keys.PlayerName, "")}.", speaker: "Scarlett");
+
+    yield return Diag.Choose(
+        "Pick one:",
+        options: [
+            Diag.Option("a", "Open the door"),
+            Diag.Option("b", "Run")
+        ],
+        storeAs: Keys.Choice);
+
+    yield return Diag.Line($"You picked: {ctx.Bb.GetOrDefault(Keys.Choice, "")}", speaker: "Narrator");
+
+    while (true)
+        yield return Ai.Wait(999f);
+}
+```
+
 ## Claims that are accurate right now
 
 - Dominatus uses CLR iterator state machines (`IEnumerator<AiStep>`) as foundational behavior units.
