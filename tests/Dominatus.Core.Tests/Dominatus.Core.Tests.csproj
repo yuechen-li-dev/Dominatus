@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.UtilityLite\Dominatus.UtilityLite.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.Llm.OptFlow\Dominatus.Llm.OptFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>
