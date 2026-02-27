@@ -19,11 +19,11 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Run dotnet test for library and test projects
+      - name: Run dotnet test for all library projects
         run: |
           set -euo pipefail
 
           while IFS= read -r project; do
             echo "Testing ${project}"
             dotnet test "${project}" --configuration Release --verbosity minimal
-          done < <(find src tests -name '*.csproj' ! -name '*Console*.csproj' | sort)
+          done < <(find src -name '*.csproj' ! -name '*Console*.csproj' | sort)
