@@ -35,14 +35,14 @@ public static class Utility
     public static DecisionSlot Slot(string id)
         => new(id);
 
-    /// <summary>Decision policy helper matching Ai.Decide/llm.Decide defaults.</summary>
+    /// <summary>Decision policy helper matching Ai.Decide defaults.</summary>
     public static DecisionPolicy Policy(
         float hysteresis = 0.10f,
         float minCommitSeconds = 0.75f,
         float tieEpsilon = 0.0001f)
         => new(hysteresis, minCommitSeconds, tieEpsilon);
 
-    /// <summary>Utility option helper shared by Ai.Decide and llm.Decide authoring.</summary>
+    /// <summary>Utility option helper for readable Ai.Decide authoring.</summary>
     public static UtilityOption Option(string id, Consideration score, StateId target)
         => new(id, target, score);
 

@@ -52,7 +52,7 @@ Natural end of an iterator is treated as success; exceptions become failure.
 
 - `Dominatus.OptFlow.Ai` provides concise builders (`Ai.Wait`, `Ai.Push`, `Ai.Decide`, `Ai.Act`, `Ai.Await`, etc.).
 - `Ariadne.OptFlow` provides dialogue-oriented steps.
-- `Dominatus.Llm.OptFlow.llm` adds lightweight helpers for LLM-style tool envelopes and await semantics.
+- `Dominatus.Llm.OptFlow` is a placeholder package reserved for future LLM integration work.
 - `Dominatus.UtilityLite.Utility` provides reusable utility scoring composition helpers.
 
 ### 4) Runtime and persistence
@@ -220,21 +220,21 @@ static IEnumerator<AiStep> DialogueRoot(AiCtx ctx)
 
 - Dominatus uses CLR iterator state machines (`IEnumerator<AiStep>`) as foundational behavior units.
 - Those units are composed by an HFSM runtime and can include utility decision steps.
-- The repository includes an LLM-oriented OptFlow helper package (`Dominatus.Llm.OptFlow`) for tool envelope dispatch over the same actuation pathway.
+- The repository includes a placeholder package (`Dominatus.Llm.OptFlow`) with no active runtime behavior yet.
 - Replay/checkpoint capabilities exist and are treated as first-class concerns in core runtime design.
 
 ## Gaps between current state and ambition
 
 If the ambition is a next-generation AI agent foundation, the current code suggests these major gaps:
 
-1. **First-class LLM runtime package is minimal**  
-   LLM support is currently helper-centric (`llm` DSL + `LlmToolCall` envelope) rather than a complete model runtime abstraction.
+1. **No first-class LLM runtime yet**  
+   `Dominatus.Llm.OptFlow` is intentionally a dormant placeholder while core runtime work is prioritized.
 
 2. **No robust tool schema/manifest registry**  
    Tool discoverability, schema validation, and strongly governed dispatch contracts are not yet a full subsystem.
 
 3. **Replay lacks explicit model transcript semantics**  
-   Replay events capture several nondeterministic host inputs; model request/response transcript logging is not yet clearly represented as first-class replay events.
+   Replay events capture several nondeterministic host inputs; model request/response transcript logging is not yet represented as first-class replay events.
 
 4. **Safety/policy stack is still lightweight**  
    Policy interfaces exist, but richer governance layers (risk tiers, approvals, context-aware guards) are not yet fully realized.
@@ -244,4 +244,4 @@ If the ambition is a next-generation AI agent foundation, the current code sugge
 
 ## Practical takeaway
 
-Dominatus appears to be a promising deterministic orchestration kernel with clear architectural intent. Its current strengths are in **runtime determinism, step semantics, HFSM control, and replayability**. The path to “next-generation foundation” most likely depends on deepening LLM runtime contracts, tool governance, and memory systems while preserving its deterministic core.
+Dominatus currently presents a deterministic orchestration kernel with clear architectural intent. Its current strengths are in **runtime determinism, step semantics, HFSM control, and replayability**.
