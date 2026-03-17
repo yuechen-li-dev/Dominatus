@@ -1,9 +1,6 @@
 ﻿using Dominatus.Core;
 using Dominatus.Core.Blackboard;
-using Dominatus.Core.Decision;
 using Dominatus.Core.Hfsm;
-using Dominatus.Core.Runtime;
-using Dominatus.Llm.OptFlow;
 using Dominatus.OptFlow;
 using Dominatus.UtilityLite;
 
@@ -47,7 +44,7 @@ public class UtilityLiteTests
     }
 
     [Fact]
-    public void Utility_Option_And_Policy_SupportAiAndLlmDecide()
+    public void Utility_Option_And_Policy_SupportAiDecide()
     {
         var options = new[]
         {
@@ -60,14 +57,9 @@ public class UtilityLiteTests
             hysteresis: policy.Hysteresis,
             minCommitSeconds: policy.MinCommitSeconds,
             tieEpsilon: policy.TieEpsilon);
-        var llmStep = llm.Decide(Utility.Slot("CombatLoop"), options,
-            hysteresis: policy.Hysteresis,
-            minCommitSeconds: policy.MinCommitSeconds,
-            tieEpsilon: policy.TieEpsilon);
 
         Assert.Equal("CombatLoop", aiStep.Slot.Id);
-        Assert.Equal("CombatLoop", llmStep.Slot.Id);
-        Assert.Equal(aiStep.Policy, llmStep.Policy);
-        Assert.Equal(2, llmStep.Options.Count);
+        Assert.Equal(policy, aiStep.Policy);
+        Assert.Equal(2, aiStep.Options.Count);
     }
 }
