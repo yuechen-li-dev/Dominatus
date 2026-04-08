@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="samples/Dominatus.FishTank/Dominatus.Fishtank.csproj" />
   <Project Path="samples/Dominatus.SimConsole/Dominatus.SimConsole.csproj" Id="8741215a-1ee9-4090-823d-b2860b51c3e1" />
   <Project Path="src/Ariadne.Console/Ariadne.ConsoleApp.csproj" Id="4ffe8ebb-8ad5-4faa-bdad-afddf42b99e7" />
   <Project Path="src/Ariadne.OptFlow/Ariadne.OptFlow.csproj" Id="7f70086a-7f3d-4fcf-a681-49c83963a640" />

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Dominatus.Fishtank</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.4" />
+    <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.4.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.UtilityLite\Dominatus.UtilityLite.csproj" />
+  </ItemGroup>
+</Project>
