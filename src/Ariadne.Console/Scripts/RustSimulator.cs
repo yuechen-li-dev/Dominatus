@@ -36,6 +36,10 @@ public static class RustSimulator
     public static readonly BbKey<string> Level1Choice = new("RustSim.Level1Choice");
     public static readonly BbKey<string> EndingChoice = new("RustSim.EndingChoice");
 
+    //Puzzle
+    public static readonly BbKey<string> Level1PuzzleAnswer = new("RustSim.L1.PuzzleAnswer");
+    public static readonly BbKey<int> Level1PuzzleAttempts = new("RustSim.L1.PuzzleAttempts");
+
     // ---------------------------------------------------------------------
     // Root / state graph
     // ---------------------------------------------------------------------
@@ -230,11 +234,58 @@ public static class RustSimulator
         var clone = ctx.Bb.GetOrDefault(ClonedEverything, false);
         var understand = ctx.Bb.GetOrDefault(AcceptedOwnershipTruth, false);
 
-        if (understand || (read && duck))
-        {
-            yield return Diag.Line("You refactor the scope. The mutable borrow ends where it should. The code compiles with the weary dignity of a problem finally named correctly.", speaker: "Narrator");
-            yield return Diag.Line("The compiler says nothing. Which, tonight, feels like respect.", speaker: "Narrator");
+        yield return Diag.Line("Fine. No more bluffing. You open the file and stare at the place where the code and your dignity parted ways.", speaker: "Narrator");
+        yield return Diag.Line("There is a missing line. Put the right Rust code there and the borrow checker relents. Put the wrong thing there and the night grows teeth.", speaker: "Narrator");
 
+        yield return Diag.Line("Broken snippet:", speaker: "System");
+        yield return Diag.Line("let player = world.player_mut();", speaker: "Code");
+        yield return Diag.Line("// ???", speaker: "Code");
+        yield return Diag.Line("world.spawn_enemy();", speaker: "Code");
+
+        if (read)
+            yield return Diag.Line("Hint: the compiler is angry because the mutable borrow of `world` lives too long.", speaker: "Compiler");
+
+        if (duck)
+            yield return Diag.Line("The rubber duck, now spiritually superior to you, reminds you that the simplest fix is often to end a borrow before you do the next mutable thing.", speaker: "Narrator");
+
+        if (understand)
+            yield return Diag.Line("You already know the shape of the truth: make the first borrow end before the second mutable borrow begins.", speaker: "Narrator");
+
+        yield return Diag.Ask("Type the missing Rust line:", storeAs: Level1PuzzleAnswer);
+
+        var attempts = ctx.Bb.GetOrDefault(Level1PuzzleAttempts, 0) + 1;
+        ctx.Bb.Set(Level1PuzzleAttempts, attempts);
+
+        var raw = ctx.Bb.GetOrDefault(Level1PuzzleAnswer, "");
+        var answer = NormalizeRustLine(raw);
+
+        if (IsAcceptedLevel1Answer(answer))
+        {
+            if (understand || (read && duck))
+            {
+                yield return Diag.Line("You type the line, rerun the build, and feel the error collapse inward like a star finally persuaded to stop arguing with gravity.", speaker: "Narrator");
+                yield return Diag.Line("The mutable borrow ends where it should. `world.spawn_enemy()` is free to live its own life. The compiler says nothing, which tonight feels almost tender.", speaker: "Narrator");
+
+                ctx.Bb.Set(CompletedLevel1, true);
+                ctx.Bb.Set(Level, 2);
+
+                yield return Ai.Goto("Ending_Level1Success");
+                yield break;
+            }
+
+            if (clone)
+            {
+                yield return Diag.Line("Against all moral expectation, the code compiles.", speaker: "Narrator");
+                yield return Diag.Line("You solved the immediate problem, but the smell of your earlier clones still hangs over the file like incense at a bad shrine.", speaker: "Narrator");
+
+                ctx.Bb.Set(CompletedLevel1, true);
+                ctx.Bb.Set(Level, 2);
+
+                yield return Ai.Goto("Ending_Level1CursedSuccess");
+                yield break;
+            }
+
+            yield return Diag.Line("The line is correct. The build passes. You do not feel victorious so much as briefly tolerated by the universe.", speaker: "Narrator");
             ctx.Bb.Set(CompletedLevel1, true);
             ctx.Bb.Set(Level, 2);
 
@@ -242,20 +293,20 @@ public static class RustSimulator
             yield break;
         }
 
-        if (clone)
+        ctx.Bb.Set(Confidence, Math.Max(0, ctx.Bb.GetOrDefault(Confidence, 0) - 1));
+
+        yield return Diag.Line("The compiler reads your answer and responds with the calm cruelty of something that was never confused in the first place.", speaker: "Compiler");
+
+        if (attempts == 1)
         {
-            yield return Diag.Line("Technically, it works.", speaker: "Narrator");
-            yield return Diag.Line("You stare at the cloned values spreading through the code like emergency scaffolding that forgot to leave after the building was done.", speaker: "Narrator");
-
-            ctx.Bb.Set(CompletedLevel1, true);
-            ctx.Bb.Set(Level, 2);
-
-            yield return Ai.Goto("Ending_Level1CursedSuccess");
+            yield return Diag.Line("That is not the line.", speaker: "Compiler");
+            yield return Diag.Line("You have angered the machine, but not beyond forgiveness. Yet.", speaker: "Narrator");
+            yield return Ai.Goto("Level1_Menu");
             yield break;
         }
 
-        yield return Diag.Line("You make a change quickly, confidently, and wrong.", speaker: "Narrator");
-        yield return Diag.Line("The original borrow error vanishes, only to be replaced by a newer, more intimate one. The compiler has stopped speaking in objections and started speaking in lessons.", speaker: "Compiler");
+        yield return Diag.Line("Still wrong.", speaker: "Compiler");
+        yield return Diag.Line("The bug remains. Worse, it has now seen you flinch.", speaker: "Narrator");
         yield return Ai.Goto("Ending_Level1Failure");
     }
 
@@ -304,6 +355,38 @@ public static class RustSimulator
         yield return Ai.Succeed();
     }
 
+    //Helper Functions
+    private static string NormalizeRustLine(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return "";
+
+        var trimmed = input.Trim();
+
+        // Collapse all whitespace runs to a single space so the player
+        // is solving the borrow problem, not fighting spacing trivia.
+        var parts = trimmed
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+        return string.Join(" ", parts);
+    }
+
+    private static bool IsAcceptedLevel1Answer(string normalized)
+    {
+        // Level 1's intended lesson:
+        // end the mutable borrow before borrowing world mutably again.
+        //
+        // We accept a small mercy-set of equivalent answers rather than forcing
+        // one exact formatting string.
+        return normalized switch
+        {
+            "drop(player);" => true,
+            "std::mem::drop(player);" => true,
+            _ => false
+        };
+    }
+
+    //State Machine Graph Builder
     public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
     {
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
