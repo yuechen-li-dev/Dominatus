@@ -21,12 +21,13 @@ public static class DemoDialogue
             options:
             [
                 Diag.Option("a", "Open the door"),
-                Diag.Option("b", "Run")
+            Diag.Option("b", "Run")
             ],
             storeAs: Choice);
 
         var c = ctx.Bb.GetOrDefault(Choice, "");
         yield return Diag.Line($"You picked: {c}", speaker: "Narrator");
+        yield return Diag.Line("End of demo.", speaker: "System");
 
         while (true)
             yield return Ai.Wait(999f);
