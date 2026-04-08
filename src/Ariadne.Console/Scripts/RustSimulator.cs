@@ -114,7 +114,6 @@ public static class RustSimulator
         yield return Diag.Line($"Confidence: {confidence}", speaker: "Status");
         yield return Diag.Line($"Sanity: {sanity}", speaker: "Status");
         yield return Diag.Line($"Tech Debt: {debt}", speaker: "Status");
-        yield return Ai.Pop();
     }
 
     // ---------------------------------------------------------------------
