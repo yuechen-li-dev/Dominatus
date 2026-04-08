@@ -101,7 +101,21 @@ public static class Utility
         });
 
     public static Consideration BbEq<T>(BbKey<T> key, T expected) where T : notnull
-        => Bool((_, a) => EqualityComparer<T>.Default.Equals(a.Bb.GetOrDefault(key, expected), expected));
+        => Bool((_, a) =>
+        {
+            foreach (var entry in a.Bb.EnumerateEntries())
+            {
+                if (string.Equals(entry.Key, key.Name, StringComparison.Ordinal))
+                {
+                    if (entry.Value is T typed)
+                        return EqualityComparer<T>.Default.Equals(typed, expected);
+
+                    return false;
+                }
+            }
+
+            return false;
+        });
 
     public static Consideration BbAtLeast(BbKey<float> key, float threshold)
         => Bool((_, a) => a.Bb.GetOrDefault(key, 0f) >= threshold);
