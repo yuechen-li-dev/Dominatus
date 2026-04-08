@@ -83,7 +83,6 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
             if (r.PayloadType is not null)
             {
                 var completedT = typeof(ActuationCompleted<>).MakeGenericType(r.PayloadType);
-                // TODO: Typed actuator completion uses reflection. Not hot path, but worth replacing.
                 var typedEvt = Activator.CreateInstance(
                     completedT,
                     new object?[] { res.Id, res.Ok, res.Error, res.Payload });
@@ -93,9 +92,24 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         else if (res.Accepted)
         {
             // Deferred completion — register as in-flight so checkpoint capture can record it.
-            // PayloadTypeTag mirrors BbJsonCodec's type table: "string" for string payload,
-            // null for untyped (e.g. DiagLine which has no payload).
-            var tag = PayloadTypeToTag(r.PayloadType);
+            // Prefer the handler result payload type, but if the handler only supplied the
+            // payload type through CompleteLater(...), recover it from the pending queue entry.
+            Type? effectivePayloadType = r.PayloadType;
+
+            if (effectivePayloadType is null)
+            {
+                for (int i = _pending.Count - 1; i >= 0; i--)
+                {
+                    var p = _pending[i];
+                    if (p.AgentId.Equals(ctx.Agent.Id) && p.Id.Equals(id))
+                    {
+                        effectivePayloadType = p.PayloadType;
+                        break;
+                    }
+                }
+            }
+
+            var tag = PayloadTypeToTag(effectivePayloadType);
             ctx.Agent.InFlightActuations.Add(new PendingActuation(id.Value, tag));
         }
 

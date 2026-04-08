@@ -158,6 +158,10 @@ public sealed class NodeRunner(AiNode node)
             case Goto or Push or Pop or Succeed or Fail:
                 return NodeTickResult.Emitted(step);
 
+            // Any IWaitEvent should be handled uniformly.
+            // This covers:
+            // - WaitEvent<T>
+            // - AwaitActuation<T>
             case IWaitEvent we:
                 _waitEvent = we;
                 _waitEventCursor = default;
@@ -183,7 +187,7 @@ public sealed class NodeRunner(AiNode node)
 
             case AwaitActuation await:
                 {
-                    // Implement Await as a wait-for-event with a stable cursor
+                    // Untyped await: wait for the matching ActuationCompleted
                     var id = agent.Bb.GetOrDefault(await.IdKey, default);
 
                     _waitEvent = new WaitEvent<ActuationCompleted>(
