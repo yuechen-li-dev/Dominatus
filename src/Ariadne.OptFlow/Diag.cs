@@ -66,4 +66,20 @@ public static class Diag
         [CallerLineNumber] int callsiteLine = 0)
         => new DiagSteps.ChooseStep(prompt, options, storeAs,
             $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
+
+    public static IEnumerable<AiStep> SafeInline(IEnumerable<AiStep> steps)
+    {
+        foreach (var step in steps)
+        {
+            if (step is Goto or Push or Pop or Succeed or Fail)
+            {
+                throw new InvalidOperationException(
+                    "Inline dialogue helpers may not yield control-flow steps " +
+                    "(Goto/Push/Pop/Succeed/Fail). " +
+                    "Make this a real HFSM state and enter it with Ai.Push or Ai.Goto instead.");
+            }
+
+            yield return step;
+        }
+    }
 }

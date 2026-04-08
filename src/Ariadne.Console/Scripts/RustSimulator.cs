@@ -90,7 +90,7 @@ public static class RustSimulator
                     yield break;
 
                 case "status":
-                    foreach (var step in ShowStatus(ctx))
+                    foreach (var step in Diag.SafeInline(ShowStatus(ctx)))
                         yield return step;
                     break;
 
