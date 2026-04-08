@@ -85,123 +85,165 @@ public sealed class NodeRunner(AiNode node)
         if (cancel.IsCancellationRequested)
             return NodeTickResult.Completed(NodeStatus.Failed);
 
-        // Handle waits
-        if (_waitSeconds is not null)
+        while (true)
         {
-            if (world.Clock.Time - _waitStartTime >= _waitSeconds.Seconds)
+            // Handle waits
+            if (_waitSeconds is not null)
             {
-                _waitSeconds = null;
+                if (world.Clock.Time - _waitStartTime >= _waitSeconds.Seconds)
+                {
+                    _waitSeconds = null;
+                }
+                else
+                {
+                    return NodeTickResult.Running();
+                }
             }
-            else
+
+            if (_waitUntil is not null)
             {
-                return NodeTickResult.Running();
+                bool done;
+                try { done = _waitUntil.Predicate(ctx); }
+                catch { done = false; }
+
+                if (done)
+                    _waitUntil = null;
+                else
+                    return NodeTickResult.Running();
             }
-        }
 
-        if (_waitUntil is not null)
-        {
-            bool done;
-            try { done = _waitUntil.Predicate(ctx); }
-            catch { done = false; }
+            if (_waitEvent is not null)
+            {
+                if (ctx.Cancel.IsCancellationRequested)
+                    return NodeTickResult.Completed(NodeStatus.Failed);
 
-            if (done)
-                _waitUntil = null;
-            else
-                return NodeTickResult.Running();
-        }
+                if (!_waitEvent.TryConsume(ctx, ref _waitEventCursor))
+                    return NodeTickResult.Running();
 
-        if (_waitEvent is not null)
-        {
-            if (ctx.Cancel.IsCancellationRequested)
-                return NodeTickResult.Completed(NodeStatus.Failed);
-
-            if (!_waitEvent.TryConsume(ctx, ref _waitEventCursor))
-                return NodeTickResult.Running();
-
-            _waitEvent = null;
-            _waitEventCursor = default;
-        }
-
-        // Advance enumerator
-        bool moved;
-        try { moved = _it.MoveNext(); }
-        catch
-        {
-            return NodeTickResult.Completed(NodeStatus.Failed);
-        }
-
-        if (!moved)
-        {
-            // Default: natural completion == success
-            return NodeTickResult.Completed(NodeStatus.Succeeded);
-        }
-
-        var step = _it.Current;
-
-        // Null yields are treated as "just keep running"
-        if (step is null)
-            return NodeTickResult.Running();
-
-        switch (step)
-        {
-            case WaitSeconds ws:
-                if (ws.Seconds <= 0) return NodeTickResult.Running();
-                _waitSeconds = ws;
-                _waitStartTime = world.Clock.Time;
-                return NodeTickResult.Running();
-
-            case WaitUntil wu:
-                _waitUntil = wu;
-                return NodeTickResult.Running();
-
-            // Control / completion signals are emitted upward to HFSM
-            case Goto or Push or Pop or Succeed or Fail:
-                return NodeTickResult.Emitted(step);
-
-            // Any IWaitEvent should be handled uniformly.
-            // This covers:
-            // - WaitEvent<T>
-            // - AwaitActuation<T>
-            case IWaitEvent we:
-                _waitEvent = we;
+                _waitEvent = null;
                 _waitEventCursor = default;
+
+                // Event consumed successfully; continue in the same tick so restore+replay
+                // can progress through Await<T> immediately when the replayed event is already present.
+                continue;
+            }
+
+            // Advance enumerator
+            bool moved;
+            try { moved = _it.MoveNext(); }
+            catch
+            {
+                return NodeTickResult.Completed(NodeStatus.Failed);
+            }
+
+            if (!moved)
+            {
+                // Default: natural completion == success
+                return NodeTickResult.Completed(NodeStatus.Succeeded);
+            }
+
+            var step = _it.Current;
+
+            // Null yields are treated as "just keep running"
+            if (step is null)
                 return NodeTickResult.Running();
 
-            case Act act:
-                {
-                    var res = ctx.Act.Dispatch(ctx, act.Command);
+            switch (step)
+            {
+                case WaitSeconds ws:
+                    if (ws.Seconds <= 0)
+                        continue;
 
-                    // Store id if requested
-                    if (act.StoreIdAs is BbKey<ActuationId> key)
-                        agent.Bb.Set(key, res.Id);
-
-                    // If it completed immediately, publish completion event so Await works uniformly
-                    if (res.Completed)
-                        agent.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
-
-                    // If not accepted, you can choose to fail immediately or just keep going.
-                    // I recommend: if not accepted AND completed, let the node handle it via Await/logic.
-                    // So we just keep running.
+                    _waitSeconds = ws;
+                    _waitStartTime = world.Clock.Time;
                     return NodeTickResult.Running();
-                }
 
-            case AwaitActuation await:
-                {
-                    // Untyped await: wait for the matching ActuationCompleted
-                    var id = agent.Bb.GetOrDefault(await.IdKey, default);
+                case WaitUntil wu:
+                    _waitUntil = wu;
+                    return NodeTickResult.Running();
 
-                    _waitEvent = new WaitEvent<ActuationCompleted>(
-                        Filter: e => e.Id.Equals(id),
-                        OnConsumed: null
-                    );
+                // Control / completion signals are emitted upward to HFSM
+                case Goto or Push or Pop or Succeed or Fail:
+                    return NodeTickResult.Emitted(step);
 
+                // Any IWaitEvent should be handled uniformly.
+                // This covers:
+                // - WaitEvent<T>
+                // - AwaitActuation<T>
+                case IWaitEvent we:
+                    _waitEvent = we;
                     _waitEventCursor = default;
-                    return NodeTickResult.Running();
-                }
 
-            default:
-                // Unknown step: treat as emitted so brain can decide later (future-proof)
-                return NodeTickResult.Emitted(step);
+                    // Try immediate consume once so restore+replay works when the event
+                    // was already published before this wait step was re-installed.
+                    if (_waitEvent.TryConsume(ctx, ref _waitEventCursor))
+                    {
+                        _waitEvent = null;
+                        _waitEventCursor = default;
+                        continue;
+                    }
+
+                    return NodeTickResult.Running();
+
+                case Act act:
+                    {
+                        // Restore-friendly resume:
+                        // If the node stores its actuation id in BB and that id is still present
+                        // in the restored in-flight set, do NOT redispatch. Treat this as "the act
+                        // already happened before the checkpoint" and continue to the subsequent await.
+                        if (act.StoreIdAs is BbKey<ActuationId> resumeKey)
+                        {
+                            var existingId = agent.Bb.GetOrDefault(resumeKey, default);
+                            bool alreadyPending = agent.InFlightActuations.Any(p => p.ActuationIdValue == existingId.Value);
+
+                            if (existingId.Value != 0 && alreadyPending)
+                                continue;
+                        }
+
+                        var res = ctx.Act.Dispatch(ctx, act.Command);
+
+                        // Store id if requested
+                        if (act.StoreIdAs is BbKey<ActuationId> key)
+                            agent.Bb.Set(key, res.Id);
+
+                        // If it completed immediately, publish completion event so Await works uniformly.
+                        // (ActuatorHost also publishes immediate completion events; keep this behavior
+                        // unchanged for now to avoid broad semantic drift outside persistence milestones.)
+                        if (res.Completed)
+                            agent.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
+
+                        // Continue in the same tick so Act -> Await can wire up immediately.
+                        continue;
+                    }
+
+                case AwaitActuation await:
+                    {
+                        // Untyped await: wait for the matching ActuationCompleted
+                        var id = agent.Bb.GetOrDefault(await.IdKey, default);
+
+                        _waitEvent = new WaitEvent<ActuationCompleted>(
+                            Filter: e => e.Id.Equals(id),
+                            OnConsumed: null
+                        );
+
+                        _waitEventCursor = default;
+
+                        // Try immediate consume once so replayed completions already sitting in the bus
+                        // are observed on the first tick after restore.
+                        if (_waitEvent.TryConsume(ctx, ref _waitEventCursor))
+                        {
+                            _waitEvent = null;
+                            _waitEventCursor = default;
+                            continue;
+                        }
+
+                        return NodeTickResult.Running();
+                    }
+
+                default:
+                    // Unknown step: treat as emitted so brain can decide later (future-proof)
+                    return NodeTickResult.Emitted(step);
+            }
         }
     }
 }

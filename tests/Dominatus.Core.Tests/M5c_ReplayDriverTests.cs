@@ -210,23 +210,44 @@ public sealed class M5c_ReplayDriverTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void ReplayDriver_Text_ReInjectsTypedCompletion_AndNodeStoresPayload()
+    public void ReplayDriver_Text_ReInjectsTypedAndUntypedCompletion_ForRestoredPendingActuation()
     {
         var (world, agent, _) = BuildWorld();
         var checkpoint = DominatusCheckpointBuilder.Capture(world);
 
+        // Capture the pending actuation id that existed at checkpoint time.
+        var expectedPending = agent.InFlightActuations.Single();
+        var expectedId = expectedPending.ActuationIdValue;
+
         var log = new ReplayLog(1, new ReplayEvent[]
         {
-            new ReplayEvent.Text(agent.Id.ToString(), "hello-from-replay")
+        new ReplayEvent.Text(agent.Id.ToString(), "hello-from-replay")
         });
 
         var cursors = DominatusCheckpointBuilder.Restore(world, checkpoint);
         var driver = new ReplayDriver(world, log, cursors);
         driver.ApplyAll();
 
-        world.Tick(0.016f); // let the node process the re-injected completion
+        // Replay should have published both completion forms for the restored pending id.
+        EventCursor untypedCursor = default;
+        var foundUntyped = agent.Events.TryConsume(
+            ref untypedCursor,
+            (ActuationCompleted e) => e.Id.Value == expectedId,
+            out var untyped);
 
-        Assert.Equal("hello-from-replay", agent.Bb.GetOrDefault(KeyAnswer, ""));
+        Assert.True(foundUntyped);
+        Assert.True(untyped.Ok);
+        Assert.Equal("hello-from-replay", Assert.IsType<string>(untyped.Payload));
+
+        EventCursor typedCursor = default;
+        var foundTyped = agent.Events.TryConsume(
+            ref typedCursor,
+            (ActuationCompleted<string> e) => e.Id.Value == expectedId,
+            out var typed);
+
+        Assert.True(foundTyped);
+        Assert.True(typed.Ok);
+        Assert.Equal("hello-from-replay", typed.Payload);
     }
 
     [Fact]
