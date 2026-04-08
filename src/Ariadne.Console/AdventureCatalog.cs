@@ -16,7 +16,13 @@ public static class AdventureCatalog
             Id: "thread_of_night",
             Title: "Ariadne: Thread of Night",
             Description: "A mythic chamber drama set on the night before the labyrinth.",
-            Root: AriadneThreadOfNight.Root)
+            Root: AriadneThreadOfNight.Root),
+
+        new(
+            Id: "rust_simulator",
+            Title: "Rust Simulator",
+            Description: "A black-comedy descent through compile-time suffering.",
+            Root: RustSimulator.Root)
     ];
 
     public static IReadOnlyList<AdventureDefinition> All => _all;

@@ -60,6 +60,23 @@ static void RunAdventure(ConsoleUi ui, AdventureDefinition adventure)
         graph.Add(new HfsmStateDef { Id = "Ending_TheDescent", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_TheDescent });
         graph.Add(new HfsmStateDef { Id = "Ending_ThreadlessTragedy", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_ThreadlessTragedy });
     }
+    else if (adventure.Id == "rust_simulator")
+    {
+        graph.Add(new HfsmStateDef { Id = "Intro", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Intro });
+        graph.Add(new HfsmStateDef { Id = "Hub", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Hub });
+        graph.Add(new HfsmStateDef { Id = "Level1_Intro", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_Intro });
+        graph.Add(new HfsmStateDef { Id = "Level1_Menu", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_Menu });
+        graph.Add(new HfsmStateDef { Id = "Level1_ReadError", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_ReadError });
+        graph.Add(new HfsmStateDef { Id = "Level1_AskDuck", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_AskDuck });
+        graph.Add(new HfsmStateDef { Id = "Level1_CloneEverything", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_CloneEverything });
+        graph.Add(new HfsmStateDef { Id = "Level1_UnderstandOwnership", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_UnderstandOwnership });
+        graph.Add(new HfsmStateDef { Id = "Level1_Resolve", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Level1_Resolve });
+        graph.Add(new HfsmStateDef { Id = "Ending_Level1Success", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Ending_Level1Success });
+        graph.Add(new HfsmStateDef { Id = "Ending_Level1CursedSuccess", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Ending_Level1CursedSuccess });
+        graph.Add(new HfsmStateDef { Id = "Ending_Level1Failure", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Ending_Level1Failure });
+        graph.Add(new HfsmStateDef { Id = "Ending_FleeMonitor", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Ending_FleeMonitor });
+        graph.Add(new HfsmStateDef { Id = "Ending_Quit", Node = Ariadne.ConsoleApp.Scripts.RustSimulator.Ending_Quit });
+    }
 
     var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
     var agent = new AiAgent(brain);
