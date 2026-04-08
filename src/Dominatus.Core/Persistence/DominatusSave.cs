@@ -15,12 +15,22 @@ public static class DominatusSave
         ReplayLog? replayLog = null,
         ISaveChunkContributor? extra = null)
     {
+        if (checkpoint is null)
+            throw new ArgumentNullException(nameof(checkpoint));
+
         var ctx = new SaveWriteContext();
 
-        // Meta (versioning)
-        ctx.AddUtf8Json(ChunkId.Meta, JsonSerializer.Serialize(new { v = checkpoint.Version }));
+        // Meta chunk: logical save-format version for chunk interpretation.
+        ctx.AddUtf8Json(
+            ChunkId.Meta,
+            JsonSerializer.Serialize(new
+            {
+                format = "dominatus-save",
+                v = CurrentVersion,
+                checkpointVersion = checkpoint.Version
+            }));
 
-        // Core chunks: JSON for now (payload blobs inside AgentCheckpoint are already byte[])
+        // Core checkpoint payload.
         ctx.AddUtf8Json(ChunkId.Hfsm, JsonSerializer.Serialize(checkpoint));
 
         if (replayLog is not null)
@@ -35,7 +45,26 @@ public static class DominatusSave
         IReadOnlyList<SaveChunk> chunks,
         ISaveChunkContributor? extra = null)
     {
+        if (chunks is null)
+            throw new ArgumentNullException(nameof(chunks));
+
         var ctx = new SaveReadContext(chunks);
+
+        if (!ctx.TryGetUtf8Json(ChunkId.Meta, out var metaJson))
+            throw new InvalidOperationException("Missing dom.meta chunk.");
+
+        using (var metaDoc = JsonDocument.Parse(metaJson))
+        {
+            var root = metaDoc.RootElement;
+
+            if (!root.TryGetProperty("v", out var versionProp) || versionProp.ValueKind != JsonValueKind.Number)
+                throw new InvalidOperationException("dom.meta chunk is missing a valid version field.");
+
+            var version = versionProp.GetInt32();
+            if (version != CurrentVersion)
+                throw new InvalidOperationException(
+                    $"Unsupported Dominatus logical save version. Expected {CurrentVersion}, got {version}.");
+        }
 
         if (!ctx.TryGetUtf8Json(ChunkId.Hfsm, out var checkpointJson))
             throw new InvalidOperationException("Missing dom.hfsm chunk.");
@@ -45,7 +74,10 @@ public static class DominatusSave
 
         ReplayLog? log = null;
         if (ctx.TryGetUtf8Json(ChunkId.ReplayLog, out var logJson))
-            log = JsonSerializer.Deserialize<ReplayLog>(logJson);
+        {
+            log = JsonSerializer.Deserialize<ReplayLog>(logJson)
+                  ?? throw new InvalidOperationException("Failed to deserialize replay log.");
+        }
 
         extra?.ReadChunks(ctx);
 
