@@ -10,7 +10,13 @@ public static class AdventureCatalog
             Id: "demo",
             Title: "Demo Dialogue",
             Description: "A tiny Ariadne conversation demo.",
-            Root: DemoDialogue.Root)
+            Root: DemoDialogue.Root),
+
+        new(
+            Id: "thread_of_night",
+            Title: "Ariadne: Thread of Night",
+            Description: "A mythic chamber drama set on the night before the labyrinth.",
+            Root: AriadneThreadOfNight.Root)
     ];
 
     public static IReadOnlyList<AdventureDefinition> All => _all;

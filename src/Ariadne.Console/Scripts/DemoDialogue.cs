@@ -21,7 +21,7 @@ public static class DemoDialogue
             options:
             [
                 Diag.Option("a", "Open the door"),
-            Diag.Option("b", "Run")
+                Diag.Option("b", "Run")
             ],
             storeAs: Choice);
 
