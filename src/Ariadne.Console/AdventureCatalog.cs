@@ -10,19 +10,19 @@ public static class AdventureCatalog
             Id: "demo",
             Title: "Demo Dialogue",
             Description: "A tiny Ariadne conversation demo.",
-            Root: DemoDialogue.Root),
+            RegisterStates: DemoDialogue.Register),
 
         new(
             Id: "thread_of_night",
             Title: "Ariadne: Thread of Night",
             Description: "A mythic chamber drama set on the night before the labyrinth.",
-            Root: AriadneThreadOfNight.Root),
+            RegisterStates: AriadneThreadOfNight.Register),
 
         new(
             Id: "rust_simulator",
             Title: "Rust Simulator",
             Description: "A black-comedy descent through compile-time suffering.",
-            Root: RustSimulator.Root)
+            RegisterStates: RustSimulator.Register)
     ];
 
     public static IReadOnlyList<AdventureDefinition> All => _all;

@@ -1,4 +1,4 @@
-﻿using Dominatus.Core.Nodes;
+﻿using Dominatus.Core.Hfsm;
 
 namespace Ariadne.ConsoleApp;
 
@@ -6,4 +6,4 @@ public sealed record AdventureDefinition(
     string Id,
     string Title,
     string Description,
-    AiNode Root);
+    Action<HfsmGraph> RegisterStates);

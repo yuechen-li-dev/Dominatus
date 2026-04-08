@@ -528,4 +528,26 @@ public static class AriadneThreadOfNight
         ctx.Bb.Set(AdventureComplete, true);
         yield return Ai.Succeed();
     }
+
+    public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
+    {
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Intro", Node = Intro });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Chamber", Node = Chamber });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "InspectThread", Node = InspectThread });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "InspectKnife", Node = InspectKnife });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "ReadTablets", Node = ReadTablets });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "VisitShrine", Node = VisitShrine });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Theseus", Node = Theseus });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "TalkToTheseusWhy", Node = TalkToTheseusWhy });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "TalkToTheseusFear", Node = TalkToTheseusFear });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "TalkToTheseusMonster", Node = TalkToTheseusMonster });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "DemandPromise", Node = DemandPromise });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Threshold", Node = Threshold });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_ThreadAndFlight", Node = Ending_ThreadAndFlight });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_MercyInTheDark", Node = Ending_MercyInTheDark });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_CrownOfKnives", Node = Ending_CrownOfKnives });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_TheDescent", Node = Ending_TheDescent });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_ThreadlessTragedy", Node = Ending_ThreadlessTragedy });
+    }
 }

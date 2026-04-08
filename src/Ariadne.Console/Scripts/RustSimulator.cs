@@ -304,4 +304,23 @@ public static class RustSimulator
         ctx.Bb.Set(AdventureComplete, true);
         yield return Ai.Succeed();
     }
+
+    public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
+    {
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Intro", Node = Intro });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Hub", Node = Hub });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Intro", Node = Level1_Intro });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Menu", Node = Level1_Menu });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_ReadError", Node = Level1_ReadError });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskDuck", Node = Level1_AskDuck });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_CloneEverything", Node = Level1_CloneEverything });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_UnderstandOwnership", Node = Level1_UnderstandOwnership });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Resolve", Node = Level1_Resolve });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Level1Success", Node = Ending_Level1Success });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Level1CursedSuccess", Node = Ending_Level1CursedSuccess });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Level1Failure", Node = Ending_Level1Failure });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_FleeMonitor", Node = Ending_FleeMonitor });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Quit", Node = Ending_Quit });
+    }
 }

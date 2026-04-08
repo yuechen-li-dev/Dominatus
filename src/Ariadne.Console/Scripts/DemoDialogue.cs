@@ -32,4 +32,8 @@ public static class DemoDialogue
         while (true)
             yield return Ai.Wait(999f);
     }
+    public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
+    {
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
+    }
 }
