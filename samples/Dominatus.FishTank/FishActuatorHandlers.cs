@@ -19,6 +19,8 @@ public sealed class SetVelocityHandler : IActuationHandler<SetVelocityCommand>
 
 public sealed class SteerTowardHandler : IActuationHandler<SteerTowardCommand>
 {
+    private const float SeparationWeight = 0.75f;
+
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, SteerTowardCommand cmd)
     {
         var px = ctx.Agent.Bb.GetOrDefault(FishKeys.PosX, 0f);
@@ -26,6 +28,13 @@ public sealed class SteerTowardHandler : IActuationHandler<SteerTowardCommand>
 
         var dx = cmd.TargetX - px;
         var dy = cmd.TargetY - py;
+
+        var sepX = ctx.Agent.Bb.GetOrDefault(FishKeys.SeparationX, 0f);
+        var sepY = ctx.Agent.Bb.GetOrDefault(FishKeys.SeparationY, 0f);
+
+        dx += sepX * SeparationWeight;
+        dy += sepY * SeparationWeight;
+
         var len = MathF.Sqrt(dx * dx + dy * dy);
 
         if (len > 0.1f)
@@ -40,6 +49,8 @@ public sealed class SteerTowardHandler : IActuationHandler<SteerTowardCommand>
 
 public sealed class SteerAwayHandler : IActuationHandler<SteerAwayCommand>
 {
+    private const float SeparationWeight = 0.55f;
+
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, SteerAwayCommand cmd)
     {
         var px = ctx.Agent.Bb.GetOrDefault(FishKeys.PosX, 0f);
@@ -47,6 +58,13 @@ public sealed class SteerAwayHandler : IActuationHandler<SteerAwayCommand>
 
         var dx = px - cmd.FromX;
         var dy = py - cmd.FromY;
+
+        var sepX = ctx.Agent.Bb.GetOrDefault(FishKeys.SeparationX, 0f);
+        var sepY = ctx.Agent.Bb.GetOrDefault(FishKeys.SeparationY, 0f);
+
+        dx += sepX * SeparationWeight;
+        dy += sepY * SeparationWeight;
+
         var len = MathF.Sqrt(dx * dx + dy * dy);
 
         if (len > 0.1f)
@@ -65,9 +83,10 @@ public sealed class WanderHandler : IActuationHandler<WanderCommand>
 
     // Craig Reynolds wander: project a circle ahead of the fish,
     // nudge a target point on that circle, steer toward it.
-    private const float CircleDistance = 40f; // how far ahead the circle is
-    private const float CircleRadius = 25f; // radius of the wander circle
-    private const float AngleChange = 0.35f; // max nudge per call (radians)
+    private const float CircleDistance = 40f;
+    private const float CircleRadius = 25f;
+    private const float AngleChange = 0.35f;
+    private const float SeparationWeight = 0.45f;
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, WanderCommand cmd)
     {
@@ -92,6 +111,12 @@ public sealed class WanderHandler : IActuationHandler<WanderCommand>
         // Target point on circle
         var tx = cx + MathF.Cos(wanderAngle) * CircleRadius;
         var ty = cy + MathF.Sin(wanderAngle) * CircleRadius;
+
+        // Mild local separation so wander still stays loose
+        var sepX = ctx.Agent.Bb.GetOrDefault(FishKeys.SeparationX, 0f);
+        var sepY = ctx.Agent.Bb.GetOrDefault(FishKeys.SeparationY, 0f);
+        tx += sepX * SeparationWeight * CircleRadius;
+        ty += sepY * SeparationWeight * CircleRadius;
 
         // Normalize and scale to desired speed
         var tlen = MathF.Sqrt(tx * tx + ty * ty);

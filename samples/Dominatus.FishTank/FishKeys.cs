@@ -22,6 +22,11 @@ public static class FishKeys
     public static readonly BbKey<float> NearestPredY = new("NearestPredY");
     public static readonly BbKey<bool> PredatorNearby = new("PredatorNearby");
 
+    // Local motion shaping (Fishbowl-specific)
+    public static readonly BbKey<float> SeparationX = new("SeparationX");
+    public static readonly BbKey<float> SeparationY = new("SeparationY");
+    public static readonly BbKey<float> FoodOffsetAngle = new("FoodOffsetAngle");
+
     // State
     public static readonly BbKey<float> Hunger = new("Hunger");
     public static readonly BbKey<float> WanderAngle = new("WanderAngle");

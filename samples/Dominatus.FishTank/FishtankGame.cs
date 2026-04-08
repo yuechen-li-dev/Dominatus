@@ -187,20 +187,63 @@ public sealed class FishtankGame : Game
 
     private void UpdatePerception()
     {
-        // --- Prey perception: find nearest food and nearest predator ---
+        const float SeparationRadius = 28f;
+        const float FoodOffsetRadius = 6f;
+
+        // --- Prey perception: nearest food, nearest predator, and local separation ---
         foreach (var prey in _prey)
         {
             var px = prey.Bb.GetOrDefault(FishKeys.PosX, 0f);
             var py = prey.Bb.GetOrDefault(FishKeys.PosY, 0f);
+            var pr = prey.Bb.GetOrDefault(FishKeys.Radius, 8f);
 
-            // Nearest food
+            // Local separation from nearby prey
+            float sepX = 0f;
+            float sepY = 0f;
+
+            foreach (var other in _prey)
+            {
+                if (ReferenceEquals(prey, other))
+                    continue;
+
+                var ox = other.Bb.GetOrDefault(FishKeys.PosX, 0f);
+                var oy = other.Bb.GetOrDefault(FishKeys.PosY, 0f);
+                var oradius = other.Bb.GetOrDefault(FishKeys.Radius, 8f);
+
+                var dx = px - ox;
+                var dy = py - oy;
+                var d = MathF.Sqrt(dx * dx + dy * dy);
+
+                var desiredSpace = pr + oradius + SeparationRadius;
+
+                if (d > 0.001f && d < desiredSpace)
+                {
+                    // Stronger repulsion when closer; fades out with distance.
+                    var strength = (desiredSpace - d) / desiredSpace;
+                    sepX += (dx / d) * strength;
+                    sepY += (dy / d) * strength;
+                }
+            }
+
+            prey.Bb.Set(FishKeys.SeparationX, sepX);
+            prey.Bb.Set(FishKeys.SeparationY, sepY);
+
+            // Nearest food, but with a stable per-fish offset around the pellet
             var bestFoodDist = float.MaxValue;
             var bestFoodX = 0f;
             var bestFoodY = 0f;
+
             foreach (var f in _food)
             {
                 var d = Dist(px, py, f.X, f.Y);
-                if (d < bestFoodDist) { bestFoodDist = d; bestFoodX = f.X; bestFoodY = f.Y; }
+                if (d < bestFoodDist)
+                {
+                    bestFoodDist = d;
+
+                    var offsetAngle = prey.Bb.GetOrDefault(FishKeys.FoodOffsetAngle, 0f);
+                    bestFoodX = f.X + MathF.Cos(offsetAngle) * FoodOffsetRadius;
+                    bestFoodY = f.Y + MathF.Sin(offsetAngle) * FoodOffsetRadius;
+                }
             }
 
             prey.Bb.Set(FishKeys.FoodVisible, bestFoodDist < PreyDetectFoodDist);
@@ -216,7 +259,12 @@ public sealed class FishtankGame : Game
                 var predX = pred.Bb.GetOrDefault(FishKeys.PosX, 0f);
                 var predY = pred.Bb.GetOrDefault(FishKeys.PosY, 0f);
                 var d = Dist(px, py, predX, predY);
-                if (d < bestPredDist) { bestPredDist = d; bestPredX = predX; bestPredY = predY; }
+                if (d < bestPredDist)
+                {
+                    bestPredDist = d;
+                    bestPredX = predX;
+                    bestPredY = predY;
+                }
             }
 
             prey.Bb.Set(FishKeys.PredatorNearby, bestPredDist < PreyDetectPredDist);
@@ -238,7 +286,12 @@ public sealed class FishtankGame : Game
                 var preyX = prey.Bb.GetOrDefault(FishKeys.PosX, 0f);
                 var preyY = prey.Bb.GetOrDefault(FishKeys.PosY, 0f);
                 var d = Dist(px, py, preyX, preyY);
-                if (d < bestDist) { bestDist = d; bestX = preyX; bestY = preyY; }
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    bestX = preyX;
+                    bestY = preyY;
+                }
             }
 
             pred.Bb.Set(FishKeys.FoodVisible, bestDist < PredDetectPreyDist);
@@ -279,6 +332,88 @@ public sealed class FishtankGame : Game
 
             agent.Bb.Set(FishKeys.PosX, x);
             agent.Bb.Set(FishKeys.PosY, y);
+        }
+
+        // Hard prey-prey overlap resolution pass.
+        // This is presentation-preserving hygiene: even if steering wants the same spot,
+        // the circles should never remain fused together.
+        const float VelocityDamp = 0.90f;
+
+        for (int i = 0; i < _prey.Count; i++)
+        {
+            var a = _prey[i];
+            var ax = a.Bb.GetOrDefault(FishKeys.PosX, 0f);
+            var ay = a.Bb.GetOrDefault(FishKeys.PosY, 0f);
+            var ar = a.Bb.GetOrDefault(FishKeys.Radius, 8f);
+
+            for (int j = i + 1; j < _prey.Count; j++)
+            {
+                var b = _prey[j];
+                var bx = b.Bb.GetOrDefault(FishKeys.PosX, 0f);
+                var by = b.Bb.GetOrDefault(FishKeys.PosY, 0f);
+                var br = b.Bb.GetOrDefault(FishKeys.Radius, 8f);
+
+                var dx = bx - ax;
+                var dy = by - ay;
+                var distSq = dx * dx + dy * dy;
+                var minDist = ar + br;
+
+                if (distSq >= minDist * minDist)
+                    continue;
+
+                float dist;
+                float nx;
+                float ny;
+
+                if (distSq > 0.0001f)
+                {
+                    dist = MathF.Sqrt(distSq);
+                    nx = dx / dist;
+                    ny = dy / dist;
+                }
+                else
+                {
+                    // Perfect or near-perfect overlap: choose a deterministic fallback axis.
+                    dist = 0f;
+                    nx = 1f;
+                    ny = 0f;
+                }
+
+                var penetration = minDist - dist;
+                var push = penetration * 0.5f;
+
+                ax -= nx * push;
+                ay -= ny * push;
+                bx += nx * push;
+                by += ny * push;
+
+                // Wrap corrected positions too
+                if (ax < 0) ax += ScreenW;
+                if (ax > ScreenW) ax -= ScreenW;
+                if (ay < 0) ay += ScreenH;
+                if (ay > ScreenH) ay -= ScreenH;
+
+                if (bx < 0) bx += ScreenW;
+                if (bx > ScreenW) bx -= ScreenW;
+                if (by < 0) by += ScreenH;
+                if (by > ScreenH) by -= ScreenH;
+
+                a.Bb.Set(FishKeys.PosX, ax);
+                a.Bb.Set(FishKeys.PosY, ay);
+                b.Bb.Set(FishKeys.PosX, bx);
+                b.Bb.Set(FishKeys.PosY, by);
+
+                // Slightly damp velocities so they don't sit there buzzing in place.
+                var avx = a.Bb.GetOrDefault(FishKeys.VelX, 0f) * VelocityDamp;
+                var avy = a.Bb.GetOrDefault(FishKeys.VelY, 0f) * VelocityDamp;
+                var bvx = b.Bb.GetOrDefault(FishKeys.VelX, 0f) * VelocityDamp;
+                var bvy = b.Bb.GetOrDefault(FishKeys.VelY, 0f) * VelocityDamp;
+
+                a.Bb.Set(FishKeys.VelX, avx);
+                a.Bb.Set(FishKeys.VelY, avy);
+                b.Bb.Set(FishKeys.VelX, bvx);
+                b.Bb.Set(FishKeys.VelY, bvy);
+            }
         }
     }
 

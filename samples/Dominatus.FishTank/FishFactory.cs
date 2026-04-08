@@ -33,6 +33,13 @@ public static class FishFactory
         agent.Bb.Set(FishKeys.ColorB, cb);
         agent.Bb.Set(FishKeys.Radius, r);
 
+        // Fishbowl-only shaping:
+        // give each prey a tiny stable orbital preference around food so they
+        // do not all converge on the exact same pixel.
+        agent.Bb.Set(FishKeys.FoodOffsetAngle, Rng.NextSingle() * MathF.PI * 2f);
+        agent.Bb.Set(FishKeys.SeparationX, 0f);
+        agent.Bb.Set(FishKeys.SeparationY, 0f);
+
         return agent;
     }
 
