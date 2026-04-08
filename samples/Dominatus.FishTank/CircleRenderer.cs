@@ -27,8 +27,8 @@ public sealed class CircleRenderer : IDisposable
             var dist = MathF.Sqrt(dx * dx + dy * dy);
             // Soft edge for antialiasing feel
             var alpha = Math.Clamp(1f - (dist - r + 1f), 0f, 1f);
-            data[y * TexSize + x] = new Color(1f, 1f, 1f, alpha);
-        }
+            data[y * TexSize + x] = new Color(alpha, alpha, alpha, alpha);
+            }
 
         _tex.SetData(data);
     }

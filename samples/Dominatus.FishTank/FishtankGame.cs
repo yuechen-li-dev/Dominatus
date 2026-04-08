@@ -161,9 +161,6 @@ public sealed class FishtankGame : Game
             var r = a.Bb.GetOrDefault(FishKeys.Radius, 14f);
             _circles.Draw(_sb, x, y, r, new Color(0.9f, 0.1f, 0.1f));
 
-            // Draw detection radius (faint)
-            _circles.Draw(_sb, x, y, PredDetectPreyDist,
-                new Color(0.9f, 0.1f, 0.1f, 0.04f));
         }
 
         _sb.End();
