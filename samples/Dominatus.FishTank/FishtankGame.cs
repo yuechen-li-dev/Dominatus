@@ -8,14 +8,14 @@ namespace Dominatus.Fishtank;
 public sealed class FishtankGame : Game
 {
     // ------- config -------
-    private const int ScreenW      = 1280;
-    private const int ScreenH      = 720;
-    private const int PreyCount    = 15;
-    private const int PredCount    = 2;
+    private const int ScreenW = 1280;
+    private const int ScreenH = 720;
+    private const int PreyCount = 15;
+    private const int PredCount = 2;
     private const float FoodRadius = 6f;
-    private const float PreyDetectPredDist  = 120f;
-    private const float PredDetectPreyDist  = 180f;
-    private const float PreyDetectFoodDist  = 150f;
+    private const float PreyDetectPredDist = 120f;
+    private const float PredDetectPreyDist = 180f;
+    private const float PreyDetectFoodDist = 150f;
 
     // ------- MonoGame -------
     private readonly GraphicsDeviceManager _graphics;
@@ -25,7 +25,7 @@ public sealed class FishtankGame : Game
 
     // ------- Dominatus -------
     private AiWorld _world = null!;
-    private readonly List<AiAgent> _prey    = new();
+    private readonly List<AiAgent> _prey = new();
     private readonly List<AiAgent> _predators = new();
 
     // ------- food pellets -------
@@ -36,7 +36,7 @@ public sealed class FishtankGame : Game
     {
         _graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth  = ScreenW,
+            PreferredBackBufferWidth = ScreenW,
             PreferredBackBufferHeight = ScreenH
         };
         Content.RootDirectory = "Content";
@@ -70,7 +70,7 @@ public sealed class FishtankGame : Game
             var agent = FishFactory.CreatePrey(
                 _rng.NextSingle() * ScreenW,
                 _rng.NextSingle() * ScreenH,
-                r:  8f, cr: c.r, cg: c.g, cb: c.b);
+                r: 8f, cr: c.r, cg: c.g, cb: c.b);
             _world.Add(agent);
             _prey.Add(agent);
         }
@@ -94,7 +94,7 @@ public sealed class FishtankGame : Game
 
     protected override void LoadContent()
     {
-        _sb      = new SpriteBatch(GraphicsDevice);
+        _sb = new SpriteBatch(GraphicsDevice);
         _circles = new CircleRenderer(GraphicsDevice);
         // Font is optional — comment out if you don't have a Content folder set up
         // _font = Content.Load<SpriteFont>("Arial");
@@ -144,9 +144,9 @@ public sealed class FishtankGame : Game
         // Draw prey
         foreach (var a in _prey)
         {
-            var x  = a.Bb.GetOrDefault(FishKeys.PosX, 0f);
-            var y  = a.Bb.GetOrDefault(FishKeys.PosY, 0f);
-            var r  = a.Bb.GetOrDefault(FishKeys.Radius, 8f);
+            var x = a.Bb.GetOrDefault(FishKeys.PosX, 0f);
+            var y = a.Bb.GetOrDefault(FishKeys.PosY, 0f);
+            var r = a.Bb.GetOrDefault(FishKeys.Radius, 8f);
             var cr = a.Bb.GetOrDefault(FishKeys.ColorR, 0.3f);
             var cg = a.Bb.GetOrDefault(FishKeys.ColorG, 0.6f);
             var cb = a.Bb.GetOrDefault(FishKeys.ColorB, 1.0f);
@@ -195,33 +195,33 @@ public sealed class FishtankGame : Game
 
             // Nearest food
             var bestFoodDist = float.MaxValue;
-            var bestFoodX    = 0f;
-            var bestFoodY    = 0f;
+            var bestFoodX = 0f;
+            var bestFoodY = 0f;
             foreach (var f in _food)
             {
                 var d = Dist(px, py, f.X, f.Y);
                 if (d < bestFoodDist) { bestFoodDist = d; bestFoodX = f.X; bestFoodY = f.Y; }
             }
 
-            prey.Bb.Set(FishKeys.FoodVisible,   bestFoodDist < PreyDetectFoodDist);
-            prey.Bb.Set(FishKeys.NearestFoodX,  bestFoodX);
-            prey.Bb.Set(FishKeys.NearestFoodY,  bestFoodY);
+            prey.Bb.Set(FishKeys.FoodVisible, bestFoodDist < PreyDetectFoodDist);
+            prey.Bb.Set(FishKeys.NearestFoodX, bestFoodX);
+            prey.Bb.Set(FishKeys.NearestFoodY, bestFoodY);
 
             // Nearest predator
             var bestPredDist = float.MaxValue;
-            var bestPredX    = 0f;
-            var bestPredY    = 0f;
+            var bestPredX = 0f;
+            var bestPredY = 0f;
             foreach (var pred in _predators)
             {
                 var predX = pred.Bb.GetOrDefault(FishKeys.PosX, 0f);
                 var predY = pred.Bb.GetOrDefault(FishKeys.PosY, 0f);
-                var d     = Dist(px, py, predX, predY);
+                var d = Dist(px, py, predX, predY);
                 if (d < bestPredDist) { bestPredDist = d; bestPredX = predX; bestPredY = predY; }
             }
 
             prey.Bb.Set(FishKeys.PredatorNearby, bestPredDist < PreyDetectPredDist);
-            prey.Bb.Set(FishKeys.NearestPredX,   bestPredX);
-            prey.Bb.Set(FishKeys.NearestPredY,   bestPredY);
+            prey.Bb.Set(FishKeys.NearestPredX, bestPredX);
+            prey.Bb.Set(FishKeys.NearestPredY, bestPredY);
         }
 
         // --- Predator perception: find nearest prey ---
@@ -231,17 +231,17 @@ public sealed class FishtankGame : Game
             var py = pred.Bb.GetOrDefault(FishKeys.PosY, 0f);
 
             var bestDist = float.MaxValue;
-            var bestX    = 0f;
-            var bestY    = 0f;
+            var bestX = 0f;
+            var bestY = 0f;
             foreach (var prey in _prey)
             {
                 var preyX = prey.Bb.GetOrDefault(FishKeys.PosX, 0f);
                 var preyY = prey.Bb.GetOrDefault(FishKeys.PosY, 0f);
-                var d     = Dist(px, py, preyX, preyY);
+                var d = Dist(px, py, preyX, preyY);
                 if (d < bestDist) { bestDist = d; bestX = preyX; bestY = preyY; }
             }
 
-            pred.Bb.Set(FishKeys.FoodVisible,  bestDist < PredDetectPreyDist);
+            pred.Bb.Set(FishKeys.FoodVisible, bestDist < PredDetectPreyDist);
             pred.Bb.Set(FishKeys.NearestFoodX, bestX);
             pred.Bb.Set(FishKeys.NearestFoodY, bestY);
         }
@@ -249,21 +249,33 @@ public sealed class FishtankGame : Game
 
     private void IntegratePositions(float dt)
     {
+        // Steering responsiveness: how quickly actual velocity tracks desired velocity.
+        // Lower = more sluggish/organic, higher = snappier.
+        const float SteerLerp = 6f;
+
         foreach (var agent in _world.Agents)
         {
-            var x  = agent.Bb.GetOrDefault(FishKeys.PosX, 0f);
-            var y  = agent.Bb.GetOrDefault(FishKeys.PosY, 0f);
             var vx = agent.Bb.GetOrDefault(FishKeys.VelX, 0f);
             var vy = agent.Bb.GetOrDefault(FishKeys.VelY, 0f);
+            var dvx = agent.Bb.GetOrDefault(FishKeys.DesiredVelX, vx);
+            var dvy = agent.Bb.GetOrDefault(FishKeys.DesiredVelY, vy);
 
-            x += vx * dt;
-            y += vy * dt;
+            // Lerp actual velocity toward desired — gives smooth organic turning
+            var t = Math.Clamp(SteerLerp * dt, 0f, 1f);
+            vx = vx + (dvx - vx) * t;
+            vy = vy + (dvy - vy) * t;
+
+            agent.Bb.Set(FishKeys.VelX, vx);
+            agent.Bb.Set(FishKeys.VelY, vy);
+
+            var x = agent.Bb.GetOrDefault(FishKeys.PosX, 0f) + vx * dt;
+            var y = agent.Bb.GetOrDefault(FishKeys.PosY, 0f) + vy * dt;
 
             // Wrap around screen edges
-            if (x < 0)      { x += ScreenW; }
-            if (x > ScreenW){ x -= ScreenW; }
-            if (y < 0)      { y += ScreenH; }
-            if (y > ScreenH){ y -= ScreenH; }
+            if (x < 0) x += ScreenW;
+            if (x > ScreenW) x -= ScreenW;
+            if (y < 0) y += ScreenH;
+            if (y > ScreenH) y -= ScreenH;
 
             agent.Bb.Set(FishKeys.PosX, x);
             agent.Bb.Set(FishKeys.PosY, y);
