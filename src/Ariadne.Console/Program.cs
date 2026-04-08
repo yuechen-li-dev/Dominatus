@@ -1,4 +1,5 @@
 ﻿using Ariadne.ConsoleApp;
+using Dominatus.Core.Blackboard;
 using Dominatus.Core.Hfsm;
 using Dominatus.Core.Runtime;
 
@@ -23,6 +24,8 @@ while (true)
 
 static void RunAdventure(ConsoleUi ui, AdventureDefinition adventure)
 {
+    var adventureComplete = new BbKey<bool>("System.AdventureComplete");
+
     ui.PrintBanner(adventure.Title, adventure.Description);
     ui.PrintInfo("Starting...");
     ui.PrintBlank();
@@ -37,17 +40,44 @@ static void RunAdventure(ConsoleUi ui, AdventureDefinition adventure)
     var graph = new HfsmGraph { Root = "Root" };
     graph.Add(new HfsmStateDef { Id = "Root", Node = adventure.Root });
 
+    if (adventure.Id == "thread_of_night")
+    {
+        graph.Add(new HfsmStateDef { Id = "Intro", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Intro });
+        graph.Add(new HfsmStateDef { Id = "Chamber", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Chamber });
+        graph.Add(new HfsmStateDef { Id = "InspectThread", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.InspectThread });
+        graph.Add(new HfsmStateDef { Id = "InspectKnife", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.InspectKnife });
+        graph.Add(new HfsmStateDef { Id = "ReadTablets", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.ReadTablets });
+        graph.Add(new HfsmStateDef { Id = "VisitShrine", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.VisitShrine });
+        graph.Add(new HfsmStateDef { Id = "Theseus", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Theseus });
+        graph.Add(new HfsmStateDef { Id = "TalkToTheseusWhy", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.TalkToTheseusWhy });
+        graph.Add(new HfsmStateDef { Id = "TalkToTheseusFear", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.TalkToTheseusFear });
+        graph.Add(new HfsmStateDef { Id = "TalkToTheseusMonster", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.TalkToTheseusMonster });
+        graph.Add(new HfsmStateDef { Id = "DemandPromise", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.DemandPromise });
+        graph.Add(new HfsmStateDef { Id = "Threshold", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Threshold });
+        graph.Add(new HfsmStateDef { Id = "Ending_ThreadAndFlight", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_ThreadAndFlight });
+        graph.Add(new HfsmStateDef { Id = "Ending_MercyInTheDark", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_MercyInTheDark });
+        graph.Add(new HfsmStateDef { Id = "Ending_CrownOfKnives", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_CrownOfKnives });
+        graph.Add(new HfsmStateDef { Id = "Ending_TheDescent", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_TheDescent });
+        graph.Add(new HfsmStateDef { Id = "Ending_ThreadlessTragedy", Node = Ariadne.ConsoleApp.Scripts.AriadneThreadOfNight.Ending_ThreadlessTragedy });
+    }
+
     var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
     var agent = new AiAgent(brain);
     world.Add(agent);
 
     try
     {
-        // Minimal runtime loop for console adventures.
-        // The dialogue handlers block on console input, so this simple loop is enough.
         while (true)
         {
             world.Tick(0.01f);
+
+            if (agent.Bb.GetOrDefault(adventureComplete, false))
+            {
+                ui.PrintBlank();
+                ui.WaitForMenuReturn("End of adventure. Press Enter to return to menu...");
+                return;
+            }
+
             Thread.Sleep(10);
         }
     }

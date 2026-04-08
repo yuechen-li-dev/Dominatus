@@ -14,6 +14,8 @@ public static class AriadneThreadOfNight
     // Blackboard keys
     // ---------------------------------------------------------------------
 
+    public static readonly BbKey<bool> AdventureComplete = new("System.AdventureComplete");
+
     public static readonly BbKey<bool> TrustsTheseus = new("Ariadne.TrustsTheseus");
     public static readonly BbKey<bool> PitiesMinotaur = new("Ariadne.PitiesMinotaur");
     public static readonly BbKey<bool> DefiesMinos = new("Ariadne.DefiesMinos");
@@ -42,43 +44,31 @@ public static class AriadneThreadOfNight
     public static readonly BbKey<string> FinalChoice = new("Ariadne.FinalChoice");
 
     // ---------------------------------------------------------------------
-    // Root
+    // Root / state graph
     // ---------------------------------------------------------------------
 
     public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
-        foreach (var step in Intro(ctx))
-            yield return step;
-
-        foreach (var step in Scene_Chamber(ctx))
-            yield return step;
-
-        foreach (var step in Scene_Theseus(ctx))
-            yield return step;
-
-        foreach (var step in Scene_Threshold(ctx))
-            yield return step;
-
-        foreach (var step in ResolveEnding(ctx))
-            yield return step;
+        yield return Ai.Goto("Intro");
 
         while (true)
             yield return Ai.Wait(999f);
     }
 
-    private static IEnumerable<AiStep> Intro(AiCtx ctx)
+    public static IEnumerator<AiStep> Intro(AiCtx ctx)
     {
         yield return Diag.Line("The palace is quiet in the deliberate way of places that expect blood by morning.", speaker: "Narrator");
         yield return Diag.Line("On the table before you lies a coil of thread, pale as moonlit bone.", speaker: "Narrator");
         yield return Diag.Line("Below your chamber, beyond torchlight and carved stone, the labyrinth waits.", speaker: "Narrator");
         yield return Diag.Line("By dawn, either a hero will be made there, or a myth will crack open.", speaker: "Narrator");
+        yield return Ai.Goto("Chamber");
     }
 
     // ---------------------------------------------------------------------
     // Scene 1: The Chamber
     // ---------------------------------------------------------------------
 
-    private static IEnumerable<AiStep> Scene_Chamber(AiCtx ctx)
+    public static IEnumerator<AiStep> Chamber(AiCtx ctx)
     {
         while (true)
         {
@@ -105,33 +95,30 @@ public static class AriadneThreadOfNight
             switch (choice)
             {
                 case "thread":
-                    foreach (var step in InspectThread(ctx))
-                        yield return step;
+                    yield return Ai.Push("InspectThread");
                     break;
 
                 case "knife":
-                    foreach (var step in InspectKnife(ctx))
-                        yield return step;
+                    yield return Ai.Push("InspectKnife");
                     break;
 
                 case "tablets":
-                    foreach (var step in ReadTablets(ctx))
-                        yield return step;
+                    yield return Ai.Push("ReadTablets");
                     break;
 
                 case "shrine":
-                    foreach (var step in VisitShrine(ctx))
-                        yield return step;
+                    yield return Ai.Push("VisitShrine");
                     break;
 
                 case "theseus":
                     yield return Diag.Line("You send word. If he was waiting for courage, it was never his that delayed him.", speaker: "Narrator");
+                    yield return Ai.Goto("Theseus");
                     yield break;
             }
         }
     }
 
-    private static IEnumerable<AiStep> InspectThread(AiCtx ctx)
+    public static IEnumerator<AiStep> InspectThread(AiCtx ctx)
     {
         ctx.Bb.Set(SeenThread, true);
         ctx.Bb.Set(ThreadPrepared, true);
@@ -158,9 +145,11 @@ public static class AriadneThreadOfNight
             if (response == "mercy")
                 ctx.Bb.Set(PitiesMinotaur, true);
         }
+
+        yield return Ai.Pop();
     }
 
-    private static IEnumerable<AiStep> InspectKnife(AiCtx ctx)
+    public static IEnumerator<AiStep> InspectKnife(AiCtx ctx)
     {
         ctx.Bb.Set(SeenKnife, true);
         ctx.Bb.Set(KnifeTaken, true);
@@ -168,9 +157,11 @@ public static class AriadneThreadOfNight
         yield return Diag.Line("The knife was ceremonial once. Gold at the hilt. A thin curve made for ritual, not war.", speaker: "Narrator");
         yield return Diag.Line("Still, a hand can teach any blade a harsher purpose.", speaker: "Ariadne");
         yield return Diag.Line("You slide it into your sash. The chamber feels different after that, as if it has accepted that words may fail.", speaker: "Narrator");
+
+        yield return Ai.Pop();
     }
 
-    private static IEnumerable<AiStep> ReadTablets(AiCtx ctx)
+    public static IEnumerator<AiStep> ReadTablets(AiCtx ctx)
     {
         ctx.Bb.Set(SeenTablets, true);
         ctx.Bb.Set(PitiesMinotaur, true);
@@ -179,9 +170,11 @@ public static class AriadneThreadOfNight
         yield return Diag.Line("The tribute tablets are all neat columns and careful names. Boys. Girls. Cities reduced to arithmetic.", speaker: "Narrator");
         yield return Diag.Line("Every generation calls horror necessary in a cleaner hand than the last.", speaker: "Ariadne");
         yield return Diag.Line("For the first time that night, the thing below does not seem like the only creature trapped by the labyrinth.", speaker: "Narrator");
+
+        yield return Ai.Pop();
     }
 
-    private static IEnumerable<AiStep> VisitShrine(AiCtx ctx)
+    public static IEnumerator<AiStep> VisitShrine(AiCtx ctx)
     {
         ctx.Bb.Set(SeenShrine, true);
         ctx.Bb.Set(ShrineVisited, true);
@@ -210,13 +203,14 @@ public static class AriadneThreadOfNight
         }
 
         yield return Diag.Line("When you rise, nothing has been solved. But something in you has stopped pretending to be stone.", speaker: "Narrator");
+        yield return Ai.Pop();
     }
 
     // ---------------------------------------------------------------------
     // Scene 2: Theseus
     // ---------------------------------------------------------------------
 
-    private static IEnumerable<AiStep> Scene_Theseus(AiCtx ctx)
+    public static IEnumerator<AiStep> Theseus(AiCtx ctx)
     {
         yield return Diag.Line("He comes without escort, which is either brave or theatrical.", speaker: "Narrator");
         yield return Diag.Line("Theseus pauses just inside the chamber door, as if he has entered a temple and is not certain whether he means to pray or steal.", speaker: "Narrator");
@@ -247,23 +241,19 @@ public static class AriadneThreadOfNight
             switch (choice)
             {
                 case "why":
-                    foreach (var step in TalkToTheseusWhy(ctx))
-                        yield return step;
+                    yield return Ai.Push("TalkToTheseusWhy");
                     break;
 
                 case "fear":
-                    foreach (var step in TalkToTheseusFear(ctx))
-                        yield return step;
+                    yield return Ai.Push("TalkToTheseusFear");
                     break;
 
                 case "monster":
-                    foreach (var step in TalkToTheseusMonster(ctx))
-                        yield return step;
+                    yield return Ai.Push("TalkToTheseusMonster");
                     break;
 
                 case "promise":
-                    foreach (var step in DemandPromise(ctx))
-                        yield return step;
+                    yield return Ai.Push("DemandPromise");
                     break;
 
                 case "offer":
@@ -298,12 +288,13 @@ public static class AriadneThreadOfNight
                     }
 
                     yield return Diag.Line("Enough words. The stones below are listening.", speaker: "Theseus");
+                    yield return Ai.Goto("Threshold");
                     yield break;
             }
         }
     }
 
-    private static IEnumerable<AiStep> TalkToTheseusWhy(AiCtx ctx)
+    public static IEnumerator<AiStep> TalkToTheseusWhy(AiCtx ctx)
     {
         ctx.Bb.Set(AskedWhy, true);
 
@@ -320,9 +311,11 @@ public static class AriadneThreadOfNight
         {
             yield return Diag.Line("Perhaps he means it. Perhaps he has learned how men sound when they mean to be trusted.", speaker: "Narrator");
         }
+
+        yield return Ai.Pop();
     }
 
-    private static IEnumerable<AiStep> TalkToTheseusFear(AiCtx ctx)
+    public static IEnumerator<AiStep> TalkToTheseusFear(AiCtx ctx)
     {
         ctx.Bb.Set(AskedFear, true);
 
@@ -334,9 +327,11 @@ public static class AriadneThreadOfNight
 
         if (ctx.Bb.GetOrDefault(AdmittedFear, false))
             yield return Diag.Line("Because you named your own fear before he arrived, his honesty feels less like weakness than kinship.", speaker: "Narrator");
+
+        yield return Ai.Pop();
     }
 
-    private static IEnumerable<AiStep> TalkToTheseusMonster(AiCtx ctx)
+    public static IEnumerator<AiStep> TalkToTheseusMonster(AiCtx ctx)
     {
         ctx.Bb.Set(AskedMonster, true);
 
@@ -354,9 +349,11 @@ public static class AriadneThreadOfNight
             yield return Diag.Line("You had expected something cleaner from him. Sword answers. Hero answers. Instead he leaves you with a human shape where a monster should have been.", speaker: "Narrator");
             ctx.Bb.Set(PitiesMinotaur, true);
         }
+
+        yield return Ai.Pop();
     }
 
-    private static IEnumerable<AiStep> DemandPromise(AiCtx ctx)
+    public static IEnumerator<AiStep> DemandPromise(AiCtx ctx)
     {
         ctx.Bb.Set(AskedPromise, true);
 
@@ -388,13 +385,15 @@ public static class AriadneThreadOfNight
             ctx.Bb.Set(WantsEscape, true);
             yield return Diag.Line("If I walk back into the light, I will not leave you in this house of debts.", speaker: "Theseus");
         }
+
+        yield return Ai.Pop();
     }
 
     // ---------------------------------------------------------------------
-    // Scene 3: The Threshold
+    // Scene 3: Threshold
     // ---------------------------------------------------------------------
 
-    private static IEnumerable<AiStep> Scene_Threshold(AiCtx ctx)
+    public static IEnumerator<AiStep> Threshold(AiCtx ctx)
     {
         yield return Diag.Line("At the threshold of the labyrinth, torchlight becomes hesitant.", speaker: "Narrator");
         yield return Diag.Line("The sealed stone below the palace seems less like an entrance than a held breath.", speaker: "Narrator");
@@ -414,46 +413,38 @@ public static class AriadneThreadOfNight
             "What story do you choose?",
             options,
             FinalChoice);
+
+        var decision = ctx.Bb.GetOrDefault(FinalChoice, "");
+
+        switch (decision)
+        {
+            case "help_theseus":
+                yield return Ai.Goto("Ending_ThreadAndFlight");
+                yield break;
+
+            case "warn_asterion":
+                yield return Ai.Goto("Ending_MercyInTheDark");
+                yield break;
+
+            case "go_alone":
+                yield return Ai.Goto("Ending_TheDescent");
+                yield break;
+
+            case "stay_and_rule":
+                yield return Ai.Goto("Ending_CrownOfKnives");
+                yield break;
+
+            default:
+                yield return Ai.Goto("Ending_ThreadlessTragedy");
+                yield break;
+        }
     }
 
     // ---------------------------------------------------------------------
     // Endings
     // ---------------------------------------------------------------------
 
-    private static IEnumerable<AiStep> ResolveEnding(AiCtx ctx)
-    {
-        var decision = ctx.Bb.GetOrDefault(FinalChoice, "");
-
-        switch (decision)
-        {
-            case "help_theseus":
-                foreach (var step in Ending_ThreadAndFlight(ctx))
-                    yield return step;
-                yield break;
-
-            case "warn_asterion":
-                foreach (var step in Ending_MercyInTheDark(ctx))
-                    yield return step;
-                yield break;
-
-            case "go_alone":
-                foreach (var step in Ending_TheDescent(ctx))
-                    yield return step;
-                yield break;
-
-            case "stay_and_rule":
-                foreach (var step in Ending_CrownOfKnives(ctx))
-                    yield return step;
-                yield break;
-
-            default:
-                foreach (var step in Ending_ThreadlessTragedy(ctx))
-                    yield return step;
-                yield break;
-        }
-    }
-
-    private static IEnumerable<AiStep> Ending_ThreadAndFlight(AiCtx ctx)
+    public static IEnumerator<AiStep> Ending_ThreadAndFlight(AiCtx ctx)
     {
         yield return Diag.Line("You place the thread in his hand.", speaker: "Narrator");
 
@@ -478,9 +469,11 @@ public static class AriadneThreadOfNight
         }
 
         yield return Diag.Line("Ending: Thread and Flight", speaker: "System");
+        ctx.Bb.Set(AdventureComplete, true);
+        yield return Ai.Succeed();
     }
 
-    private static IEnumerable<AiStep> Ending_MercyInTheDark(AiCtx ctx)
+    public static IEnumerator<AiStep> Ending_MercyInTheDark(AiCtx ctx)
     {
         yield return Diag.Line("You choose the dark not to conquer it, but to warn what waits inside.", speaker: "Narrator");
         yield return Diag.Line("Asterion is not what the songs would have preferred. That is the first true thing the night gives you.", speaker: "Narrator");
@@ -492,9 +485,11 @@ public static class AriadneThreadOfNight
             yield return Diag.Line("No one above will call what you did mercy. They will call it treason, madness, softness. Let them. They built a maze and mistook themselves for civilized.", speaker: "Narrator");
 
         yield return Diag.Line("Ending: Mercy in the Dark", speaker: "System");
+        ctx.Bb.Set(AdventureComplete, true);
+        yield return Ai.Succeed();
     }
 
-    private static IEnumerable<AiStep> Ending_CrownOfKnives(AiCtx ctx)
+    public static IEnumerator<AiStep> Ending_CrownOfKnives(AiCtx ctx)
     {
         yield return Diag.Line("You turn back toward the palace.", speaker: "Narrator");
         yield return Diag.Line("Not because you believe it innocent. Because you finally understand that innocence was never one of the rooms it offered you.", speaker: "Narrator");
@@ -504,9 +499,11 @@ public static class AriadneThreadOfNight
 
         yield return Diag.Line("Men below and men above will finish making a legend of each other. You will remain to govern what legends leave behind: widows, walls, frightened servants, and the throne itself.", speaker: "Narrator");
         yield return Diag.Line("Ending: Crown of Knives", speaker: "System");
+        ctx.Bb.Set(AdventureComplete, true);
+        yield return Ai.Succeed();
     }
 
-    private static IEnumerable<AiStep> Ending_TheDescent(AiCtx ctx)
+    public static IEnumerator<AiStep> Ending_TheDescent(AiCtx ctx)
     {
         yield return Diag.Line("You take the thread yourself.", speaker: "Narrator");
 
@@ -518,13 +515,17 @@ public static class AriadneThreadOfNight
         yield return Diag.Line("There are stories in which Ariadne waits at the edge and stories in which heroes decide what the dark contains. This is not one of them.", speaker: "Narrator");
         yield return Diag.Line("You step below, and the labyrinth receives not a victim, not a bride, not a guide, but its first honest heir.", speaker: "Narrator");
         yield return Diag.Line("Ending: The Descent", speaker: "System");
+        ctx.Bb.Set(AdventureComplete, true);
+        yield return Ai.Succeed();
     }
 
-    private static IEnumerable<AiStep> Ending_ThreadlessTragedy(AiCtx ctx)
+    public static IEnumerator<AiStep> Ending_ThreadlessTragedy(AiCtx ctx)
     {
         yield return Diag.Line("Morning comes whether or not anyone is ready for it.", speaker: "Narrator");
         yield return Diag.Line("By the time the palace doors open, choice has already hardened into consequence somewhere you cannot reach.", speaker: "Narrator");
         yield return Diag.Line("When people refuse to choose a story, the cruelest one often chooses itself.", speaker: "Narrator");
         yield return Diag.Line("Ending: Threadless Tragedy", speaker: "System");
+        ctx.Bb.Set(AdventureComplete, true);
+        yield return Ai.Succeed();
     }
 }
