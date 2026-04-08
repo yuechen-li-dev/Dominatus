@@ -135,17 +135,31 @@ public sealed class HfsmInstance
             }
         }
 
-        // 1.5) Root overlay tick (IntentRoot) when KeepRootFrame is enabled
+        // 1.5) Root overlay tick (IntentRoot) when KeepRootFrame is enabled.
+        // Important semantic rule:
+        // - If Root emits a step that causes a structural stack change, consume the tick.
+        // - If Root emits a non-structural step (e.g. Decide chooses current target,
+        //   hysteresis blocks, min-commit blocks, etc.), continue and let the leaf run.
         if (Options.KeepRootFrame && _stack.Count >= 1 && _stack[0].Id.Equals(RootId))
         {
             var root = _stack[0];
+
+            int beforeCount = _stack.Count;
+            StateId beforeLeafId = _stack[^1].Id;
+
             var rootRes = root.Runner.Tick(world, agent);
 
             if (rootRes.HasEmittedStep && rootRes.EmittedStep is not null)
             {
                 Trace?.OnYield(root.Id, world.Clock.Time, rootRes.EmittedStep);
                 ApplyEmittedStep(world, agent, root.Id, rootRes.EmittedStep);
-                return; // one structural change per tick
+
+                bool structuralChange =
+                    _stack.Count != beforeCount ||
+                    !_stack[^1].Id.Equals(beforeLeafId);
+
+                if (structuralChange)
+                    return;
             }
 
             if (rootRes.CompletedStatus is NodeStatus.Succeeded)
