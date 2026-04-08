@@ -99,9 +99,16 @@ public static class DiagSteps
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));
 
-            return ctx.Events.TryConsume(ref cursor,
-                (ActuationCompleted e) => e.Id.Equals(id),
-                out _);
+            if (!ctx.Events.TryConsume(ref cursor,
+                    (ActuationCompleted e) => e.Id.Equals(id),
+                    out _))
+                return false;
+
+            // Step completed successfully — clear restore bookkeeping so this same
+            // callsite can be used again later in a loop/menu without reusing stale ids.
+            ctx.Bb.Set(startedKey, false);
+            ctx.Bb.Set(pendingIdKey, 0L);
+            return true;
         }
     }
 
@@ -134,6 +141,11 @@ public static class DiagSteps
                 return false;
 
             ctx.Bb.Set(StoreAs, got.Payload ?? "");
+
+            // Step completed successfully — clear restore bookkeeping so this same
+            // callsite can be used again later in a loop/menu without reusing stale ids.
+            ctx.Bb.Set(startedKey, false);
+            ctx.Bb.Set(pendingIdKey, 0L);
             return true;
         }
     }
@@ -171,6 +183,11 @@ public static class DiagSteps
                 return false;
 
             ctx.Bb.Set(StoreAs, got.Payload ?? "");
+
+            // Step completed successfully — clear restore bookkeeping so this same
+            // callsite can be used again later in a loop/menu without reusing stale ids.
+            ctx.Bb.Set(startedKey, false);
+            ctx.Bb.Set(pendingIdKey, 0L);
             return true;
         }
     }
