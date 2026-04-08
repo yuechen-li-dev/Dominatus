@@ -88,11 +88,18 @@ public static class DominatusCheckpointBuilder
             foreach (var kv in map)
                 agent.Bb.SetRaw(kv.Key, kv.Value);
 
+            // Event cursor restore — decode first so both the agent and ReplayDriver
+            // can see the same pending-actuation state.
+            var cursorSnapshot = EventCursorCodec.Deserialize(ac.EventCursorBlob);
+            cursorSnapshots[idx] = cursorSnapshot;
+
+            // Restore in-flight actuation tracking itself.
+            agent.InFlightActuations.Clear();
+            foreach (var pending in cursorSnapshot.Pending)
+                agent.InFlightActuations.Add(pending);
+
             // HFSM path restore — cold re-enter from scratch.
             agent.Brain.RestoreActivePath(world, agent, ac.ActiveStatePath);
-
-            // Event cursor restore — returned for ReplayDriver wiring.
-            cursorSnapshots[idx] = EventCursorCodec.Deserialize(ac.EventCursorBlob);
         }
 
         return cursorSnapshots;
