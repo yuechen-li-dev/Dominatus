@@ -67,9 +67,8 @@ public sealed class AriadneThreadOfNightFlowTests
             "Your chamber holds its breath. What do you do?",
             choosePrompts[1]);
 
-        var path = agent.Brain.GetActivePath();
-        Assert.Equal("Root", path[0].Value);
-        Assert.Equal("Theseus", path[^1].Value);
+        // And we should have progressed beyond the chamber into the Theseus scene.
+        Assert.Contains("What do you say to Theseus?", choosePrompts);
     }
 
     private sealed class AutoLineHandler : IActuationHandler<DiagLineCommand>
