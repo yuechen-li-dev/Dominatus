@@ -1,4 +1,5 @@
 using Dominatus.Core.Runtime;
+using Dominatus.UtilityLite;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -110,8 +111,11 @@ public sealed class FishtankGame : Game
         if (ms.LeftButton == ButtonState.Pressed)
             _food.Add(new Vector2(ms.X, ms.Y));
 
-        // Randomly spawn food occasionally
-        if (_rng.NextSingle() < 0.01f)
+        // Utility-controlled ambient spawning.
+        // Few pellets => spawn more aggressively.
+        // Many pellets => slow down or stop.
+        var spawnChance = GetAmbientFoodSpawnChance();
+        if (_rng.NextSingle() < spawnChance)
             SpawnFood();
 
         float dt = (float)gt.ElapsedGameTime.TotalSeconds;
@@ -425,11 +429,10 @@ public sealed class FishtankGame : Game
             {
                 var px = prey.Bb.GetOrDefault(FishKeys.PosX, 0f);
                 var py = prey.Bb.GetOrDefault(FishKeys.PosY, 0f);
+
                 if (Dist(px, py, _food[i].X, _food[i].Y) < 12f)
                 {
                     _food.RemoveAt(i);
-                    // Respawn somewhere else
-                    SpawnFood();
                     break;
                 }
             }
@@ -441,5 +444,63 @@ public sealed class FishtankGame : Game
         var dx = ax - bx;
         var dy = ay - by;
         return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private float GetAmbientFoodSpawnChance()
+    {
+        // Hard safety cap so the screen can never spiral into a yellow apocalypse.
+        const int HardCap = 80;
+        if (_food.Count >= HardCap)
+            return 0f;
+
+        // We use UtilityLite as a tiny discrete controller:
+        // pick the highest-utility spawn band from current pellet count.
+        //
+        // Bands:
+        // - Starving  : very few pellets, spawn aggressively
+        // - Low       : somewhat low, spawn moderately
+        // - Balanced  : healthy amount, spawn lightly
+        // - Flooded   : too many, stop spawning
+        //
+        // These utility surfaces are intentionally simple and readable.
+        var starving = When.Score((_, _) =>
+        {
+            if (_food.Count <= 8) return 1.0f;
+            if (_food.Count <= 14) return 0.6f;
+            return 0.0f;
+        }).Eval(_world, _prey.Count > 0 ? _prey[0] : _predators[0]);
+
+        var low = When.Score((_, _) =>
+        {
+            if (_food.Count >= 6 && _food.Count <= 18) return 0.85f;
+            if (_food.Count <= 24) return 0.35f;
+            return 0.0f;
+        }).Eval(_world, _prey.Count > 0 ? _prey[0] : _predators[0]);
+
+        var balanced = When.Score((_, _) =>
+        {
+            if (_food.Count >= 16 && _food.Count <= 36) return 0.75f;
+            if (_food.Count <= 44) return 0.25f;
+            return 0.0f;
+        }).Eval(_world, _prey.Count > 0 ? _prey[0] : _predators[0]);
+
+        var flooded = When.Score((_, _) =>
+        {
+            if (_food.Count >= 45) return 1.0f;
+            if (_food.Count >= 36) return 0.5f;
+            return 0.0f;
+        }).Eval(_world, _prey.Count > 0 ? _prey[0] : _predators[0]);
+
+        // Winner-takes-band. This is a deliberately simple utility controller.
+        if (starving >= low && starving >= balanced && starving >= flooded)
+            return 0.08f;
+
+        if (low >= balanced && low >= flooded)
+            return 0.025f;
+
+        if (balanced >= flooded)
+            return 0.006f;
+
+        return 0.0f;
     }
 }
