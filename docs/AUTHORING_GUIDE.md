@@ -1839,6 +1839,339 @@ Utility.Threshold(c, t)  /  Utility.Remap(c, min, max)  /  Utility.Pow(c, exp)
 
 ## 14. Common Mistakes
 
+This section focuses on mistakes that are easy to make in real Dominatus code, especially when writing longer-lived stateful flows.
+
+These are not hypothetical style nits. They are the kinds of mistakes that actually cause stuck menus, repeated prompts, broken utility behavior, or save/load surprises.
+
+---
+
+### Forgetting the difference between `Goto` and `Push`
+
+This is probably the most common structural mistake.
+
+* `Goto` **replaces** the current state
+* `Push` **suspends** the current state and returns to it later when the pushed state pops
+
+If you use `Goto` for something that should behave like a subroutine, you will not come back automatically.
+
+Bad:
+
+```csharp
+yield return Ai.Goto("InspectKnife");
+```
+
+if what you really meant was “inspect the knife, then return to the menu.”
+
+Good:
+
+```csharp
+yield return Ai.Push("InspectKnife");
+```
+
+Use `Goto` for handoff. Use `Push` for call/return.
+
+---
+
+### Using an inline helper for control flow
+
+If a helper is being inlined with `Diag.SafeInline(...)`, it must not yield:
+
+* `Ai.Goto(...)`
+* `Ai.Push(...)`
+* `Ai.Pop()`
+* `Ai.Succeed()`
+* `Ai.Fail()`
+
+This exact mistake causes subtle stuck-flow bugs.
+
+Inline helpers are for emitting content steps. If the routine needs stack control, it is not an inline helper anymore. It should become a real registered HFSM state.
+
+Bad shape:
+
+```csharp id="m4fy40"
+public static IEnumerable<AiStep> ShowStatus(AiCtx ctx)
+{
+    yield return Diag.Line("Status...", speaker: "System");
+    yield return Ai.Pop();
+}
+```
+
+Good shape:
+
+```csharp id="4o44vh"
+public static IEnumerable<AiStep> ShowStatus(AiCtx ctx)
+{
+    yield return Diag.Line("Status...", speaker: "System");
+}
+```
+
+or promote it to a real state if it truly needs `Pop`.
+
+`Diag.SafeInline(...)` exists specifically to catch this class of mistake early.
+
+---
+
+### Root nodes that restart themselves accidentally
+
+When `KeepRootFrame = true`, root nodes should usually:
+
+* initialize once
+* hand off once
+* then stay alive quietly
+
+A one-shot root like this:
+
+```csharp id="n8wwhw"
+public static IEnumerator<AiStep> Root(AiCtx ctx)
+{
+    yield return Ai.Goto("Intro");
+}
+```
+
+can re-enter and restart behavior unexpectedly under keep-root semantics.
+
+The safer pattern is:
+
+```csharp
+public static IEnumerator<AiStep> Root(AiCtx ctx)
+{
+    yield return Ai.Goto("Intro");
+
+    while (true)
+        yield return Ai.Wait(999f);
+}
+```
+
+This keeps the root alive without repeatedly re-kicking the first child state.
+
+---
+
+### Assuming dialogue/menu loops can safely reuse stale pending step state
+
+This was a real Ariadne bug class.
+
+If a dialogue step like `Diag.Choose(...)` stores its pending actuation bookkeeping but does not clear it after successful completion, the next time that same menu callsite appears in a loop it can reuse stale pending ids and hang forever.
+
+The fix is conceptual as much as technical:
+
+* pending-step bookkeeping must exist while a step is in flight
+* once the step completes successfully, that bookkeeping must be cleared
+
+If repeated dialogue loops feel mysteriously stuck, stale pending actuation state is one of the first things to check.
+
+---
+
+### Treating dialogue as a different execution model
+
+Ariadne is not a separate runtime. It is a dialogue layer on top of Dominatus.
+
+So if a dialogue scene gets stuck, branches strangely, or fails to return, the problem is usually one of the same structural issues you would debug in any other Dominatus state:
+
+* wrong use of `Goto` vs `Push`
+* invalid helper/control-flow mixing
+* bad BB assumptions
+* stale pending interaction state
+* incorrect restore assumptions
+
+Do not mentally quarantine dialogue as “special.” It follows the same runtime logic.
+
+---
+
+### Using `When.Always` as a fallback score when you really want a weaker default
+
+In utility decisions, this is a very easy trap:
+
+```csharp id="9qtrj2"
+Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+Ai.Option("Patrol", When.Always, "Patrol"),
+```
+
+This often creates ties, because both options can score `1.0`. If the runtime prefers the current committed option in a tie, your “obviously should switch” test will fail and the behavior will look wrong.
+
+Usually the right fallback is a lower explicit score:
+
+```csharp id="cbx5p7"
+Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+```
+
+Fallbacks are usually not “always the best.” They are “always available, but weaker.”
+
+---
+
+### Expecting `BbEq(...)` to behave sanely if missing-key semantics are wrong
+
+A practical utility helper pitfall: equality over BB values should only succeed if the key actually exists and equals the expected value.
+
+If a helper silently treats a missing key as if it were the expected value, your utility surface becomes nonsense.
+
+So the correct mental model for `BbEq(...)` is:
+
+* missing key → false
+* present but different value → false
+* present and equal → true
+
+If equality helpers behave differently, fix them before relying on them in real behavior.
+
+---
+
+### Misunderstanding `Remap(...)`
+
+`Consideration` values are already normalized into `0..1`. That means `Remap(...)` is best thought of as a shaping helper over normalized scores, not as a raw general-purpose “map arbitrary float ranges from the world into utility.”
+
+Good use:
+
+```csharp
+When.Remap(When.Score((_, _) => 0.5f), 0.25f, 0.75f)
+```
+
+This is shaping an already normalized score.
+
+Confusing use:
+
+```csharp
+When.Remap(When.Score((_, _) => 15f), 10f, 20f)
+```
+
+If you think that is mapping raw world-space 10..20 into 0..1 directly, you are already too late — the `Score` consideration has already normalized/clamped.
+
+Use `Score(...)` and `Remap(...)` with that in mind.
+
+---
+
+### Re-scoring utility too frequently with no cadence
+
+A utility root that re-scores every single tick with no wait can be noisier than intended and harder to reason about.
+
+Usually a small cadence is healthier:
+
+```csharp id="4moy5v"
+while (true)
+{
+    yield return Ai.Decide([
+        Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+        Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+    ], hysteresis: 0.10f, minCommitSeconds: 0.75f);
+
+    yield return Ai.Wait(0.10f);
+}
+```
+
+That keeps decisions legible and stable without making the agent feel sluggish.
+
+---
+
+### Treating utility as a replacement for state structure
+
+Utility chooses **which state should be active**. It does not replace stateful behavior.
+
+A common mistake is trying to encode too much behavior inside the scoring layer instead of:
+
+* using utility to choose the mode
+* letting that mode carry real stateful logic
+
+For example, in **FishTank**, utility is a good fit for selecting “flee vs seek food vs wander,” but the actual movement, steering, and overlap handling still belong in the agent behavior and simulation layer, not in the utility scores.
+
+Use utility to select intent, not to fake an entire runtime.
+
+---
+
+### Hiding durable meaning in iterator-local state and expecting save/load to preserve it
+
+This is the core persistence mistake.
+
+Dominatus does not serialize live iterator program counters and arbitrary local variable state directly. Save/load restores:
+
+* BB state
+* active HFSM path
+* pending actuation/replay state
+
+If a behavior-critical fact only exists in a transient local iterator variable, it may not survive restore the way you expect.
+
+If it matters after save/load, prefer to store it in:
+
+* the blackboard
+* explicit state structure
+* replay-visible pending obligations
+
+---
+
+### Assuming save/load means exact suspended continuation
+
+It does not.
+
+Dominatus restore is:
+
+* cold re-entry into the restored active path
+* plus replay of post-checkpoint nondeterministic inputs
+
+That means a flow should be authored so its durable meaning can be reconstructed from BB/state/replay, not from an assumption that the runtime will magically resume the exact suspended source line.
+
+This matters especially for:
+
+* dialogue prompts
+* long waits
+* deferred commands
+* menu loops
+* externally completed actions
+
+---
+
+### Forgetting that repeated menu or prompt callsites are real runtime state
+
+If a menu appears in a loop, that is not “just presentation.” It is a repeated stateful interaction point.
+
+That means:
+
+* its results should go through BB
+* its pending state should be handled correctly
+* its completion bookkeeping must reset correctly
+* save/load behavior should be considered if the interaction matters
+
+Menu loops are runtime logic, not decorative UI.
+
+---
+
+### Letting host-side convenience blur the runtime model
+
+It is easy, especially in console demos, to think:
+
+* “this is just a line of text”
+* “this is just a menu”
+* “this is just a food spawn”
+* “this is just a little helper”
+
+But Dominatus tends to reward being explicit.
+
+If something is:
+
+* stateful
+* resumable
+* branching
+* waited on
+* interruptible
+* worth saving/restoring
+
+then treat it as real runtime logic, not a shortcut.
+
+That mindset avoids most of the worst mistakes.
+
+---
+
+### A good debugging rule of thumb
+
+When something feels wrong, ask:
+
+1. Is this a `Goto` vs `Push` mistake?
+2. Is this helper illegally doing control flow?
+3. Is stale BB or pending actuation state being reused?
+4. Is utility tying when I thought it was selecting?
+5. Am I assuming exact suspended continuation across save/load?
+6. Is this actually host/UI weirdness, or is it the script/runtime model?
+
+That checklist catches a surprising amount of real Dominatus bugs quickly.
+
+## 15. Other Potential Pitfalls
 **Forgetting `yield break` after `Ai.Goto`**
 
 `Ai.Goto` is just a yielded value — it does not stop the node from continuing.
