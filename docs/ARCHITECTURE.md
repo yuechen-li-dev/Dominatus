@@ -213,6 +213,103 @@ yield return Ai.Await(Keys.CommandId);
 yield return Ai.Await(Keys.CommandId, Keys.ResultPayload);  // typed
 yield return Ai.Decide(options, hysteresis: 0.1f, minCommitSeconds: 0.5f);
 ```
+## 5a. How Dominatus is Implemented
+
+Dominatus is built on top of ordinary C# iterator methods.
+
+A node like:
+
+```csharp
+public static IEnumerator<AiStep> Patrol(AiCtx ctx)
+{
+    while (true)
+    {
+        yield return Ai.Wait(0.25f);
+        yield return Ai.Act(new MoveToCommand(...), Keys.MoveId);
+        yield return Ai.Await(Keys.MoveId);
+    }
+}
+```
+
+is not interpreted from a custom scripting language. It is compiled by C# into a hidden iterator state machine — the same general mechanism the language uses for `yield return` everywhere else.
+
+Dominatus takes advantage of that deliberately.
+
+Instead of treating iterators as “just a pause-able list,” Dominatus treats them as the authoring surface for resumable agent behavior. The runtime drives those compiler-generated iterator state machines explicitly through `NodeRunner`, while the HFSM controls which node/state is active.
+
+### Why this is advantageous
+
+This design has several important benefits.
+
+#### 1. Agent logic stays ordinary C#
+
+Nodes are just C# methods. They use:
+
+* local variables
+* loops
+* conditionals
+* normal method extraction
+* normal type checking
+* ordinary tooling
+
+There is no separate embedded DSL, no custom parser, and no reflective graph magic.
+
+#### 2. Dominatus does not need its own bytecode VM
+
+Dominatus does not implement a second scripting VM on top of .NET. It uses the CLR, the C# compiler, and compiler-generated iterator state machines as the execution substrate.
+
+That keeps the implementation smaller and lets Dominatus benefit from the underlying language/runtime/toolchain rather than fighting it.
+
+#### 3. State synchronization problems are reduced
+
+Because behavior is authored in ordinary C# and driven by explicit runtime state (`Blackboard`, HFSM path, actuation completions, event bus), there is much less need to synchronize between a “graph language” and a separate code layer.
+
+The authoring model and the runtime model are much closer together.
+
+#### 4. Runtime improvements in .NET help Dominatus automatically
+
+To the extent that future .NET / Roslyn / JIT improvements make iterator state machines or surrounding execution more efficient, Dominatus benefits from that automatically. It is building on mainstream language/runtime machinery rather than bypassing it.
+
+### What Dominatus does **not** do
+
+Dominatus does **not** serialize live iterator program counters or compiler-generated iterator objects directly for persistence.
+
+Instead, persistence is built around:
+
+* blackboard state
+* active HFSM path
+* pending obligations / actuation state
+* replay of nondeterministic inputs
+
+That distinction matters.
+
+So the implementation model is:
+
+* use compiler-generated iterator state machines for runtime execution
+* but use explicit runtime state for durability and reconstruction
+
+This is a major reason the system remains inspectable and bounded instead of collapsing into opaque continuation capture.
+
+### Why not use `async`/`await` instead?
+
+For similar reasons, Dominatus does not use C# `async`/`await` as the behavioral suspension model for agents.
+
+`async`/`await` is excellent for general asynchronous application code, but Dominatus needs suspension to remain:
+
+* runtime-visible
+* deterministic-oriented
+* replayable
+* persistence-compatible
+* explicit in traces and state
+
+So commands are modeled as:
+
+* dispatch
+* explicit actuation id
+* explicit completion
+* explicit await of that completion
+
+rather than hiding agent suspension inside task continuations.
 
 ---
 
@@ -516,7 +613,117 @@ throws at runtime. Navigation must go through real HFSM states.
 
 ---
 
-## 14. Summary: Data Flow on a Tick
+## 14. Dominatus and Traditional AI Approaches
+
+Dominatus is easiest to understand in relation to four familiar families of game/simulation AI:
+
+* finite state machines
+* behavior trees
+* utility systems
+* GOAP
+
+Dominatus is not identical to any one of them. Instead, it deliberately combines the strongest parts of the first three while keeping planning concerns separate.
+
+### Finite State Machines
+
+Traditional FSMs are strong at:
+
+* explicit modes
+* clear transitions
+* readable control structure
+* predictability
+
+They are weak at scale when behavior becomes deeply nested or when too many transitions accumulate in a flat graph.
+
+Dominatus keeps the strengths of FSMs — explicit state, explicit transitions, predictable structure — but uses a **hierarchical stack-based FSM** rather than a flat one. That makes nested behavior, subroutines, interruptions, and resumable flows much easier to express.
+
+In that sense, Dominatus is very much an FSM-based system — just not a flat one.
+
+### Behavior Trees
+
+Behavior trees are strong at:
+
+* compositional reactive logic
+* hierarchical behavior organization
+* familiar game-AI authoring patterns
+* visual-tool friendliness
+
+They are often weaker at:
+
+* explicit long-lived mode/state
+* resumable subroutine semantics
+* persistence/replay friendliness
+* making interruption/return structure obvious without decorator/service complexity
+
+Dominatus can express many tree-like patterns naturally, but it does so with explicit runtime state and stack control rather than repeated tree walking.
+
+So Dominatus is **not** a behavior tree library, but it captures many of the same organizational benefits while keeping state and return structure more explicit.
+
+### Utility Systems
+
+Utility systems are strong at:
+
+* choosing among competing behaviors
+* expressing soft preference rather than only hard branching
+* avoiding brittle priority ladders
+* making agents feel more adaptive
+
+They are often weaker when used alone, because utility scoring answers:
+
+* what should be active now?
+
+but not by itself:
+
+* what is the current control structure?
+* what do I resume after interruption?
+* what am I waiting on?
+* how do I persist this coherently?
+
+Dominatus uses utility where utility is strongest: **behavior selection**.
+
+That is why utility decisions in Dominatus typically live in a root/planner-like state, while the selected behaviors themselves remain ordinary HFSM states with full control flow.
+
+### GOAP
+
+GOAP is strong at:
+
+* explicit symbolic planning
+* multi-step action sequencing
+* goal-directed search
+
+It is often more expensive and more planning-centric than what many real-time agent behaviors actually need frame-to-frame.
+
+Dominatus does not use GOAP as its core control model. The runtime is built around:
+
+* explicit state
+* stack-based control flow
+* utility-driven selection
+* commands/actuation
+
+If planning is needed, GOAP-like logic is usually a better fit as a **planner-side capability** or **actuator/planning subsystem** that produces actions for Dominatus to execute, rather than as the entire runtime kernel.
+
+That is also where future alternatives — including external planners or even LLM-assisted planning — fit more naturally: as planning/actuation layers, not as replacements for the control kernel itself.
+
+### In practice
+
+A good shorthand is:
+
+* **FSM** gives Dominatus explicit state
+* **Behavior-tree-like structure** gives it hierarchical organization
+* **Utility** gives it adaptive behavior selection
+* **GOAP/planning** belongs better as an optional planner or actuator-side layer than as the core runtime model
+
+That combination is why Dominatus works well for:
+
+* game AI
+* simulations
+* dialogue systems like Ariadne
+* controller-style systems
+
+It is trying to be a runtime kernel for stateful agent execution, not a single-strategy AI technique.
+
+
+## 15. Summary: Data Flow on a Tick
 
 ```
 world.Tick(dt)
