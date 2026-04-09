@@ -112,6 +112,7 @@ public static class RustSimulator
     // Shared helpers
     // ---------------------------------------------------------------------
 
+    // Very important: IEnumerable is needed for "foreach" in C#. Do not put control loop logic in IEnumerable helpers nodes, only in IEnumerator nodes.
     public static IEnumerable<AiStep> ShowStatus(AiCtx ctx)
     {
         var confidence = ctx.Bb.GetOrDefault(Confidence, 0);
@@ -458,7 +459,7 @@ public static class RustSimulator
         yield return Ai.Succeed();
     }
 
-    //Helper Functions
+    //Helper Functions for Puzzle
     private static string NormalizeRustLine(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
