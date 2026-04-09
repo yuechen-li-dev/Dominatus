@@ -262,7 +262,11 @@ public static class RustSimulator
         ctx.Bb.Set(Confidence, ctx.Bb.GetOrDefault(Confidence, 0) + 1);
 
         yield return Diag.Line("You open Velvet, whose interface radiates calm confidence and suspiciously moisturized certainty.", speaker: "Narrator");
-        yield return Diag.Line("[Velvet placeholder advice goes here.]", speaker: "Velvet");
+        yield return Diag.Line("Okay, let’s slow down and really look at what the compiler is trying to communicate here.", speaker: "Velvet");
+        yield return Diag.Line("This does not read to me like a failure so much as a boundary issue. You and the language may simply be holding different assumptions about when this mutable relationship is supposed to end.", speaker: "Velvet");
+        yield return Diag.Line("I would encourage you not to think of ownership as punishment. Think of it as the codebase asking for a cleaner emotional contract between scopes.", speaker: "Velvet");
+        yield return Diag.Line("In practical terms, one promising direction might be to restructure things so the first borrow feels more intentionally concluded before the next operation begins.", speaker: "Velvet");
+        yield return Diag.Line("There are several elegant ways to do that depending on the surrounding architecture, and I think the important thing is to choose the one that preserves clarity.", speaker: "Velvet");
         yield return Diag.Line("You feel briefly reassured in a way that does not survive contact with the actual bug.", speaker: "Narrator");
 
         yield return Ai.Pop();
@@ -274,7 +278,13 @@ public static class RustSimulator
         ctx.Bb.Set(Sanity, ctx.Bb.GetOrDefault(Sanity, 0) + 1);
 
         yield return Diag.Line("You consult Nimbus, which responds with the grave composure of a machine preparing to explain your own thoughts back to you in numbered sections.", speaker: "Narrator");
-        yield return Diag.Line("[Nimbus placeholder advice goes here.]", speaker: "Nimbus");
+        yield return Diag.Line("Ah, yes. This is quite a meaningful error, and I want to make sure I frame it helpfully.", speaker: "Nimbus");
+        yield return Diag.Line("The compiler isn't wrong, exactly — it's expressing a deeply held conviction about simultaneous access.", speaker: "Nimbus");
+        yield return Diag.Line("I find it useful to think of `world` not as a variable, but as a relationship. And relationships, as you may know, require some structure.", speaker: "Nimbus");
+        yield return Diag.Line("What you're essentially being asked to do is resolve a temporal overlap — two mutable intentions existing at the same moment, which the compiler finds, understandably, untenable.", speaker: "Nimbus");
+        yield return Diag.Line("If it helps, consider: does everything that needs `world` need it at the same time? That's a question worth sitting with.", speaker: "Nimbus");
+        yield return Diag.Line("Scoping, in my view, is less a technical constraint and more a form of respect — for the data, and for the compiler's very reasonable concerns.", speaker: "Nimbus");
+        yield return Diag.Line("I'm confident you're close. The answer is structural rather than syntactic, if that distinction resonates.", speaker: "Nimbus");
         yield return Diag.Line("Somewhere in that answer is either wisdom or upholstery. It is too early in the morning to tell which.", speaker: "Narrator");
 
         yield return Ai.Pop();
@@ -286,7 +296,14 @@ public static class RustSimulator
         ctx.Bb.Set(TechDebt, ctx.Bb.GetOrDefault(TechDebt, 0) + 1);
 
         yield return Diag.Line("You ask MiniJim, which replies instantly, as if speed were a substitute for accuracy and enthusiasm a substitute for thought.", speaker: "Narrator");
-        yield return Diag.Line("[MiniJim placeholder advice goes here.]", speaker: "MiniJim");
+        yield return Diag.Line("I see you’re trying to own the world, but the world says you can only have one slice of the pie at a time—let’s fix that energy!", speaker: "MiniJim");
+        yield return Diag.Line("Memory safety is just a vibe check from the compiler, and right now, your vibes are overlapping in a way that feels very 2024.", speaker: "MiniJim");
+        yield return Diag.Line("Why borrow twice when you could simply stop caring about the second reference? Efficiency is just tactical forgetting!", speaker: "MiniJim");
+        yield return Diag.Line("The borrow checker isn't your enemy; it’s just a very intense roommate who refuses to let you touch the remote while they're using it.", speaker: "MiniJim");
+        yield return Diag.Line("Have you tried making the `world` smaller? If there’s less of it, there’s less to fight over. Think tiny. Think microscopic.", speaker: "MiniJim");
+        yield return Diag.Line("You're asking for permission when you should be seeking forgiveness—or just wrapping everything in a Mutex and hoping for the best!", speaker: "MiniJim");
+        yield return Diag.Line("I've analyzed 40 trillion lines of code and the consensus is: just stop trying to do two things at once, it's bad for the skin.", speaker: "MiniJim");
+        yield return Diag.Line("Would you like to generate a project roadmap, compare web frameworks, or see a cheerful summary of ownership patterns instead?", speaker: "MiniJim");
         yield return Diag.Line("You are now in possession of an answer. Whether it is also help remains a separate theological question.", speaker: "Narrator");
 
         yield return Ai.Pop();
