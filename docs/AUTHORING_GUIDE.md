@@ -762,47 +762,365 @@ AI where external world state should preempt behaviour.
 
 ## 9. Utility Decisions
 
-Use `Decide` when a "planner" state should continuously score options and
-activate the best one. The canonical setup is a root state with
-`KeepRootFrame = true` that yields `Decide` in a loop.
+Use `Ai.Decide(...)` when a state should continuously score several possible behaviors and activate the best one.
 
-`Ai.Option` builds a `UtilityOption`. Scores are `Consideration` values,
-constructed via `Utility.*` or `When.*` helpers (see section 11).
+This is the most common way to author **intent-selection** in Dominatus: a root or planner-like state stays alive, evaluates a set of options, and the runtime keeps the best-scoring child behavior active. 
+
+Dominatus utility decisions are designed to work naturally with its stack-based HFSM model:
+
+* the deciding state stays alive
+* the selected child behavior runs above it
+* later re-evaluation can replace that child if another option wins clearly enough
+
+This is why utility works especially well with `KeepRootFrame = true`.
+
+---
+
+### Preferred authoring style
+
+The preferred style is:
+
+* collection expressions for option lists
+* `Ai.Option(...)` for options
+* `When.*` for readable considerations
+* explicit `hysteresis` and `minCommitSeconds` where behavior stability matters
+
+A typical root decision loop looks like this:
 
 ```csharp
-// In your HFSM setup:
-var options = new HfsmOptions { KeepRootFrame = true };
-var hfsm = new HfsmInstance(graph, options);
-
-// The root node:
-public static IEnumerator<AiStep> IntentRoot(AiCtx ctx)
+public static IEnumerator<AiStep> Root(AiCtx ctx)
 {
-    var options = new[]
-    {
-        Ai.Option("Combat", When.BbAtLeast(Keys.Threat, 0.7f), "CombatState"),
-        Ai.Option("Alert",  When.BbAtLeast(Keys.Threat, 0.3f), "AlertState"),
-        Ai.Option("Patrol", When.Always,                        "PatrolState"),
-    };
-
     while (true)
     {
-        // Single-slot overload (slot name defaults to "Default"):
-        yield return Ai.Decide(options, hysteresis: 0.10f, minCommitSeconds: 0.75f);
+        yield return Ai.Decide([
+            Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+            Ai.Option("Reload", When.Bb(Keys.LowAmmo), "Reload"),
+            Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+        ], hysteresis: 0.10f, minCommitSeconds: 0.75f);
 
-        // Named slot overload (use when multiple Decide calls exist in same HFSM):
-        // yield return Ai.Decide(new DecisionSlot("MainIntent"), options, hysteresis: 0.10f);
-
-        yield return Ai.Wait(0.1f); // Don't re-score every single tick
+        yield return Ai.Wait(0.10f);
     }
 }
 ```
 
-With `KeepRootFrame = true`, `IntentRoot` stays alive while `CombatState`,
-`AlertState`, or `PatrolState` runs as the leaf above it. Each time `IntentRoot`
-ticks and yields `Decide`, the HFSM evaluates scores and may swap the leaf.
-The `Hysteresis` margin and `MinCommitSeconds` prevent thrashing.
+That reads the way Dominatus is intended to be authored:
+
+* `Combat` if alerted
+* `Reload` if low ammo
+* otherwise `Patrol` as a fallback
+
+Notice that the fallback is **not** `When.Always` here. A fallback state usually wants a lower score, not a tie, so that higher-priority states can beat it cleanly.
 
 ---
+
+### What `Ai.Decide(...)` actually does
+
+`Ai.Decide(...)` evaluates a list of `UtilityOption`s and selects the best one under a `DecisionPolicy`.
+
+Each option has:
+
+* an `id`
+* a `Consideration` score
+* a target `StateId`
+
+The runtime evaluates the scores, applies hysteresis / commitment rules, and may change the currently active leaf state accordingly. 
+
+So this:
+
+```csharp id="t0bq4s"
+yield return Ai.Decide([
+    Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+], hysteresis: 0.10f, minCommitSeconds: 0.75f);
+```
+
+means:
+
+* score both options right now
+* do not switch too eagerly if the current option still has enough advantage under hysteresis
+* do not thrash rapidly between states if `minCommitSeconds` has not elapsed
+
+This is how Dominatus gets stable, readable utility-driven behavior instead of twitchy branch-flapping.
+
+---
+
+### `KeepRootFrame` and utility roots
+
+Utility roots usually want `KeepRootFrame = true` on the HFSM:
+
+```csharp
+var hfsm = new HfsmInstance(graph, new HfsmOptions
+{
+    KeepRootFrame = true
+});
+```
+
+With `KeepRootFrame = true`, the root state remains alive and keeps re-scoring options while the selected child behavior runs above it.
+
+That gives you an active path like:
+
+```text id="3cq5sp"
+Root -> Patrol
+Root -> Combat
+Root -> Reload
+```
+
+The root is the selector. The leaf is the currently chosen behavior.
+
+This is the intended Dominatus shape for utility-driven agents.
+
+---
+
+### `When.*` vs `Utility.*`
+
+The preferred surface for authoring decisions is `When.*`.
+
+Example:
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Reload", When.Bb(Keys.LowAmmo), "Reload"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+]);
+```
+
+This is exactly equivalent in meaning to a lower-level `Utility.*` style:
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Combat", Utility.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Reload", Utility.Bb(Keys.LowAmmo), "Reload"),
+    Ai.Option("Patrol", Utility.Score((_, _) => 0.4f), "Patrol"),
+]);
+```
+
+The difference is only one of authoring intent:
+
+* use `When.*` when you want readable decision surfaces
+* drop to `Utility.*` when you want to emphasize composition or the math directly
+
+The convenience layer is explicit; it is not reflection magic or hidden DSL behavior.
+
+---
+
+### Building considerations
+
+A `Consideration` is just a scored predicate returning a float in `0..1`.
+
+Common helpers include:
+
+```csharp
+When.Always
+When.Never
+
+When.Bool((world, agent) => boolCondition)
+When.Score((world, agent) => someFloatScore)
+
+When.Bb(Keys.Alerted)                  // BbKey<bool>
+When.Bb(Keys.Threat)                   // BbKey<float>
+When.Bb(Keys.Health, 0, 100)           // BbKey<int> remapped to 0..1
+
+When.BbAtLeast(Keys.Threat, 0.7f)
+When.BbAtMost(Keys.Threat, 0.3f)
+When.BbEq(Keys.Mode, "combat")
+
+When.Not(c)
+When.All(c1, c2, c3)
+When.Any(c1, c2, c3)
+
+When.Threshold(c, 0.5f)
+When.Pow(c, 2f)
+When.Remap(c, 0.25f, 0.75f)
+```
+
+In normal authoring, the most common ones are:
+
+* `When.Bb(...)`
+* `When.BbAtLeast(...)`
+* `When.BbAtMost(...)`
+* `When.Score(...)`
+* `When.All(...)`
+* `When.Any(...)`
+
+That already covers most real game/sim/controller decision surfaces.
+
+---
+
+### Fallbacks and tie behavior
+
+One of the most common mistakes in utility authoring is giving your fallback state a full `1.0` score.
+
+For example, this is often wrong:
+
+```csharp
+Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+Ai.Option("Patrol", When.Always, "Patrol"),
+```
+
+because when `Alerted` becomes true, both options may score `1.0`, and the runtime may keep the current choice instead of switching cleanly.
+
+Usually what you want is a real fallback score:
+
+```csharp
+Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+```
+
+That way:
+
+* patrol is a viable default
+* combat clearly beats it when triggered
+
+This is one of the key practical authoring rules for Dominatus utility surfaces.
+
+---
+
+### Hysteresis and commitment
+
+Dominatus utility decisions are not meant to flap every tick.
+
+Two knobs help stabilize behavior:
+
+#### `hysteresis`
+
+How much better another option must be before the runtime switches away from the current one.
+
+Higher hysteresis means:
+
+* fewer rapid switches
+* more stability
+* slower reactivity
+
+#### `minCommitSeconds`
+
+How long the runtime should prefer to stay with the current choice before reconsidering a switch.
+
+Higher commitment means:
+
+* less thrashing
+* more “I am currently doing this”
+* better behavioral coherence
+
+A typical setup:
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Flee", When.Bb(Keys.PredatorNearby), "Flee"),
+    Ai.Option("SeekFood", When.Bb(Keys.FoodVisible), "SeekFood"),
+    Ai.Option("Wander", When.Score((_, _) => 0.4f), "Wander"),
+], hysteresis: 0.05f, minCommitSeconds: 0.10f);
+```
+
+This is exactly the sort of pattern used in the fish tank demo: utility chooses the mode, then the active state carries the actual behavior. 
+
+---
+
+### Named slots
+
+If a state uses more than one independent decision surface, give them separate `DecisionSlot`s.
+
+Preferred style:
+
+```csharp
+yield return Ai.Decide(
+    Utility.Slot("MainIntent"),
+    [
+        Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+        Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+    ],
+    hysteresis: 0.10f,
+    minCommitSeconds: 0.75f);
+```
+
+If you only have one decision surface in the state, the default slot is usually enough.
+
+---
+
+### Under the hood
+
+The convenience authoring style:
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+], hysteresis: 0.10f, minCommitSeconds: 0.75f);
+```
+
+expands to ordinary runtime concepts:
+
+* `Ai.Option(...)` builds a `UtilityOption`
+* `When.Bb(...)` builds a `Consideration`
+* `Ai.Decide(...)` creates a `Decide` step with a `DecisionPolicy`
+
+Nothing reflective or magical is happening. These helpers exist so decision authoring stays readable while remaining fully explicit under the hood. 
+
+---
+
+### Common utility patterns
+
+#### Mode selection
+
+Pick one major behavior mode from several.
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Search", When.Bb(Keys.Suspicious), "Search"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+]);
+```
+
+#### Thresholded escalation
+
+Use BB thresholds to stage behavior.
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Flee", When.BbAtLeast(Keys.Threat, 0.85f), "Flee"),
+    Ai.Option("Alert", When.BbAtLeast(Keys.Threat, 0.40f), "Alert"),
+    Ai.Option("Idle", When.Score((_, _) => 0.3f), "Idle"),
+]);
+```
+
+#### Combined conditions
+
+Use `When.All(...)` or `When.Any(...)` when multiple signals should combine.
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Reload",
+        When.All(
+            When.Bb(Keys.LowAmmo),
+            When.Not(When.Bb(Keys.UnderHeavyFire))),
+        "Reload"),
+    Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+]);
+```
+
+---
+
+### Common mistakes
+
+#### Using `When.Always` as a fallback when you really want a weaker default
+
+This creates ties and surprises.
+
+#### Re-scoring too frequently with no wait
+
+A utility root should usually include a short `Ai.Wait(...)` cadence instead of hammering decisions every single tick unless that is truly necessary.
+
+#### Treating utility as a replacement for state structure
+
+Utility chooses *which* state should be active. The states themselves still carry behavior, memory, waits, commands, and subroutines.
+
+#### Overcomplicating considerations too early
+
+Start with simple readable considerations. Most useful utility surfaces are built from a handful of BB signals and one or two fallback scores, not from a giant wall of scoring math.
+
+
 
 ## 10. Writing Ariadne Dialogue Nodes
 
