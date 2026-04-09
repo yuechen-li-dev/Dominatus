@@ -541,48 +541,178 @@ The `UtilityLite` OptFlow helper (`Utility.Option`, `Utility.BbAtLeast`,
 
 ## 12. Persistence: Checkpoint and Replay
 
-Persistence is built into the architecture from the beginning rather than
-bolted on. The key insight is that nodes are **not serialized** — enumerator
-state cannot be reliably serialized in .NET. Instead, Dominatus saves enough
-information to *reconstruct* the running state and then *replay* any
-nondeterministic inputs that occurred after the checkpoint.
+Persistence is built into Dominatus from the beginning rather than bolted on afterward. The key design constraint is that Dominatus does **not** attempt to serialize live C# iterator objects or their hidden program-counter state directly.
+
+That is intentional.
+
+Enumerator state cannot be treated as a reliable, portable persistence boundary in .NET. Instead, Dominatus persists enough **durable runtime state** to reconstruct execution meaningfully after restore, then uses replay to re-apply nondeterministic inputs that occurred after the checkpoint.
+
+So the persistence model is:
+
+* save blackboard state
+* save the active HFSM path
+* save pending runtime obligations and cursor state
+* restore those durable surfaces
+* replay external/nondeterministic inputs as needed
+
+This is a bounded and explicit restore model, not “serialize the entire running process.”
 
 ### What is saved
 
-A **`DominatusCheckpoint`** contains:
-- The **HFSM active path** — the ordered list of state IDs currently on the
-  stack. On restore, the HFSM re-enters each state from its entry point.
-- A **blackboard snapshot** — all current key/value pairs, serialized via
-  `BbJsonCodec`.
-- An **event cursor snapshot** — the positions of the event bus cursors and
-  the set of in-flight actuation IDs at checkpoint time.
+A **`DominatusCheckpoint`** captures the durable parts of runtime state needed for reconstruction:
 
-A **`ReplayLog`** contains the sequence of nondeterministic events (player
-input, text entries, choices, external signals) that occurred after the
-checkpoint. These are fed back in by `ReplayDriver` after restore.
+* the **HFSM active path** — the ordered list of currently active state IDs
+* a **blackboard snapshot** — all current key/value pairs, serialized via `BbJsonCodec`
+* **event cursor / in-flight actuation state** — enough information for replay and pending completion handling to resume coherently
+
+This means Dominatus persists the *meaningful control state* of the agent, not the raw internal shape of a suspended iterator object.
+
+### What restore means
+
+Restore does **not** mean:
+
+* resume the exact suspended `yield return` instruction in memory
+* resurrect arbitrary iterator-local variables as if the process had never stopped
+* reconstruct hidden compiler-generated continuation state byte-for-byte
+
+Instead, restore means:
+
+1. restore the blackboard
+2. restore the active HFSM path
+3. reconstruct pending runtime obligations
+4. replay nondeterministic post-checkpoint inputs
+5. continue execution from the rebuilt runtime state
+
+A good way to think about this is:
+
+> Dominatus restores durable agent state and then reconstructs ongoing behavior through re-entry plus replay.
+
+That is the actual contract.
+
+### Why replay exists
+
+A checkpoint alone is not enough if the agent was waiting on something nondeterministic or externally driven, such as:
+
+* a dialogue response
+* a deferred actuation completion
+* a user choice
+* an external signal or host callback
+
+That is what the **`ReplayLog`** is for.
+
+A `ReplayLog` records nondeterministic inputs that happened after the checkpoint. After restore, `ReplayDriver` re-injects those inputs so the runtime can observe the same causal history and reach the same externally visible state.
+
+Replay is therefore not an optional cosmetic feature. It is part of how Dominatus preserves continuity across restore without pretending it can serialize arbitrary live continuation machinery.
 
 ### Save format
 
-`DominatusSave` writes/reads a chunked binary file (`SaveFile`). The file
-format is: magic bytes `DOM1`, version, then a sequence of named chunks, each
-with a length-prefixed ID and payload. Current chunks:
+`DominatusSave` writes and reads a chunked binary file (`SaveFile`). The container format is:
 
-- `dom.meta` — format version header (JSON).
-- `dom.hfsm` — the serialized checkpoint (JSON).
-- `dom.replay` — the replay log (JSON), if present.
+* magic bytes `DOM1`
+* format/version information
+* a sequence of named chunks with length-prefixed payloads
 
-Additional chunks can be contributed by implementing `ISaveChunkContributor`.
+Current logical chunks include:
+
+* `dom.meta` — metadata / format version header
+* `dom.hfsm` — the serialized checkpoint
+* `dom.replay` — the replay log, if present
+
+Additional chunks can be contributed through `ISaveChunkContributor`.
+
+This gives Dominatus a save surface that is:
+
+* explicit
+* versioned
+* extensible
+* inspectable at the logical payload level
+* strict about malformed container structure
 
 ### Restore flow
 
+At a high level, restore proceeds like this:
+
 1. Read the save file and deserialize the checkpoint.
-2. Clear and restore the blackboard from the snapshot (using `SetRaw` to bypass
-   dirty-tracking — this is a restore, not normal operation).
-3. Call `HfsmInstance.RestoreActivePath(stateIds)` — exits all current frames
-   cleanly, then re-enters each state in order.
-4. Construct a `ReplayDriver` with the checkpoint's event cursor snapshots.
-5. Drive the `ReplayDriver` to re-inject nondeterministic inputs until the
-   log is exhausted and live play resumes.
+2. Restore the blackboard snapshot.
+3. Rebuild the HFSM active path by re-entering the recorded states.
+4. Restore cursor / pending-obligation state.
+5. Replay nondeterministic inputs until the runtime has caught back up to the saved session’s causal state.
+
+The important point is that HFSM restore is **state-path restoration**, not raw enumerator resurrection.
+
+### Practical authoring implication
+
+If some behavior must survive save/load correctly, its durable meaning should be represented in one or more of these places:
+
+* the blackboard
+* the HFSM state path
+* pending actuation / replay-visible runtime obligations
+
+It should **not** depend only on transient iterator-local state that the runtime is not designed to serialize directly.
+
+This is one reason Dominatus strongly favors:
+
+* explicit blackboard memory
+* explicit state structure
+* explicit host command/completion modeling
+
+Those surfaces are persistence-friendly.
+
+### Ariadne and restore
+
+Ariadne benefits directly from this model.
+
+Dialogue steps such as `Diag.Line`, `Diag.Ask`, and `Diag.Choose` use BB-backed pending-step bookkeeping so that if a dialogue actuation was already dispatched before save, a restored session does not blindly redispatch it again. Instead, it can wait for the replayed completion and continue coherently.
+
+That is why properly-authored Ariadne dialogue can survive checkpoint/restore without:
+
+* duplicated lines
+* repeated prompts
+* replaying already-consumed choices incorrectly
+
+This behavior depends on the same Dominatus persistence rule as everything else: durable state is restored explicitly, and in-flight causal history is replayed explicitly.
+
+### What this model is good at
+
+Dominatus persistence is especially well-suited for:
+
+* stateful dialogue
+* game/simulation agents with explicit modes
+* command-driven behavior with deferred completion
+* controller-style systems with replayable external inputs
+
+These all align well with:
+
+* blackboard-backed durable state
+* explicit HFSM structure
+* replay-visible external interactions
+
+### What this model is not trying to be
+
+Dominatus is not trying to be:
+
+* a full process snapshot system
+* a byte-for-byte continuation serializer
+* a generic “freeze arbitrary managed execution and restore it later” runtime
+
+That is outside the intended scope.
+
+Its goal is narrower and more practical:
+
+* persist meaningful agent runtime state
+* restore it deterministically
+* reconstruct unfinished external interactions through replay
+
+### Summary
+
+The persistence model can be summarized like this:
+
+* **Blackboard** stores durable memory
+* **HFSM path** stores durable control position
+* **Replay** restores post-checkpoint causality
+* **Iterator internals are not the persistence boundary**
+
+That trade-off keeps Dominatus persistence explicit, bounded, and compatible with the broader goals of determinism, inspectability, and replay-oriented debugging.
 
 ---
 
