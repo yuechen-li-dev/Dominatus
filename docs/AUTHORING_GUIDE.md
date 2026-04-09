@@ -55,27 +55,46 @@ ctx.Bb.Set(PlayerAnswer, userInput);
 
 ## 3. Writing Nodes
 
-A node is a static method with this exact signature:
+A Dominatus state is authored as a C# iterator method that yields `AiStep` values over time.
+
+The canonical shape is:
 
 ```csharp
 public static IEnumerator<AiStep> MyState(AiCtx ctx)
 {
-    // ... your logic here, using yield return to emit steps
+    // ... your logic here
 }
 ```
 
-**Rules:**
-- Must be `static`. Dominatus stores the method as a delegate; instance methods
-  work too but static is conventional.
-- Must return `IEnumerator<AiStep>`.
-- Must accept exactly one `AiCtx ctx` parameter.
-- The `ctx` is valid for the lifetime of the node's execution. Do not cache it
-  across yields — though in practice nothing will go wrong if you do, since
-  `AiCtx` is a readonly struct holding references.
-- Reaching the end of the method (iterator exhausted) is treated as **success**.
-- Throwing an exception is treated as **failure** (the HFSM pops the state).
+A node is not a callback and not a one-shot function. It is a resumable routine executed by the HFSM runtime. Each `yield return` emits a step for the runtime to process, and execution resumes later when that step has completed or been consumed. 
 
-### The minimal node
+### Required shape
+
+A state node should follow these rules:
+
+* Prefer `static` methods.
+* Return `IEnumerator<AiStep>`.
+* Accept exactly one `AiCtx ctx` parameter.
+* Yield Dominatus steps such as `Ai.Wait(...)`, `Ai.Goto(...)`, `Ai.Push(...)`, `Ai.Pop()`, `Ai.Decide(...)`, `Ai.Act(...)`, or Ariadne dialogue steps like `Diag.Line(...)`.
+
+The preferred convention is to treat node methods as named runtime states, not as generic helper methods. Helper routines should usually be written separately and inlined with `Diag.SafeInline(...)` only when they do not emit control-flow steps.
+
+### What the runtime does
+
+A node runs until one of these things happens:
+
+* it yields a step that causes it to wait
+* it yields a control-flow step like `Goto`, `Push`, `Pop`, `Succeed`, or `Fail`
+* it reaches the end of the iterator
+* it throws
+
+Reaching the end of the iterator is treated as **success**. Throwing is treated as **failure**. 
+
+### Preferred authoring style
+
+In normal Dominatus authoring, nodes should read like explicit control flow, not like hidden callback logic.
+
+A minimal state:
 
 ```csharp
 public static IEnumerator<AiStep> Idle(AiCtx ctx)
@@ -85,31 +104,41 @@ public static IEnumerator<AiStep> Idle(AiCtx ctx)
 }
 ```
 
-### A node that loops forever
+A long-lived hub or loop state:
 
 ```csharp
 public static IEnumerator<AiStep> Hub(AiCtx ctx)
 {
     while (true)
     {
-        // ... read BB, display menu, etc.
-        yield return Ai.Wait(0.1f);
+        yield return Diag.Choose("What now?",
+        [
+            Diag.Option("status", "Check status"),
+            Diag.Option("quit", "Quit")
+        ], RootChoice);
+
+        var choice = ctx.Bb.GetOrDefault(RootChoice, "");
+
+        switch (choice)
+        {
+            case "status":
+                foreach (var step in Diag.SafeInline(ShowStatus(ctx)))
+                    yield return step;
+                break;
+
+            case "quit":
+                yield return Ai.Goto("Ending_Quit");
+                yield break;
+        }
     }
 }
 ```
 
-A node that loops forever will run until the HFSM transitions away from it via
-an external trigger or a `Goto`/`Push` from another node that called `Push` to
-get here.
-
-### A node that initialises then delegates
-
-The most common root pattern: do setup once, then push a child state and wait.
+A one-time setup root that hands off to the first real state:
 
 ```csharp
 public static IEnumerator<AiStep> Root(AiCtx ctx)
 {
-    // One-time initialization
     if (ctx.Bb.GetOrDefault(Level, 0) == 0)
     {
         ctx.Bb.Set(Level, 1);
@@ -118,94 +147,444 @@ public static IEnumerator<AiStep> Root(AiCtx ctx)
 
     yield return Ai.Goto("Intro");
 
-    // Keep root alive after Goto returns (it won't — Goto replaces this frame)
-    // If you used Push instead, you'd need:
+    // KeepRootFrame roots should remain alive after their initial handoff.
     while (true)
         yield return Ai.Wait(999f);
 }
 ```
 
+That last pattern is especially important when `HfsmOptions.KeepRootFrame = true`: the root should route once into the real behavior and then remain inert rather than repeatedly restarting it.
+
+### Under the hood
+
+Nothing magical is happening here. A node is just a C# iterator over `AiStep`. Dominatus stores and advances that iterator as part of the active HFSM state. Convenience helpers like `Ai.*`, `When.*`, and `Diag.*` are there to make authoring readable, not to hide a separate reflective DSL.
+
+For example, this:
+
+```csharp
+yield return Ai.Wait(0.5f);
+yield return Ai.Succeed();
+```
+
+is simply emitting two runtime steps in sequence. The runtime interprets those steps; it does not parse special syntax or inspect your method body.
+
+### `AiCtx` usage
+
+`AiCtx` provides access to the current world, agent, blackboard, event bus, and actuation surface.
+
+Typical usage:
+
+```csharp
+var level = ctx.Bb.GetOrDefault(Level, 0);
+ctx.Bb.Set(Level, level + 1);
+
+var time = ctx.World.Clock.Time;
+var agent = ctx.Agent;
+```
+
+Treat `ctx` as the live state access point for the current execution of the node. In practice, you usually just read from it as needed rather than trying to cache pieces of it aggressively.
+
+### Real states vs inline helpers
+
+This distinction matters.
+
+#### Real state
+
+Use `IEnumerator<AiStep>` and register it in the `HfsmGraph` when the routine:
+
+* is a named HFSM state
+* may use control flow like `Goto`, `Push`, `Pop`, `Succeed`, or `Fail`
+* should appear in the runtime state graph
+
+```csharp
+public static IEnumerator<AiStep> Level1_ReadError(AiCtx ctx)
+{
+    ctx.Bb.Set(ReadTheErrorCarefully, true);
+    yield return Diag.Line("You read the error again.", speaker: "Narrator");
+    yield return Ai.Pop();
+}
+```
+
+#### Inline helper
+
+Use `IEnumerable<AiStep>` only for small helper routines that are inlined into a surrounding node and do **not** emit control-flow steps.
+
+```csharp
+public static IEnumerable<AiStep> ShowStatus(AiCtx ctx)
+{
+    yield return Diag.Line($"Confidence: {ctx.Bb.GetOrDefault(Confidence, 0)}", speaker: "Status");
+    yield return Diag.Line($"Sanity: {ctx.Bb.GetOrDefault(Sanity, 0)}", speaker: "Status");
+}
+```
+
+Then use it like this:
+
+```csharp
+foreach (var step in Diag.SafeInline(ShowStatus(ctx)))
+    yield return step;
+```
+
+`Diag.SafeInline(...)` exists specifically to prevent helper routines from secretly yielding control-flow steps. If a helper needs `Goto`, `Push`, `Pop`, `Succeed`, or `Fail`, it should be promoted into a real HFSM state instead. 
+
+### Recommended conventions
+
+These conventions have worked well in the current Dominatus/Ariadne codebase:
+
+* Use `IEnumerator<AiStep>` for registered states.
+* Use `IEnumerable<AiStep>` only for inline helper content.
+* Prefer explicit `yield break` after `Ai.Goto(...)` inside loops or `switch` cases.
+* Prefer collection expressions when building option lists for `Diag.Choose(...)` or `Ai.Decide(...)`.
+* Keep root states simple: initialize, hand off, then idle if `KeepRootFrame` is enabled.
+* Use `Push` for subroutine-like flows and `Goto` for handoff/replacement flows.
+
+### Common pitfalls
+
+#### A node that never yields a real wait
+
+This can spin too aggressively or make the routine hard to reason about. Long-lived loops should usually include `Ai.Wait(...)`, an event wait, a dialogue step, or some other blocking step.
+
+#### Using an inline helper for control flow
+
+This is one of the easiest ways to create subtle bugs. If a helper wants to `Pop`, it is not a helper anymore. It is a state.
+
+#### Assuming `Goto` ends the method automatically
+
+`Goto` is just a yielded step. It tells the runtime to replace the current state, but writing `yield break` after it in loop-heavy code is still good style because it makes intent obvious.
+
+#### Treating node methods like ordinary functions
+
+A node is resumable runtime logic, not just a method that happens to return a sequence. Author it as a stateful routine with explicit steps and explicit handoff.
+
 ---
 
-## 4. Navigation: Goto, Push, and Pop
+## 4. Navigation: `Goto`, `Push`, and `Pop`
 
-These are the three structural moves available to a node.
+Dominatus navigation is **stack-based**.
+
+That is one of the most important differences between Dominatus and systems that model behavior as a flat state switch or a repeatedly re-walked tree. In Dominatus, the active behavior is not just “the current state.” It is a **stack of active states**, with the leaf at the top doing the immediate work.
+
+If you have used a call stack in programming, the idea is the same:
+
+* the bottom of the stack is older, broader context
+* the top of the stack is the currently active routine
+* entering a nested routine can **push** a new frame
+* finishing that nested routine can **pop** back to the caller
+
+This is why Dominatus uses the terms `Push` and `Pop` instead of only talking about “transitions.”
+
+### Mental model
+
+A typical active path might look like this:
+
+```text
+Root -> Combat -> Reload
+```
+
+That means:
+
+* `Root` is still alive underneath
+* `Combat` is active as a parent mode
+* `Reload` is the current leaf state on top
+
+If `Reload` finishes and pops, execution returns to `Combat`. If `Combat` then transitions away, the stack can be rewritten again.
+
+This structure is what makes Dominatus good at sub-behaviors, interruptions, and resumable control flow.
+
+---
 
 ### `Ai.Goto("TargetState")`
 
-Replaces the current state with the target. The current node is exited, the
-target node is entered. The stack depth stays the same. This is a *tail call* —
-use it when you're done with the current state and want to hand off.
+`Goto` replaces the current top state with a new state.
+
+Use it when the current state is finished and you want to hand off to a different one without returning later.
 
 ```csharp
 yield return Ai.Goto("Level1_Intro");
-// Execution of this node ends here. Level1_Intro starts fresh.
+yield break;
 ```
+
+Think of `Goto` as:
+
+* “leave this state”
+* “enter that state instead”
+* “do not come back here unless something else explicitly routes back later”
+
+This is the closest thing to a traditional state-machine transition.
+
+#### When to use `Goto`
+
+Use `Goto` when:
+
+* the current state is done
+* you are changing mode permanently or semi-permanently
+* you do not want automatic return to the current state afterward
+
+Examples:
+
+* hub → intro
+* intro → main menu
+* menu → ending
+* patrol → combat mode
+* threshold → ending
+
+---
 
 ### `Ai.Push("TargetState")`
 
-Pushes the target state above the current one. The current node is *suspended*,
-the target node is entered. When the target pops (via `Pop`, `Succeed`, or `Fail`),
-execution returns to the current node at the `yield return Ai.Push(...)` statement.
+`Push` suspends the current state and places a new state on top of it.
 
-This is the subroutine/function-call pattern.
+Use it when the new state is a **subroutine-like** or **nested** behavior and you expect to return to the current state afterward.
 
-```csharp
-// In a menu loop:
+```csharp id="eq1x0g"
 yield return Ai.Push("Level1_ReadError");
-// Execution resumes here when Level1_ReadError pops.
-// The while (true) loop continues and re-displays the menu.
+// execution resumes here after Level1_ReadError pops
 ```
 
-### `Ai.Pop()` / `Ai.Succeed()` / `Ai.Fail()`
+Think of `Push` as:
 
-Pop the current state. In v0, all three have the same mechanical effect
-(pop the current frame). Use `Succeed` to signal a normal return, `Fail` to
-signal that something went wrong, and `Pop` when neither applies.
+* “pause what I’m doing”
+* “go do this smaller nested thing”
+* “then come back and continue from here”
 
-```csharp
-yield return Ai.Pop();     // neutral return
-yield return Ai.Succeed(); // "I finished my job"
-yield return Ai.Fail();    // "something went wrong"
+This is why `Push` is one of Dominatus’ most important control-flow tools. It lets behavior read like structured runtime logic instead of forcing everything into flat transitions.
+
+#### When to use `Push`
+
+Use `Push` when:
+
+* the current state should resume afterward
+* the called state is effectively a sub-scene, sub-behavior, or nested task
+* you want call/return semantics
+
+Examples:
+
+* hub menu → inspect status
+* level menu → read error
+* dialogue menu → ask one question
+* combat state → reload
+* AI mode → temporary evasive response
+
+---
+
+### `Ai.Pop()`
+
+`Pop` exits the current top state and returns control to the state underneath it.
+
+```csharp id="53hm9n"
+yield return Ai.Pop();
 ```
 
-### Example: Push/Pop menu pattern
+If the current state was entered via `Push`, this returns to the caller.
 
-This is the core pattern in `RustSimulator.cs`:
+So the usual pattern is:
 
-```csharp
-public static IEnumerator<AiStep> MainMenu(AiCtx ctx)
+* parent state does `Push`
+* child state runs
+* child state does `Pop`
+* parent resumes after the `Push`
+
+This is the structured “return” operation.
+
+#### When to use `Pop`
+
+Use `Pop` when:
+
+* a pushed child state has finished its job
+* you want to return neutrally without implying special success/failure meaning
+
+Examples:
+
+* status overlay closes
+* inspect scene finishes
+* one dialogue question finishes
+* temporary subtask ends
+
+---
+
+### `Ai.Succeed()` and `Ai.Fail()`
+
+`Succeed` and `Fail` also remove the current state from the stack, but they communicate intent more clearly than bare `Pop`.
+
+```csharp id="30d2dw"
+yield return Ai.Succeed("Reloaded");
+yield return Ai.Fail("No valid route");
+```
+
+Mechanically in v0 they are still “leave this state,” but semantically they mean:
+
+* `Succeed` — this state completed normally
+* `Fail` — this state could not complete correctly
+
+Use them when the distinction matters to the reader or to future control-flow extensions.
+
+#### Good rule of thumb
+
+* use `Pop` for neutral return
+* use `Succeed` for normal completion
+* use `Fail` for unsuccessful completion
+
+---
+
+## Preferred authoring patterns
+
+### Pattern 1: `Goto` for handoff
+
+```csharp id="5qg3u3"
+public static IEnumerator<AiStep> Intro(AiCtx ctx)
+{
+    yield return Diag.Line("Welcome.", speaker: "System");
+    yield return Ai.Goto("Hub");
+    yield break;
+}
+```
+
+This means:
+
+* Intro is finished
+* Hub replaces it
+* no return to Intro
+
+---
+
+### Pattern 2: `Push` / `Pop` for subroutines
+
+```csharp id="5hkw8a"
+public static IEnumerator<AiStep> Hub(AiCtx ctx)
 {
     while (true)
     {
-        // Build option list, show menu, read choice...
-        var choice = ctx.Bb.GetOrDefault(MenuChoice, "");
+        yield return Diag.Choose("What now?",
+        [
+            Diag.Option("status", "Check status"),
+            Diag.Option("quit", "Quit")
+        ], RootChoice);
+
+        var choice = ctx.Bb.GetOrDefault(RootChoice, "");
 
         switch (choice)
         {
-            case "option_a":
-                yield return Ai.Push("OptionA_Handler");
-                // Returns here after OptionA_Handler pops
-                break;
-
-            case "option_b":
-                yield return Ai.Push("OptionB_Handler");
+            case "status":
+                yield return Ai.Push("ShowStatus");
                 break;
 
             case "quit":
                 yield return Ai.Goto("Ending_Quit");
-                yield break; // Goto exits the current node; yield break is defensive
+                yield break;
         }
     }
 }
 
-public static IEnumerator<AiStep> OptionA_Handler(AiCtx ctx)
+public static IEnumerator<AiStep> ShowStatus(AiCtx ctx)
 {
-    // Do some work...
-    ctx.Bb.Set(Keys.SomeFlag, true);
-    yield return Ai.Pop(); // Return to MainMenu
+    yield return Diag.Line($"Confidence: {ctx.Bb.GetOrDefault(Confidence, 0)}", speaker: "Status");
+    yield return Diag.Line($"Sanity: {ctx.Bb.GetOrDefault(Sanity, 0)}", speaker: "Status");
+    yield return Ai.Pop();
 }
 ```
+
+This means:
+
+* `Hub` stays active underneath
+* `ShowStatus` runs on top
+* `Pop` returns to `Hub`
+* `Hub` continues its loop
+
+That is stack-based control flow doing exactly what it is supposed to do.
+
+---
+
+### Pattern 3: root frame with leaf replacement
+
+When `KeepRootFrame = true`, a common shape is:
+
+* root stays alive underneath
+* leaf states come and go above it
+* root may keep yielding `Ai.Decide(...)`
+
+That means the stack might look like:
+
+```text
+Root -> Patrol
+Root -> Combat
+Root -> Reload
+```
+
+The root is not being replaced each time. The leaf is.
+
+That is why the “keep root alive, swap leaf behaviors” model works so naturally in Dominatus.
+
+---
+
+## Why not just say “transition”?
+
+Because `transition` is too vague for what Dominatus is actually doing.
+
+There are at least two very different navigation operations here:
+
+* **replace** the current state with another state
+* **enter** a nested state and return later
+
+Those are not the same operation. Calling both of them “transition” hides the difference.
+
+`Goto`, `Push`, and `Pop` make the control-flow model explicit:
+
+* `Goto` = replace
+* `Push` = call
+* `Pop` = return
+
+That clarity is one of the reasons Dominatus is easier to reason about than flatter state-transition systems.
+
+---
+
+## Under the hood
+
+The HFSM maintains an active state path, and the current leaf node yields control-flow steps back to the runtime. Those steps are interpreted by the HFSM as stack operations.
+
+Nothing reflective or magical is happening here. `Push` does not “invoke a callback.” It tells the runtime to suspend the current frame and place another state above it. `Pop` tells the runtime to remove the top frame and resume the one below. 
+
+---
+
+## Common navigation mistakes
+
+### Using `Goto` when you meant `Push`
+
+If you use `Goto` for a subroutine-like action, you will not return automatically.
+
+Bad:
+
+```csharp
+yield return Ai.Goto("InspectKnife");
+```
+
+if what you really wanted was “inspect, then come back to menu.”
+
+Good:
+
+```csharp
+yield return Ai.Push("InspectKnife");
+```
+
+---
+
+### Using `Pop` from an inline helper
+
+If a helper is being inlined with `Diag.SafeInline(...)`, it is not a real stack frame and must not emit `Pop`.
+
+That is exactly why `Diag.SafeInline(...)` rejects control-flow steps at runtime.
+
+---
+
+### Forgetting that `Push` resumes at the next line
+
+This is the whole point of `Push`. The parent state continues after the `Push` when the child returns.
+
+If your parent logic depends on that resumed execution, `Push` is the right choice.
+
+---
+
+### Treating `Succeed` as “transition to success state”
+
+It is not. It means “this state is done successfully.” If you want to move to another named state, use `Goto`.
 
 ---
 
