@@ -106,10 +106,12 @@ public sealed class FishtankGame : Game
         var kb = Keyboard.GetState();
         if (kb.IsKeyDown(Keys.Escape)) Exit();
 
-        // Click to add food
+        // Click to add food, but only if the click is inside the playable area.
         var ms = Mouse.GetState();
-        if (ms.LeftButton == ButtonState.Pressed)
-            _food.Add(new Vector2(ms.X, ms.Y));
+        if (ms.LeftButton == ButtonState.Pressed && IsInsidePlayableBounds(ms.X, ms.Y))
+            _food.Add(new Vector2(
+                ClampFoodX(ms.X),
+                ClampFoodY(ms.Y)));
 
         // Utility-controlled ambient spawning.
         // Few pellets => spawn more aggressively.
@@ -185,8 +187,8 @@ public sealed class FishtankGame : Game
     private void SpawnFood()
     {
         _food.Add(new Vector2(
-            _rng.NextSingle() * ScreenW,
-            _rng.NextSingle() * ScreenH));
+            ClampFoodX(_rng.NextSingle() * ScreenW),
+            ClampFoodY(_rng.NextSingle() * ScreenH)));
     }
 
     private void UpdatePerception()
@@ -444,6 +446,21 @@ public sealed class FishtankGame : Game
         var dx = ax - bx;
         var dy = ay - by;
         return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static bool IsInsidePlayableBounds(int x, int y)
+    {
+        return x >= 0 && x < ScreenW && y >= 0 && y < ScreenH;
+    }
+
+    private static float ClampFoodX(float x)
+    {
+        return Math.Clamp(x, FoodRadius, ScreenW - FoodRadius);
+    }
+
+    private static float ClampFoodY(float y)
+    {
+        return Math.Clamp(y, FoodRadius, ScreenH - FoodRadius);
     }
 
     private float GetAmbientFoodSpawnChance()
