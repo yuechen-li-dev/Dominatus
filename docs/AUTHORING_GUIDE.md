@@ -2144,57 +2144,241 @@ If you write with those three ideas in mind, Dominatus persistence will feel nat
 
 ---
 
-## 13. Quick Reference: All Available Steps
+## 13. Quick Reference: Common Dominatus Authoring Surface
+
+This section is intentionally biased toward the **preferred authoring surface**:
+
+* `Ai.*` for control flow and commands
+* `When.*` for readable utility conditions
+* `Diag.*` for Ariadne dialogue
+
+Lower-level equivalents still exist, but these are the forms most authors should reach for first. 
+
+### Control flow
 
 ```csharp
-// Navigation
-yield return Ai.Goto("StateName");                  // replace current state
-yield return Ai.Push("StateName");                  // push child state
-yield return Ai.Pop();                              // return to caller
-yield return Ai.Succeed();                          // return (success)
-yield return Ai.Fail();                             // return (failure)
+// Replace the current state with another state
+yield return Ai.Goto("StateName");
 
-// Waiting
-yield return Ai.Wait(seconds);                      // wall-clock wait
-yield return Ai.Until(ctx => condition);            // predicate wait
+// Push a child state and return when it pops
+yield return Ai.Push("StateName");
 
-// Events
-yield return Ai.Event<MyEventType>();               // wait for typed event
+// Return from the current pushed state
+yield return Ai.Pop();
+
+// Return successfully
+yield return Ai.Succeed();
+
+// Return unsuccessfully
+yield return Ai.Fail();
+```
+
+### Waiting
+
+```csharp
+// Wait for wall-clock simulation time
+yield return Ai.Wait(seconds);
+
+// Wait until a predicate becomes true
+yield return Ai.Until(ctx => condition);
+```
+
+### Events
+
+```csharp
+// Wait for the next event of type T
+yield return Ai.Event<MyEventType>();
+
+// Wait for a filtered event and optionally update BB when consumed
 yield return Ai.Event<MyEventType>(
     filter: e => e.SomeField == value,
-    onConsumed: (agent, e) => agent.Bb.Set(k, e.Val));
-
-// Actuation
-yield return Ai.Act(new MyCommand());               // fire and forget
-yield return Ai.Act(new MyCommand(), Keys.ActId);   // fire and store id
-yield return Ai.Await(Keys.ActId);                  // wait for completion
-yield return Ai.Await(Keys.ActId, Keys.Payload);    // wait + capture typed payload
-
-// Utility decision (single slot)
-yield return Ai.Decide(options, hysteresis, minCommitSeconds);
-// Utility decision (named slot)
-yield return Ai.Decide(new DecisionSlot("Name"), options, hysteresis, minCommitSeconds);
-// Build options
-Ai.Option("id", consideration, "TargetState")       // UtilityOption factory
-
-// Dialogue (Ariadne) — self-contained IWaitEvent steps, yielded directly
-yield return Diag.Line("text", speaker: "Name");
-yield return Diag.Ask("prompt", storeAs: Keys.Input);
-yield return Diag.Choose("prompt", options, storeAs: Keys.Choice);
-foreach (var s in Diag.SafeInline(Helper(ctx))) yield return s;
-// Note: SafeInline throws if Helper yields Goto/Push/Pop/Succeed/Fail
-
-// Utility / When helpers (for building Considerations)
-Utility.Always / Utility.Never
-Utility.Bool((w,a) => bool)
-Utility.Score((w,a) => float)
-Utility.Bb(BbKey<bool>)  /  Utility.Bb(BbKey<float>)  /  Utility.Bb(BbKey<int>, min, max)
-Utility.BbAtLeast(key, threshold)  /  Utility.BbAtMost(key, threshold)
-Utility.BbEq(key, value)
-Utility.Not(c)  /  Utility.All(c1,c2,...)  /  Utility.Any(c1,c2,...)
-Utility.Threshold(c, t)  /  Utility.Remap(c, min, max)  /  Utility.Pow(c, exp)
-// When.* mirrors all of the above
+    onConsumed: (agent, e) => agent.Bb.Set(Keys.LastValue, e.SomeField));
 ```
+
+### Commands and actuation
+
+```csharp
+// Fire-and-forget command
+yield return Ai.Act(new MyCommand(...));
+
+// Dispatch and store actuation id for later wait
+yield return Ai.Act(new MyCommand(...), Keys.ActId);
+
+// Wait for completion of a previously dispatched command
+yield return Ai.Await(Keys.ActId);
+
+// Wait for completion and store a typed payload into the BB
+yield return Ai.Await(Keys.ActId, Keys.ResultValue);
+```
+
+### Utility decisions
+
+Preferred style:
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+    Ai.Option("Reload", When.Bb(Keys.LowAmmo), "Reload"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+], hysteresis: 0.10f, minCommitSeconds: 0.75f);
+```
+
+Named-slot form:
+
+```csharp
+yield return Ai.Decide(
+    Utility.Slot("MainIntent"),
+    [
+        Ai.Option("Combat", When.Bb(Keys.Alerted), "Combat"),
+        Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+    ],
+    hysteresis: 0.10f,
+    minCommitSeconds: 0.75f);
+```
+
+Build options directly:
+
+```csharp
+Ai.Option("id", consideration, "TargetState")
+```
+
+### Dialogue (Ariadne)
+
+```csharp
+// Show a line and wait for advance
+yield return Diag.Line("text", speaker: "Name");
+
+// Ask for free text and store it in a BB key
+yield return Diag.Ask("prompt", storeAs: Keys.Input);
+
+// Present choices and store the selected key string
+yield return Diag.Choose("prompt",
+[
+    Diag.Option("a", "Option A"),
+    Diag.Option("b", "Option B"),
+], storeAs: Keys.Choice);
+```
+
+Inline helper content safely:
+
+```csharp
+foreach (var step in Diag.SafeInline(Helper(ctx)))
+    yield return step;
+```
+
+Important: `Diag.SafeInline(...)` throws if `Helper(...)` yields control-flow steps like `Goto`, `Push`, `Pop`, `Succeed`, or `Fail`. Inline helpers are for content only. 
+
+### Common `When.*` helpers
+
+```csharp
+When.Always
+When.Never
+
+When.Bool((world, agent) => boolCondition)
+When.Score((world, agent) => floatScore)
+
+When.Bb(Keys.SomeBoolKey)                  // BbKey<bool>
+When.Bb(Keys.SomeFloatKey)                 // BbKey<float>
+When.Bb(Keys.SomeIntKey, 0, 100)           // BbKey<int> remapped to 0..1
+
+When.BbAtLeast(Keys.Threat, 0.7f)
+When.BbAtMost(Keys.Threat, 0.3f)
+When.BbEq(Keys.Mode, "combat")
+
+When.Not(c)
+When.All(c1, c2, c3)
+When.Any(c1, c2, c3)
+
+When.Threshold(c, 0.5f)
+When.Remap(c, 0.25f, 0.75f)
+When.Pow(c, 2f)
+```
+
+### Equivalent lower-level `Utility.*` helpers
+
+If you want the more explicit lower-level form, `Utility.*` mirrors the same consideration-building surface:
+
+```csharp
+Utility.Always / Utility.Never
+Utility.Bool((w, a) => bool)
+Utility.Score((w, a) => float)
+
+Utility.Bb(BbKey<bool>)
+Utility.Bb(BbKey<float>)
+Utility.Bb(BbKey<int>, minInclusive, maxInclusive)
+
+Utility.BbAtLeast(key, threshold)
+Utility.BbAtMost(key, threshold)
+Utility.BbEq(key, value)
+
+Utility.Not(c)
+Utility.All(c1, c2, ...)
+Utility.Any(c1, c2, ...)
+Utility.Threshold(c, t)
+Utility.Remap(c, min, max)
+Utility.Pow(c, exp)
+```
+
+### Typical node signatures
+
+Registered state:
+
+```csharp
+public static IEnumerator<AiStep> MyState(AiCtx ctx)
+{
+    ...
+}
+```
+
+Inline helper:
+
+```csharp
+public static IEnumerable<AiStep> MyHelper(AiCtx ctx)
+{
+    ...
+}
+```
+
+Use `IEnumerator<AiStep>` for real HFSM states. Use `IEnumerable<AiStep>` only for inline helper content that will be consumed through `Diag.SafeInline(...)`. 
+
+### Graph registration
+
+Preferred pattern:
+
+```csharp
+public static void Register(HfsmGraph graph)
+{
+    graph.Add(new HfsmStateDef { Id = "Root", Node = Root });
+    graph.Add(new HfsmStateDef { Id = "Hub", Node = Hub });
+    graph.Add(new HfsmStateDef { Id = "Ending", Node = Ending });
+}
+```
+
+### Runtime options
+
+```csharp
+var hfsm = new HfsmInstance(graph, new HfsmOptions
+{
+    KeepRootFrame = true,
+    InterruptScanIntervalSeconds = 0.05f,
+    TransitionScanIntervalSeconds = 0.10f,
+});
+```
+
+Useful options:
+
+* `KeepRootFrame` — keep the root alive under the active leaf; commonly used for utility roots
+* `InterruptScanIntervalSeconds` — throttle interrupt scanning
+* `TransitionScanIntervalSeconds` — throttle normal transition scanning
+
+### Good rule of thumb
+
+* use `Goto` for handoff
+* use `Push` / `Pop` for call-and-return
+* use `When.*` for readable utility authoring
+* use `Diag.*` for dialogue
+* use BB state for durable meaning
+* use `SafeInline` only for content helpers, never for navigation
 
 ---
 
