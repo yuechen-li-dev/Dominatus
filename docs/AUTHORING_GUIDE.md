@@ -1512,45 +1512,274 @@ runtime behaviour:
 
 ## 12. Save and Restore
 
+Dominatus supports checkpoint/restore and replay, but it is important to understand **what is actually persisted** and **what is not**.
+
+Dominatus does **not** serialize live C# iterator program counters or suspended coroutine state directly. A restore is not “resume this exact `yield return` instruction from memory.” Instead, Dominatus restores durable runtime state and then relies on re-entry plus replay to reconstruct ongoing behavior. 
+
+That is the core model:
+
+* restore blackboard state
+* restore active HFSM path
+* restore pending actuation obligations
+* replay post-checkpoint nondeterministic inputs
+* let the runtime continue from there
+
+This is a deliberate design choice. It keeps persistence explicit and deterministic, rather than trying to snapshot arbitrary live iterator internals.
+
+---
+
+### What is persisted
+
+A Dominatus checkpoint is intended to preserve the parts of agent state that are durable and meaningful across restore:
+
+* world time
+* agent blackboard contents
+* active HFSM state path
+* pending deferred actuations / replay cursor state
+
+Concretely, the important pieces are:
+
+#### Blackboard snapshot
+
+The blackboard is the main durable memory surface. If your agent needs to remember something across save/load, it should live in the BB.
+
+#### Active HFSM path
+
+The currently active state path is restored, so the runtime knows which states are active after load.
+
+#### Pending actuations
+
+If a command has been dispatched but not yet completed, that pending obligation is captured so it can be replayed or completed correctly after restore.
+
+This is especially important for dialogue and other external interactions.
+
+---
+
+### What is **not** persisted
+
+Dominatus does **not** currently serialize:
+
+* live `IEnumerator<AiStep>` program counters
+* local variable state inside suspended iterators
+* internal wait bookkeeping as if the routine were frozen byte-for-byte in memory
+
+That means restore is **cold re-entry into the restored active path**, not exact bytecode-style continuation.
+
+This is the most important limitation to understand.
+
+If you author with that model in mind, persistence works well.
+If you assume “the runtime will serialize my exact suspended iterator state,” you will eventually write a flow that behaves incorrectly after restore. 
+
+---
+
+### Practical authoring rule
+
+If some behavior must survive save/load correctly, its durable meaning should be represented in:
+
+* BB state
+* active state path
+* pending actuation / replay state
+
+not only in hidden iterator-local variables.
+
+This is one reason Dominatus encourages explicit state and BB-backed memory rather than burying behavior-critical facts inside transient local control flow.
+
+---
+
+### Save model in one sentence
+
+A good way to think about Dominatus persistence is:
+
+> **save the agent’s durable state and pending obligations, then replay the missing external history after restore.**
+
+That is much closer to the real model than “serialize the whole running process.”
+
+---
+
 ### Saving
 
-```csharp
-var builder  = new DominatusCheckpointBuilder();
-var checkpoint = builder.Capture(world);           // snapshot BB + HFSM path + cursors
-var replayLog  = myReplayLog;                       // collect your ReplayLog separately
+At a high level, saving looks like this:
 
+```csharp
+var checkpoint = DominatusCheckpointBuilder.Capture(world);
 var chunks = DominatusSave.CreateCheckpointChunks(checkpoint, replayLog);
-SaveFile.Write("savegame.dom", chunks.ToList());
+SaveFile.Write(path, chunks);
 ```
+
+This produces a logical save consisting of:
+
+* metadata
+* checkpoint payload
+* optional replay log
+* any extra save chunks contributed by the host
+
+The logical payloads are JSON-based, wrapped in a small chunked binary file format. 
+
+That means the save surface is:
+
+* explicit
+* versioned
+* inspectable at the logical level
+* strict about malformed container data
+
+---
 
 ### Restoring
 
+At a high level, restore looks like this:
+
 ```csharp
-var chunks     = SaveFile.Read("savegame.dom");
-var (cp, log)  = DominatusSave.ReadCheckpointChunks(chunks);
+var chunks = SaveFile.Read(path);
+var (checkpoint, replayLog) = DominatusSave.ReadCheckpointChunks(chunks);
 
-// Restore BB
-BbJsonCodec.ApplySnapshot(agent.Bb, cp.Agents[0].BbSnapshot);
+var cursors = DominatusCheckpointBuilder.Restore(world, checkpoint);
 
-// Restore HFSM stack
-hfsm.RestoreActivePath(world, agent, cp.Agents[0].ActivePath);
-
-// Replay nondeterministic inputs
-if (log is not null)
+if (replayLog is not null)
 {
-    var cursors = cp.Agents.Select(a => a.EventCursorSnapshot).ToArray();
-    var driver  = new ReplayDriver(world, log, cursors);
-    while (!driver.IsComplete)
-    {
-        driver.ApplyNext(world);
-        world.Tick(0f); // advance without real time to process replayed events
-    }
+    var driver = new ReplayDriver(world, replayLog, cursors);
+    driver.ApplyAll();
 }
 ```
 
-The key invariant: after restore and replay, the agent's observable state
-(BB + active path) is identical to what it would have been if the session
-had never been interrupted.
+The restore phase does the durable-state rebuild:
+
+* blackboard contents
+* active HFSM path
+* pending actuation / cursor state
+
+Then replay applies the nondeterministic events that happened after the checkpoint.
+
+That separation is intentional.
+
+---
+
+### Dialogue and restore
+
+This is where Ariadne benefits directly from the Dominatus model.
+
+Ariadne dialogue steps use BB-backed pending-step bookkeeping so that if a line, question, or menu was already dispatched before save, a restored session can avoid redispatching it and instead wait for the replayed completion event. 
+
+That is why properly-authored dialogue does not:
+
+* re-show lines after load
+* re-ask already answered prompts
+* duplicate menu interactions
+
+This behavior depends on the bounded restore model being respected:
+
+* durable state in BB
+* pending step identity captured
+* replay re-injects completion
+
+---
+
+### What replay is for
+
+Replay exists to restore **causal continuity**, not just state snapshots.
+
+A saved blackboard alone is not enough if the world was still “waiting for something to happen,” such as:
+
+* a deferred actuation completing
+* an external event arriving
+* a typed response coming back from a host-facing command
+
+Replay lets the restored runtime observe those things in the correct post-checkpoint order.
+
+That is why replay is part of the persistence model rather than an optional extra bolt-on.
+
+---
+
+### What this means for authors
+
+When writing Dominatus flows that should survive save/load cleanly:
+
+#### Prefer BB-backed durable meaning
+
+If the agent must remember it, put it in the blackboard.
+
+#### Prefer explicit state structure
+
+If the runtime must know what mode the agent is in after load, represent that as state path + BB state, not just transient local iterator context.
+
+#### Treat pending host interactions as real runtime obligations
+
+Dialogue prompts, deferred commands, and external waits should be authored with the expectation that restore may happen while they are in-flight.
+
+#### Do not assume exact suspended-iterator resurrection
+
+That is not the current Dominatus contract.
+
+---
+
+### Good fit for persistence
+
+Dominatus persistence works especially well for flows like:
+
+* stateful dialogue
+* simulation agents with explicit modes
+* AI with BB-backed memory and command waits
+* controllers with discrete state and external events
+
+These all align naturally with:
+
+* explicit state
+* explicit memory
+* replayable obligations
+
+---
+
+### Less good fit without extra care
+
+Flows that depend heavily on hidden iterator-local transient state and assume exact continuation after restore are not a good fit **unless** you explicitly surface that meaning into BB/state/replay.
+
+The runtime will not rescue those assumptions for you automatically.
+
+---
+
+### Save surface today
+
+The current v0 persistence story is:
+
+* coherent
+* bounded
+* deterministic-oriented
+* suitable for real save/load flows
+
+But it is not “serialize an entire live VM state” persistence.
+
+That distinction should be understood clearly when authoring long-lived behaviors.
+
+---
+
+### Common mistakes
+
+#### Assuming restore resumes the exact suspended source line
+
+It does not. Restore is cold re-entry plus replay.
+
+#### Hiding critical meaning only in local iterator variables
+
+If it matters after load, it should probably be in the BB.
+
+#### Treating replay as optional when external completion mattered
+
+If the agent was waiting on a deferred external effect, replay is part of correctness.
+
+#### Writing persistence-sensitive flows without testing save/load in the middle
+
+If a flow matters, test it under save/load while it is in progress, not just before and after.
+
+---
+
+### Recommended authoring mindset
+
+The safest mindset is:
+
+* the BB is durable memory
+* the HFSM path is durable control position
+* replay preserves unfinished obligations and post-save causality
+
+If you write with those three ideas in mind, Dominatus persistence will feel natural and predictable.
 
 ---
 
