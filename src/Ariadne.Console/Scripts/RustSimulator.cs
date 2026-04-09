@@ -30,6 +30,9 @@ public static class RustSimulator
     public static readonly BbKey<bool> ClonedEverything = new("RustSim.L1.ClonedEverything");
     public static readonly BbKey<bool> AskedRubberDuck = new("RustSim.L1.AskedRubberDuck");
     public static readonly BbKey<bool> AcceptedOwnershipTruth = new("RustSim.L1.AcceptedOwnershipTruth");
+    public static readonly BbKey<bool> AskedVelvet = new("RustSim.L1.AskedVelvet");
+    public static readonly BbKey<bool> AskedNimbus = new("RustSim.L1.AskedNimbus");
+    public static readonly BbKey<bool> AskedMiniJim = new("RustSim.L1.AskedMiniJim");
 
     // Menu / branching scratch
     public static readonly BbKey<string> RootChoice = new("RustSim.RootChoice");
@@ -150,6 +153,7 @@ public static class RustSimulator
             if (!ctx.Bb.GetOrDefault(AcceptedOwnershipTruth, false))
                 options.Add(Diag.Option("understand", "Try to understand what ownership is actually complaining about"));
 
+            options.Add(Diag.Option("ai", "Ask AI for help"));
             options.Add(Diag.Option("resolve", "Attempt a fix"));
             options.Add(Diag.Option("flee", "Close the editor and stare into the void"));
 
@@ -173,6 +177,10 @@ public static class RustSimulator
 
                 case "understand":
                     yield return Ai.Push("Level1_UnderstandOwnership");
+                    break;
+
+                case "ai":
+                    yield return Ai.Push("Level1_AIHelp");
                     break;
 
                 case "resolve":
@@ -203,6 +211,84 @@ public static class RustSimulator
 
         yield return Diag.Line("You explain the code to the rubber duck on your desk.", speaker: "Narrator");
         yield return Diag.Line("Halfway through, you hear yourself say the phrase 'well obviously that borrow still exists there,' and the duck achieves enlightenment before you do.", speaker: "Narrator");
+        yield return Ai.Pop();
+    }
+
+    public static IEnumerator<AiStep> Level1_AIHelp(AiCtx ctx)
+    {
+        while (true)
+        {
+            var options = new List<DiagChoice>();
+
+            if (!ctx.Bb.GetOrDefault(AskedVelvet, false))
+                options.Add(Diag.Option("velvet", "Ask Velvet"));
+
+            if (!ctx.Bb.GetOrDefault(AskedNimbus, false))
+                options.Add(Diag.Option("nimbus", "Ask Nimbus"));
+
+            if (!ctx.Bb.GetOrDefault(AskedMiniJim, false))
+                options.Add(Diag.Option("minijim", "Ask MiniJim"));
+
+            options.Add(Diag.Option("back", "Never mind"));
+
+            yield return Diag.Choose("Which AI assistant do you consult?", options, Level1Choice);
+
+            var choice = ctx.Bb.GetOrDefault(Level1Choice, "");
+
+            switch (choice)
+            {
+                case "velvet":
+                    yield return Ai.Push("Level1_AskVelvet");
+                    break;
+
+                case "nimbus":
+                    yield return Ai.Push("Level1_AskNimbus");
+                    break;
+
+                case "minijim":
+                    yield return Ai.Push("Level1_AskMiniJim");
+                    break;
+
+                case "back":
+                    yield return Ai.Pop();
+                    yield break;
+            }
+        }
+    }
+
+    public static IEnumerator<AiStep> Level1_AskVelvet(AiCtx ctx)
+    {
+        ctx.Bb.Set(AskedVelvet, true);
+        ctx.Bb.Set(Confidence, ctx.Bb.GetOrDefault(Confidence, 0) + 1);
+
+        yield return Diag.Line("You open Velvet, whose interface radiates calm confidence and suspiciously moisturized certainty.", speaker: "Narrator");
+        yield return Diag.Line("[Velvet placeholder advice goes here.]", speaker: "Velvet");
+        yield return Diag.Line("You feel briefly reassured in a way that does not survive contact with the actual bug.", speaker: "Narrator");
+
+        yield return Ai.Pop();
+    }
+
+    public static IEnumerator<AiStep> Level1_AskNimbus(AiCtx ctx)
+    {
+        ctx.Bb.Set(AskedNimbus, true);
+        ctx.Bb.Set(Sanity, ctx.Bb.GetOrDefault(Sanity, 0) + 1);
+
+        yield return Diag.Line("You consult Nimbus, which responds with the grave composure of a machine preparing to explain your own thoughts back to you in numbered sections.", speaker: "Narrator");
+        yield return Diag.Line("[Nimbus placeholder advice goes here.]", speaker: "Nimbus");
+        yield return Diag.Line("Somewhere in that answer is either wisdom or upholstery. It is too early in the morning to tell which.", speaker: "Narrator");
+
+        yield return Ai.Pop();
+    }
+
+    public static IEnumerator<AiStep> Level1_AskMiniJim(AiCtx ctx)
+    {
+        ctx.Bb.Set(AskedMiniJim, true);
+        ctx.Bb.Set(TechDebt, ctx.Bb.GetOrDefault(TechDebt, 0) + 1);
+
+        yield return Diag.Line("You ask MiniJim, which replies instantly, as if speed were a substitute for accuracy and enthusiasm a substitute for thought.", speaker: "Narrator");
+        yield return Diag.Line("[MiniJim placeholder advice goes here.]", speaker: "MiniJim");
+        yield return Diag.Line("You are now in possession of an answer. Whether it is also help remains a separate theological question.", speaker: "Narrator");
+
         yield return Ai.Pop();
     }
 
@@ -396,6 +482,10 @@ public static class RustSimulator
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Menu", Node = Level1_Menu });
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_ReadError", Node = Level1_ReadError });
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskDuck", Node = Level1_AskDuck });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AIHelp", Node = Level1_AIHelp });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskVelvet", Node = Level1_AskVelvet });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskNimbus", Node = Level1_AskNimbus });
+        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskMiniJim", Node = Level1_AskMiniJim });
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_CloneEverything", Node = Level1_CloneEverything });
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_UnderstandOwnership", Node = Level1_UnderstandOwnership });
         graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Resolve", Node = Level1_Resolve });
