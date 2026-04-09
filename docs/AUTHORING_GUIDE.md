@@ -1124,119 +1124,324 @@ Start with simple readable considerations. Most useful utility surfaces are buil
 
 ## 10. Writing Ariadne Dialogue Nodes
 
-Ariadne extends Dominatus with dialogue-specific step types. Import
-`Ariadne.OptFlow` to access `Diag`.
+Ariadne is built on top of Dominatus, not beside it.
 
-Unlike general actuation (`Ai.Act` + `Ai.Await`), the three Diag step types
-are **self-contained `IWaitEvent` implementations** — you yield them directly
-and they handle dispatch and waiting internally. You do not need a BB key for
-the actuation id.
+That matters, because it means dialogue in Ariadne is not running on a separate special-purpose engine. It runs on the same underlying Dominatus runtime model as any other agent behavior: states, blackboard memory, control flow, commands, waits, and save/restore semantics. 
 
-### Lines
+In practice, that means dialogue and “game AI” are much closer than they first appear.
+
+A combat agent, a menu-driven scene, and a branching conversation all need many of the same runtime properties:
+
+* explicit state
+* memory
+* structured control flow
+* waits
+* commands/actuation
+* resumable execution
+* persistence/replay
+
+The main differences are usually:
+
+* **cadence** — dialogue is slower and player-paced; reactive AI is often faster and simulation-paced
+* **actuation surface** — dialogue emits lines, questions, and choices; other agents may emit movement, audio, animation, or controller commands
+* **presentation** — dialogue is usually text/UI-first, while other agents may be embodied in space or systems
+
+That is why Ariadne could emerge naturally from Dominatus rather than requiring a separate engine.
+
+---
+
+### What Ariadne adds
+
+Ariadne provides dialogue-specific `AiStep` helpers through `Ariadne.OptFlow`:
+
+* `Diag.Line(...)`
+* `Diag.Ask(...)`
+* `Diag.Choose(...)`
+* `Diag.Option(...)`
+* `Diag.SafeInline(...)`
+
+These are convenience authoring helpers layered on top of ordinary Dominatus runtime semantics. They do not replace Dominatus control flow. You still use:
+
+* `Ai.Goto(...)`
+* `Ai.Push(...)`
+* `Ai.Pop()`
+* `Ai.Succeed()`
+* `Ai.Fail()`
+* `Ai.Wait(...)`
+
+inside Ariadne-authored adventures exactly the same way you would in any other Dominatus agent.
+
+That is the key mental model:
+
+> Ariadne does not introduce a separate execution model for dialogue.
+> It introduces a dialogue-specific actuation layer on top of the existing Dominatus one.
+
+---
+
+### Preferred authoring style
+
+A typical Ariadne dialogue state looks like this:
 
 ```csharp
-yield return Diag.Line("The compiler stares at you.", speaker: "Narrator");
-yield return Diag.Line("error[E0499]: cannot borrow...", speaker: "Compiler");
-```
-
-Dispatches a `DiagLineCommand` to the actuator host, then waits for
-`ActuationCompleted`. Your host-side handler displays the line and signals
-completion when the player advances (e.g. presses Enter or clicks).
-
-### Free text input
-
-```csharp
-yield return Diag.Ask("Enter the missing Rust line:", storeAs: Keys.PlayerAnswer);
-var answer = ctx.Bb.GetOrDefault(Keys.PlayerAnswer, "");
-```
-
-Dispatches a `DiagAskCommand`. The handler should accept text input and
-complete with a `string` payload. The result is stored directly into the
-provided `BbKey<string>`.
-
-### Choice menus
-
-```csharp
-var options = new List<DiagChoice>
+public static IEnumerator<AiStep> Hub(AiCtx ctx)
 {
-    Diag.Option("read",  "Read the error carefully"),
-    Diag.Option("duck",  "Explain it to the rubber duck"),
-    Diag.Option("clone", "Clone everything"),
-};
-yield return Diag.Choose("What do you do?", options, storeAs: Keys.MenuChoice);
+    while (true)
+    {
+        yield return Diag.Choose("What now?",
+        [
+            Diag.Option("status", "Check your condition"),
+            Diag.Option("quit", "Abandon your career and leave"),
+        ], RootChoice);
 
-var choice = ctx.Bb.GetOrDefault(Keys.MenuChoice, "");
-switch (choice)
-{
-    case "read":  yield return Ai.Push("Level1_ReadError"); break;
-    case "duck":  yield return Ai.Push("Level1_AskDuck");   break;
-    case "clone": yield return Ai.Push("Level1_Clone");     break;
+        var choice = ctx.Bb.GetOrDefault(RootChoice, "");
+
+        switch (choice)
+        {
+            case "status":
+                foreach (var step in Diag.SafeInline(ShowStatus(ctx)))
+                    yield return step;
+                break;
+
+            case "quit":
+                yield return Ai.Goto("Ending_Quit");
+                yield break;
+        }
+    }
 }
 ```
 
-Dispatches a `DiagChooseCommand` with the full options list. The handler
-presents the menu, and completes with the `Key` string of the chosen option
-as a `string` payload.
+This should feel familiar if you already understand Dominatus nodes:
 
-### Conditional option lists
+* the state is an `IEnumerator<AiStep>`
+* dialogue operations are yielded as steps
+* BB stores the result
+* ordinary Dominatus control flow handles branching
 
-A common pattern is building the option list dynamically based on BB flags,
-so options only appear when they're still available:
+That is exactly the point: Ariadne authoring should feel like Dominatus authoring with dialogue-specific commands, not like learning an unrelated DSL.
+
+---
+
+### `Diag.Line(...)`
+
+Use `Diag.Line(...)` to display a line of dialogue and wait for player advance.
+
+```csharp id="p4zxu1"
+yield return Diag.Line("The compiler stares at you.", speaker: "Narrator");
+yield return Diag.Line("error[E0499]: cannot borrow `world` as mutable more than once at a time", speaker: "Compiler");
+```
+
+A `Diag.Line(...)` step is self-contained:
+
+* it dispatches the underlying line command
+* it waits for completion internally
+* it resumes when the host signals that the player has advanced
+
+So unlike general actuation with `Ai.Act(...)` + `Ai.Await(...)`, you do not manually store an actuation id for ordinary Ariadne dialogue steps. 
+
+---
+
+### `Diag.Ask(...)`
+
+Use `Diag.Ask(...)` to request free text input and store the result directly into a BB key.
+
+```csharp
+yield return Diag.Ask("Type the missing Rust line:", storeAs: PlayerAnswer);
+
+var answer = ctx.Bb.GetOrDefault(PlayerAnswer, "");
+```
+
+The host-side handler is responsible for collecting the text, but from the author’s perspective this behaves like any other stateful step:
+
+* ask
+* wait
+* resume with BB updated
+
+That is exactly the sort of structured wait Dominatus is built for.
+
+---
+
+### `Diag.Choose(...)`
+
+Use `Diag.Choose(...)` to present options and store the selected key string.
+
+```csharp id="8w9hyh"
+yield return Diag.Choose("Which AI assistant do you consult?",
+[
+    Diag.Option("velvet", "Ask Velvet"),
+    Diag.Option("nimbus", "Ask Nimbus"),
+    Diag.Option("minijim", "Ask MiniJim"),
+], Level1Choice);
+
+var choice = ctx.Bb.GetOrDefault(Level1Choice, "");
+```
+
+Then branch with normal Dominatus control flow:
+
+```csharp
+switch (choice)
+{
+    case "velvet":
+        yield return Ai.Push("Level1_AskVelvet");
+        break;
+
+    case "nimbus":
+        yield return Ai.Push("Level1_AskNimbus");
+        break;
+
+    case "minijim":
+        yield return Ai.Push("Level1_AskMiniJim");
+        break;
+}
+```
+
+This is one of the clearest examples of Ariadne not being “something else.” A choice menu is just another stateful branch point inside the same runtime model.
+
+---
+
+### Dynamic option lists
+
+A common Ariadne pattern is to build choice lists dynamically from BB state.
 
 ```csharp
 var options = new List<DiagChoice>();
 
-if (!ctx.Bb.GetOrDefault(Keys.ReadError, false))
-    options.Add(Diag.Option("read", "Read the error carefully"));
+if (!ctx.Bb.GetOrDefault(AskedVelvet, false))
+    options.Add(Diag.Option("velvet", "Ask Velvet"));
 
-if (!ctx.Bb.GetOrDefault(Keys.AskedDuck, false))
-    options.Add(Diag.Option("duck", "Explain it to the rubber duck"));
+if (!ctx.Bb.GetOrDefault(AskedNimbus, false))
+    options.Add(Diag.Option("nimbus", "Ask Nimbus"));
 
-options.Add(Diag.Option("resolve", "Attempt a fix")); // always available
+if (!ctx.Bb.GetOrDefault(AskedMiniJim, false))
+    options.Add(Diag.Option("minijim", "Ask MiniJim"));
 
-yield return Diag.Choose("What now?", options, Keys.MenuChoice);
+options.Add(Diag.Option("back", "Never mind"));
+
+yield return Diag.Choose("Which AI assistant do you consult?", options, Level1Choice);
 ```
 
-### Restore semantics and callsite IDs
+This pattern should already feel familiar if you have written any other Dominatus state that responds to BB flags and chooses a branch.
 
-Each `Diag.Line`, `Diag.Ask`, and `Diag.Choose` call uses `[CallerFilePath]`
-and `[CallerLineNumber]` (filled automatically by the C# compiler) to derive
-stable synthetic BB keys — `__diag.{File}:{Line}.started` and `.pendingId`.
-On restore, the step finds its actuation id already in the BB and skips
-re-dispatch, waiting only for the replay driver to re-inject the completion
-event. This means **dialogue steps survive checkpoint/restore without
-double-showing lines or re-prompting choices**.
+---
 
-> **Important:** The auto-generated callsite id is stable only while the source
-> line number doesn't move. If you need saves to survive a patch that shifts
-> line numbers, pass an explicit stable id:
-> ```csharp
-> Diag.Line("Hello.", callsiteFile: "intro_scene", callsiteLine: 0)
-> ```
+### `Diag.SafeInline(...)`
 
-### SafeInline
-
-`Diag.SafeInline` lets you yield from a helper `IEnumerable<AiStep>` method
-inline without creating a new HFSM state:
+Use `Diag.SafeInline(...)` for small inline helper routines that emit dialogue content but do **not** navigate the HFSM.
 
 ```csharp
 public static IEnumerable<AiStep> ShowStatus(AiCtx ctx)
 {
-    yield return Diag.Line($"Confidence: {ctx.Bb.GetOrDefault(Keys.Confidence, 0)}");
-    yield return Diag.Line($"Sanity: {ctx.Bb.GetOrDefault(Keys.Sanity, 0)}");
+    yield return Diag.Line($"Confidence: {ctx.Bb.GetOrDefault(Confidence, 0)}", speaker: "Status");
+    yield return Diag.Line($"Sanity: {ctx.Bb.GetOrDefault(Sanity, 0)}", speaker: "Status");
+    yield return Diag.Line($"Tech Debt: {ctx.Bb.GetOrDefault(TechDebt, 0)}", speaker: "Status");
 }
+```
 
-// In a node:
+Then inline it safely:
+
+```csharp
 foreach (var step in Diag.SafeInline(ShowStatus(ctx)))
     yield return step;
 ```
 
-**Important constraint:** `SafeInline` actively enforces that you cannot yield
-control-flow steps (`Goto`, `Push`, `Pop`, `Succeed`, `Fail`) inside it. Doing
-so throws `InvalidOperationException` at runtime. If your helper needs to do
-navigation, make it a real HFSM state and enter it with `Ai.Push` or `Ai.Goto`.
+`Diag.SafeInline(...)` is important because it enforces an authoring rule that turned out to matter in practice:
+
+* inline helpers may emit dialogue/content steps
+* inline helpers may **not** emit control-flow steps such as `Goto`, `Push`, `Pop`, `Succeed`, or `Fail`
+
+If a helper needs control-flow, it should be promoted into a real HFSM state and entered with `Ai.Push(...)` or `Ai.Goto(...)`.
+
+That distinction keeps Ariadne authoring sane and avoids a whole class of hard-to-debug stuck-flow bugs. 
 
 ---
+
+### Restore semantics and callsite identity
+
+Ariadne dialogue steps are built to survive checkpoint/restore without double-dispatching the same line or re-prompting the same question.
+
+Each `Diag.Line(...)`, `Diag.Ask(...)`, and `Diag.Choose(...)` call derives a stable synthetic identity from the callsite and uses BB-backed bookkeeping to remember whether it has already dispatched and which actuation id is pending. On restore, the step can skip redispatch and wait for the replayed completion instead. 
+
+This matters because dialogue is one of the easiest places for persistence bugs to feel terrible:
+
+* duplicated lines
+* repeated prompts
+* menus shown twice
+* input re-asked after load
+
+Ariadne’s dialogue steps exist partly to make those flows safe by default.
+
+One important rule follows from that:
+
+* while a dialogue step is pending, its bookkeeping must remain intact
+* once it successfully completes, that bookkeeping is cleared so the same callsite can be used again later in a loop or menu
+
+That is why repeated hub/menu prompts work correctly.
+
+---
+
+### Under the hood
+
+Ariadne dialogue steps are still just yielded `AiStep`s.
+
+For example:
+
+```csharp
+yield return Diag.Line("Hello.", speaker: "Narrator");
+```
+
+is not a custom mini-language instruction. It is a Dominatus step object that internally dispatches a command and waits for the corresponding completion event.
+
+That means Ariadne remains transparent:
+
+* dialogue is authored more conveniently
+* but the runtime model is still ordinary Dominatus
+
+This is important to understand if you later want to mix dialogue with other behavior in the same agent. Nothing special has to happen. The same state can use:
+
+* `Diag.Line(...)`
+* `Ai.Wait(...)`
+* `Ai.Decide(...)`
+* `Ai.Push(...)`
+* `Ai.Act(...)`
+
+together, because they are all part of the same execution model.
+
+---
+
+### Dialogue and non-dialogue logic can mix naturally
+
+Because Ariadne rides on Dominatus rather than replacing it, dialogue states can still use ordinary Dominatus features whenever needed.
+
+For example, a scene can:
+
+* display dialogue
+* branch on BB memory
+* push a nested state
+* wait for an event
+* make a utility decision
+* save/load correctly
+
+That is one of the biggest practical advantages of this design. You do not have to choose between “dialogue scripting” and “real agent logic.” The two are built from the same runtime grammar.
+
+---
+
+### Common mistakes
+
+#### Thinking Ariadne is a separate runtime
+
+It is not. Ariadne is a dialogue-specific helper layer over Dominatus.
+
+#### Writing dialogue like a flat string tree
+
+Ariadne is happiest when you let it use real state structure, BB memory, and normal control flow instead of forcing everything into a giant monolithic choice graph.
+
+#### Using inline helpers for navigation
+
+If the routine needs `Push`, `Pop`, or `Goto`, it should be a state, not a `SafeInline` helper.
+
+#### Forgetting that dialogue is still stateful runtime logic
+
+A dialogue scene is not just text output. It is a state machine with memory and waits. Author it accordingly.
+
 
 ## 11. Utility and When: Consideration Helpers
 
