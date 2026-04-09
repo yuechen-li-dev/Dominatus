@@ -624,67 +624,428 @@ yield return Ai.Event<PlayerAttackedEvent>(
 
 ## 6. Commands and Actuation
 
-For anything that needs to interact with the outside world (play audio, move
-a character, display UI, wait for a player to click), you define a command
-and register a handler.
+Commands and actuation are how a Dominatus agent interacts with the outside world.
+
+A node can decide, wait, branch, and manipulate BB state on its own, but anything that crosses the boundary into the host environment — UI, movement, audio, simulation actions, external systems, controller outputs, and so on — should usually be expressed as a command handled by the actuator host. 
+
+This keeps the runtime model clean:
+
+* the node decides **what** to do
+* the actuator host decides **how** that command is carried out
+* completion comes back into the runtime explicitly
+
+That separation is one of the key reasons Dominatus stays deterministic and inspectable.
+
+---
+
+### The model at a glance
+
+A command flow in Dominatus usually looks like this:
+
+1. the node dispatches a command
+2. the runtime assigns it an `ActuationId`
+3. the host either completes it immediately or later
+4. the node optionally waits for the matching completion
+5. the runtime resumes the node when that completion is observed
+
+So from the author’s point of view, the pattern is:
+
+```csharp id="vz3k4z"
+yield return Ai.Act(new MyCommand(...), Keys.CommandId);
+yield return Ai.Await(Keys.CommandId);
+```
+
+or, if a payload is expected back:
+
+```csharp id="puo8xw"
+yield return Ai.Act(new QuerySomethingCommand(...), Keys.CommandId);
+yield return Ai.Await(Keys.CommandId, Keys.ResultValue);
+```
+
+This is an explicit runtime protocol, not a hidden language feature.
+
+---
+
+### Why Dominatus does **not** use C# `async`/`await` for agent execution
+
+This is deliberate, and it is important.
+
+C# `async`/`await` is a very powerful tool for general asynchronous application code. But Dominatus is solving a different problem: **deterministic, inspectable, replayable agent execution**.
+
+Those are not the same thing.
+
+Dominatus therefore does **not** use task-based suspension as the core behavioral model. Instead, it models external work as:
+
+* dispatch a command
+* get an actuation id
+* optionally wait for explicit completion
+* resume only when the runtime observes the matching completion event
+
+That may look slightly more manual at first, but it buys several things that are central to Dominatus:
+
+#### 1. Waiting stays runtime-visible
+
+With `async`/`await`, the compiler transforms your method into a hidden continuation state machine.
+
+That is usually a feature.
+
+But in Dominatus, hidden continuation state is the wrong trade. The runtime wants waiting to remain explicit and inspectable:
+
+* which command is pending
+* why the agent is paused
+* what completion will resume it
+* what payload came back
+
+That is much easier to debug and reason about when it is modeled directly in the runtime.
+
+#### 2. Persistence stays bounded and explicit
+
+Dominatus save/restore does not try to serialize arbitrary compiler-generated async continuations.
+
+Instead, it persists:
+
+* blackboard state
+* active HFSM path
+* pending obligations / replay cursor state
+
+and then reconstructs ongoing behavior through restore + replay.
+
+That model would become much uglier if the runtime depended on serializing live async task continuation state.
+
+#### 3. Replay and tracing remain coherent
+
+An actuation in Dominatus is something the runtime can trace and replay explicitly:
+
+* command dispatched
+* completion immediate or deferred
+* matching completion event observed
+* node resumed
+
+That is much more compatible with deterministic replay than hiding behavior suspension inside arbitrary task machinery.
+
+#### 4. Runtime timing remains under runtime control
+
+Dominatus wants agent progression to happen through:
+
+* world tick
+* runtime clock
+* explicit host completion
+
+not through ambient scheduler or task timing semantics.
+
+This matters especially for:
+
+* simulations
+* games
+* controllers
+* deterministic debugging
+
+So the rule is not “never use async anywhere.” The rule is:
+
+> **Do not use C# `async`/`await` as the behavioral suspension model for agent nodes.**
+
+A host may still do asynchronous work internally if it wants. But it should report completion back to Dominatus explicitly through the actuation system rather than suspending the node itself with task-based awaiting.
+
+A good short summary is:
+
+> `async`/`await` is excellent for application concurrency; Dominatus commands are about runtime-visible behavioral suspension.
+
+---
 
 ### Defining a command
+
+A command is usually a small record implementing `IActuationCommand`.
 
 ```csharp
 public sealed record PlaySoundCommand(string ClipId, float Volume) : IActuationCommand;
 ```
 
+The command should describe the intent cleanly. It should not contain runtime suspension logic by itself.
+
+Good commands are usually:
+
+* small
+* explicit
+* host-facing
+* serializable in spirit, even if not literally persisted as-is
+
+---
+
 ### Registering a handler
+
+Handlers are registered on the `ActuatorHost`.
 
 ```csharp
 var host = new ActuatorHost();
 host.Register(new PlaySoundHandler());
+```
 
+A handler receives:
+
+* the host
+* the current `AiCtx`
+* the generated `ActuationId`
+* the command value
+
+and returns a `HandlerResult`.
+
+Example:
+
+```csharp
 public sealed class PlaySoundHandler : IActuationHandler<PlaySoundCommand>
 {
-    public HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, PlaySoundCommand cmd)
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, PlaySoundCommand cmd)
     {
         AudioSystem.Play(cmd.ClipId, cmd.Volume);
-        // Completes immediately — no waiting needed
-        return new HandlerResult(Accepted: true, Completed: true, Ok: true);
+
+        return new ActuatorHost.HandlerResult(
+            Accepted: true,
+            Completed: true,
+            Ok: true);
     }
 }
 ```
 
-### Using a command in a node
+This means:
+
+* the command was accepted
+* it completed immediately
+* it completed successfully
+
+Immediate completion is common for simple UI or simulation commands.
+
+---
+
+### Dispatching a command from a node
+
+If you do not need to wait for completion:
 
 ```csharp
-// Fire and forget (no await needed if you don't care about completion):
 yield return Ai.Act(new PlaySoundCommand("explosion", 1.0f));
-
-// With await (pause until handler signals completion):
-yield return Ai.Act(new PlaySoundCommand("music_intro", 0.8f), Keys.SoundActId);
-yield return Ai.Await(Keys.SoundActId);
-// Continues here once PlaySoundHandler marks the actuation complete
-
-// With typed payload from the handler:
-yield return Ai.Act(new QueryDatabaseCommand("user_name"), Keys.QueryActId);
-yield return Ai.Await(Keys.QueryActId, Keys.UserName);  // BbKey<string>
-// ctx.Bb.GetOrDefault(Keys.UserName, "") is now populated
 ```
 
-### Deferred completion (async handlers)
+If you do want to wait, store the actuation id in a BB key:
+
+```csharp
+yield return Ai.Act(new PlaySoundCommand("music_intro", 0.8f), Keys.SoundActId);
+yield return Ai.Await(Keys.SoundActId);
+```
+
+This means:
+
+* dispatch the command
+* store the id in `Keys.SoundActId`
+* pause until the matching completion arrives
+
+That explicitness is important. The runtime can now inspect, persist, and replay that waiting relationship.
+
+---
+
+### Awaiting a typed payload
+
+Some commands complete with a typed result.
+
+For example:
+
+```csharp id="nuit9h"
+yield return Ai.Act(new QueryDatabaseCommand("user_name"), Keys.QueryActId);
+yield return Ai.Await(Keys.QueryActId, Keys.UserName);
+```
+
+If the completion carries a `string` payload, it will be written into the provided BB key.
+
+That gives you a clean runtime shape:
+
+* dispatch command
+* wait
+* BB receives typed result
+* continue with normal state logic
+
+This is especially useful for things like:
+
+* host prompts
+* queries
+* lookups
+* external tool results
+* player text input
+
+---
+
+### Deferred completion
+
+Not all commands complete immediately.
+
+Sometimes a handler accepts the command now but signals completion later.
+
+That is a deferred completion.
+
+Example:
 
 ```csharp
 public sealed class MoveToHandler : IActuationHandler<MoveToCommand>
 {
-    public HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, MoveToCommand cmd)
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, MoveToCommand cmd)
     {
         StartMovement(cmd.Destination);
-        // Complete 3 seconds later
-        host.CompleteLater(ctx, id, dueTime: ctx.World.Clock.Time + 3f, ok: true);
-        return new HandlerResult(Accepted: true, Completed: false, Ok: false);
+
+        host.CompleteLater(
+            ctx,
+            id,
+            dueTime: ctx.World.Clock.Time + 3f,
+            ok: true);
+
+        return new ActuatorHost.HandlerResult(
+            Accepted: true,
+            Completed: false,
+            Ok: false);
     }
 }
 ```
 
-The node that `Await`ed will remain paused until the `ActuatorHost.Tick()`
-fires the deferred completion into the agent's event bus.
+This means:
+
+* the command was accepted
+* it has **not** completed yet
+* the host will complete it later
+
+The waiting node remains paused until the runtime observes the matching completion.
+
+This is the correct shape for operations that are behaviorally “in flight,” such as:
+
+* travel
+* long animation
+* delayed UI confirmation
+* external callback
+* asynchronous host action
+
+---
+
+### Immediate vs deferred completion
+
+It is useful to think of handlers as falling into two categories:
+
+#### Immediate
+
+The handler can finish the command now.
+
+Examples:
+
+* set a BB-like external value
+* play a sound
+* show a line that blocks synchronously until player advance
+* compute something local
+
+#### Deferred
+
+The handler starts something now and completes it later.
+
+Examples:
+
+* move to destination
+* wait for player input in a non-blocking host
+* wait for external process / hardware / tool result
+* long-running simulated action
+
+Dominatus supports both cleanly because completion is explicit in the runtime model.
+
+---
+
+### Dialogue is the same model with more convenience
+
+Ariadne dialogue helpers such as `Diag.Line(...)`, `Diag.Ask(...)`, and `Diag.Choose(...)` are still using this same actuation model underneath.
+
+The difference is just that they package the dispatch + await behavior into one dialogue-friendly step, so the author writes:
+
+```csharp id="s93knf"
+yield return Diag.Line("The compiler stares at you.", speaker: "Narrator");
+yield return Diag.Ask("Type the missing Rust line:", storeAs: PlayerAnswer);
+```
+
+instead of manually spelling the lower-level command and actuation-id flow every time.
+
+That is a convenience layer, not a different execution model.
+
+---
+
+### Preferred authoring style
+
+In normal Dominatus authoring:
+
+* use `Ai.Act(...)` when the node needs to issue a command
+* use `Ai.Await(...)` when the node should pause for completion
+* use Ariadne `Diag.*` helpers when you are writing dialogue
+* keep host-specific work in handlers, not in the node
+
+That keeps nodes readable and keeps runtime behavior explicit.
+
+Good:
+
+```csharp id="9zmasd"
+yield return Ai.Act(new OpenDoorCommand(doorId), Keys.DoorActId);
+yield return Ai.Await(Keys.DoorActId);
+yield return Ai.Goto("NextRoom");
+```
+
+Less good:
+
+* burying host behavior directly in the node
+* trying to make the node itself perform ambient async work
+* hiding command completion outside the runtime’s actuation model
+
+---
+
+### Under the hood
+
+`Ai.Act(...)` yields an `Act` step.
+`Ai.Await(...)` yields an `AwaitActuation` step.
+
+The runtime tracks the command id and waits for a matching completion event.
+
+So this:
+
+```csharp
+yield return Ai.Act(new MyCommand(), Keys.ActId);
+yield return Ai.Await(Keys.ActId);
+```
+
+is not magic syntax. It is just explicit runtime authoring over:
+
+* a command
+* an id
+* a completion event
+* a resumed node
+
+This is exactly the sort of explicitness Dominatus wants.
+
+---
+
+### Common mistakes
+
+#### Using real `async`/`await` in place of command completion
+
+This undermines the runtime model. Host-side async internals are fine, but node-level behavioral suspension should remain in the Dominatus actuation/completion system.
+
+#### Forgetting to store the actuation id when a later await is needed
+
+If you plan to wait on a command, store the id explicitly in a BB key.
+
+#### Treating deferred completion like immediate completion
+
+If the host says the command is still in flight, the node should not assume it is done yet.
+
+#### Returning ambiguous handler results
+
+A handler should clearly communicate:
+
+* whether the command was accepted
+* whether it completed now
+* whether it succeeded
+
+Ambiguous results make debugging much harder.
+
+#### Smuggling too much host behavior into node logic
+
+Nodes should describe agent behavior. Handlers should integrate with the outside world.
 
 ---
 
