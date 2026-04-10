@@ -1,5 +1,9 @@
 # Dominatus
 
+[![NuGet](https://img.shields.io/nuget/v/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Dominatus is a .NET 8 agent runtime kernel for deterministic, stateful AI.
 
 It combines hierarchical finite state machines with utility-based decision-making to execute agentic AI behavior as C# iterator-driven step streams in a way that is structured, inspectable, and persistable.
