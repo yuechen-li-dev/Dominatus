@@ -4,11 +4,24 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>Dominatus.UtilityLite</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Dominatus Contributors</Authors>
+    <Description>Readable utility helpers for Dominatus, including `When.*` conditions and score combinators for agent intent selection.</Description>
+    <PackageTags>utility-ai;ai;hfsm;scoring;decision-making;game-ai</PackageTags>
+    <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
     <ProjectReference Include="..\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
   </ItemGroup>
 
 </Project>
