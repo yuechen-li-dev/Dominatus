@@ -18,7 +18,7 @@ Dominatus is a general-purpose runtime for any domain that needs agents with mem
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│               OptFlow / Ariadne / Llm               │  ← authoring helpers
+│            OptFlow / Ariadne / Llm (WIP)            │  ← authoring helpers
 ├─────────────────────────────────────────────────────┤
 │            HfsmInstance  (orchestrator)             │  ← control flow
 ├─────────────────────────────────────────────────────┤
@@ -511,6 +511,17 @@ from outside a node: `world.Mail.Send(targetId, message)`.
 transitions to the winning target state. It is designed for situations where
 a "planner root" needs to continuously pick the best behaviour.
 
+The preferred convention with OptFlow helper using C# collection expression is:
+
+```csharp
+yield return Ai.Decide([
+    Ai.Option("Combat", When.BbAtLeast(Keys.Threat, 0.7f), "Combat"),
+    Ai.Option("Patrol", When.Score((_, _) => 0.4f), "Patrol"),
+    Ai.Option("Idle", When.Never, "Idle"),
+], hysteresis: 0.10f, minCommitSeconds: 0.75f);
+```
+Or, in equivalent long form:
+
 ```csharp
 var slot = new DecisionSlot("MainIntent");
 var options = new[]
@@ -718,13 +729,11 @@ That trade-off keeps Dominatus persistence explicit, bounded, and compatible wit
 
 ## 13. The Ariadne Dialogue Layer
 
-Ariadne is the `Ariadne.OptFlow` package — an authoring layer built on top of
-Dominatus actuation semantics specifically for linear/branching dialogue and
-text adventure-style interactions.
+Ariadne is the `Ariadne.OptFlow` package — an authoring layer built on top of Dominatus actuation semantics specifically for linear/branching dialogue and text adventure-style interactions.
 
-It adds three step types that implement `IWaitEvent` directly — they are
-yielded like any other step, and handle dispatch and waiting internally without
-requiring a separate `Ai.Act` + `Ai.Await` pair:
+Ariadne is not a separate runtime model for dialogue; it is a dialogue-specific actuation/helper layer over the same Dominatus execution model.
+
+It adds three step types that implement `IWaitEvent` directly — they are yielded like any other step, and handle dispatch and waiting internally without requiring a separate `Ai.Act` + `Ai.Await` pair:
 
 - **`Diag.Line(text, speaker?)`** — dispatches a `DiagLineCommand` and waits for `ActuationCompleted`.
 - **`Diag.Ask(prompt, storeAs)`** — dispatches a `DiagAskCommand`, waits for `ActuationCompleted<string>`, stores the result in `storeAs`.
