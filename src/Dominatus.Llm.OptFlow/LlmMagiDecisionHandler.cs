@@ -72,28 +72,27 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
 
         var advocateARequest = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
         var advocateAHash = LlmDecisionRequestHasher.ComputeHash(advocateARequest);
-        var advocateAResult = _advocateAClient.ScoreOptionsAsync(advocateARequest, advocateAHash, cancellationToken)
-            .GetAwaiter()
-            .GetResult();
+        var advocateBRequest = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var advocateBHash = LlmDecisionRequestHasher.ComputeHash(advocateBRequest);
+        var advocateATask = _advocateAClient.ScoreOptionsAsync(advocateARequest, advocateAHash, cancellationToken);
+        var advocateBTask = _advocateBClient.ScoreOptionsAsync(advocateBRequest, advocateBHash, cancellationToken);
+
+        WaitForAdvocates(advocateATask, advocateBTask);
+
+        var advocateAResult = advocateATask.GetAwaiter().GetResult();
+        var advocateBResult = advocateBTask.GetAwaiter().GetResult();
 
         if (advocateAResult is null)
         {
             throw new InvalidOperationException("Magi advocate A provider returned null result.");
         }
 
-        LlmDecisionResultValidator.ValidateAgainstRequest(advocateARequest, advocateAHash, advocateAResult);
-
-        var advocateBRequest = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
-        var advocateBHash = LlmDecisionRequestHasher.ComputeHash(advocateBRequest);
-        var advocateBResult = _advocateBClient.ScoreOptionsAsync(advocateBRequest, advocateBHash, cancellationToken)
-            .GetAwaiter()
-            .GetResult();
-
         if (advocateBResult is null)
         {
             throw new InvalidOperationException("Magi advocate B provider returned null result.");
         }
 
+        LlmDecisionResultValidator.ValidateAgainstRequest(advocateARequest, advocateAHash, advocateAResult);
         LlmDecisionResultValidator.ValidateAgainstRequest(advocateBRequest, advocateBHash, advocateBResult);
 
         var judgment = _judgeClient.JudgeAsync(request, requestHash, advocateAResult, advocateBResult, cancellationToken)
@@ -128,4 +127,39 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
 
     private static string BuildFailureMessage(LlmCassetteMode mode, string stableId, string requestHash, string reason)
         => $"LlmMagi decision failed (Mode={mode}, StableId={stableId}, RequestHash={requestHash}). {reason}";
+
+    private static void WaitForAdvocates(Task<LlmDecisionResult> advocateATask, Task<LlmDecisionResult> advocateBTask)
+    {
+        try
+        {
+            Task.WhenAll(advocateATask, advocateBTask).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var failed = new List<string>(2);
+
+            if (advocateATask.IsFaulted)
+            {
+                failed.Add("advocateA");
+            }
+
+            if (advocateBTask.IsFaulted)
+            {
+                failed.Add("advocateB");
+            }
+
+            if (failed.Count is 0)
+            {
+                failed.Add("unknown");
+            }
+
+            throw new InvalidOperationException(
+                $"Magi advocate request failed ({string.Join(", ", failed)}).",
+                ex);
+        }
+    }
 }

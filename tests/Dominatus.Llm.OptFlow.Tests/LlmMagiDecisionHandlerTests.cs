@@ -9,6 +9,98 @@ namespace Dominatus.Llm.OptFlow.Tests;
 public sealed class LlmMagiDecisionHandlerTests
 {
     [Fact]
+    public async Task MagiHandler_StartsBothAdvocatesBeforeAwaitingEither()
+    {
+        var request = CreateRequest();
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var aResult = CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq));
+        var bResult = CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq));
+
+        var aClient = GatedFakeLlmDecisionClient.Success(aResult);
+        var bClient = GatedFakeLlmDecisionClient.Success(bResult);
+        var judgeClient = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judgeClient, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
+
+        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+
+        await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(0, judgeClient.CallCount);
+
+        aClient.Release();
+        bClient.Release();
+
+        var completion = await dispatchTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(completion.Ok);
+        Assert.Equal(1, aClient.CallCount);
+        Assert.Equal(1, bClient.CallCount);
+        Assert.Equal(1, judgeClient.CallCount);
+    }
+
+    [Fact]
+    public async Task MagiHandler_CallsJudgeOnlyAfterBothAdvocatesComplete()
+    {
+        var request = CreateRequest();
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var aResult = CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq));
+        var bResult = CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq));
+
+        var aClient = GatedFakeLlmDecisionClient.Success(aResult);
+        var bClient = GatedFakeLlmDecisionClient.Success(bResult);
+        var judgeClient = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judgeClient, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
+
+        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
+
+        aClient.Release();
+        await Task.Delay(50);
+        Assert.Equal(0, judgeClient.CallCount);
+
+        bClient.Release();
+        var completion = await dispatchTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(completion.Ok);
+        Assert.Equal(1, judgeClient.CallCount);
+    }
+
+    [Fact]
+    public async Task MagiHandler_ParallelAdvocateCompletionOrderDoesNotAffectResult()
+    {
+        var request = CreateRequest();
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var aResult = new LlmDecisionResult(
+            LlmDecisionRequestHasher.ComputeHash(aReq),
+            [new LlmDecisionOptionScore("join", 0.7, 1, "a"), new LlmDecisionOptionScore("mediate", 0.6, 2, "a"), new LlmDecisionOptionScore("refuse", 0.1, 3, "a")],
+            "a");
+        var bResult = new LlmDecisionResult(
+            LlmDecisionRequestHasher.ComputeHash(bReq),
+            [new LlmDecisionOptionScore("join", 0.68, 1, "b"), new LlmDecisionOptionScore("mediate", 0.5, 2, "b"), new LlmDecisionOptionScore("refuse", 0.2, 3, "b")],
+            "b");
+
+        var aClient = GatedFakeLlmDecisionClient.Success(aResult);
+        var bClient = GatedFakeLlmDecisionClient.Success(bResult);
+        var judgeClient = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judgeClient, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
+
+        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
+
+        bClient.Release();
+        await Task.Delay(20);
+        aClient.Release();
+
+        var completion = await dispatchTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(completion.Ok);
+        var payload = Assert.IsType<LlmMagiDecisionResult>(completion.Payload);
+        Assert.Equal(aResult, payload.AdvocateAResult);
+        Assert.Equal(bResult, payload.AdvocateBResult);
+        Assert.Same(aResult, judgeClient.LastAdvocateAResult);
+        Assert.Same(bResult, judgeClient.LastAdvocateBResult);
+    }
+
+    [Fact]
     public void MagiLiveMode_CallsBothAdvocatesAndJudgeAndCompletes()
     {
         var request = CreateRequest();
@@ -69,6 +161,26 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
+    public async Task MagiReplayMode_OnHit_DoesNotStartAdvocateTasks()
+    {
+        var request = CreateRequest();
+        var cassette = SeedCassette(request);
+        var aClient = GatedFakeLlmDecisionClient.Success(CreateDecisionResult("unused-a"));
+        var bClient = GatedFakeLlmDecisionClient.Success(CreateDecisionResult("unused-b"));
+        var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "unused"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, cassette, LlmCassetteMode.Replay);
+
+        var completion = DispatchAndGetCompletion(handler, request);
+        Assert.True(completion.Ok);
+        Assert.Equal(0, aClient.CallCount);
+        Assert.Equal(0, bClient.CallCount);
+        Assert.Equal(0, judge.CallCount);
+        Assert.False(aClient.Started.Task.IsCompleted);
+        Assert.False(bClient.Started.Task.IsCompleted);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
     public void MagiReplayMode_OnMiss_FailsLoudly()
     {
         var request = CreateRequest();
@@ -92,6 +204,26 @@ public sealed class LlmMagiDecisionHandlerTests
         Assert.Equal(0, aClient.CallCount);
         Assert.Equal(0, bClient.CallCount);
         Assert.Equal(0, judgeClient.CallCount);
+    }
+
+    [Fact]
+    public async Task MagiStrictMode_OnHit_DoesNotStartAdvocateTasks()
+    {
+        var request = CreateRequest();
+        var cassette = SeedCassette(request);
+        var aClient = GatedFakeLlmDecisionClient.Success(CreateDecisionResult("unused-a"));
+        var bClient = GatedFakeLlmDecisionClient.Success(CreateDecisionResult("unused-b"));
+        var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "unused"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, cassette, LlmCassetteMode.Strict);
+
+        var completion = DispatchAndGetCompletion(handler, request);
+        Assert.True(completion.Ok);
+        Assert.Equal(0, aClient.CallCount);
+        Assert.Equal(0, bClient.CallCount);
+        Assert.Equal(0, judge.CallCount);
+        Assert.False(aClient.Started.Task.IsCompleted);
+        Assert.False(bClient.Started.Task.IsCompleted);
+        await Task.CompletedTask;
     }
 
     [Fact]
@@ -187,6 +319,98 @@ public sealed class LlmMagiDecisionHandlerTests
 
         var completed = DispatchAndGetCompletion(handler, request);
         Assert.False(completed.Ok);
+    }
+
+    [Fact]
+    public void MagiHandler_AdvocateAFailure_DoesNotCallJudge()
+    {
+        var request = CreateRequest();
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var bHash = LlmDecisionRequestHasher.ComputeHash(bReq);
+        var handler = new LlmMagiDecisionHandler(
+            new ThrowingFakeLlmDecisionClient("advocate a failed"),
+            new FakeLlmDecisionClient(CreateDecisionResult(bHash)),
+            new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok")),
+            new InMemoryLlmMagiCassette(),
+            LlmCassetteMode.Live);
+
+        var completion = DispatchAndGetCompletion(handler, request);
+        Assert.False(completion.Ok);
+        Assert.Contains("advocateA", completion.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MagiHandler_AdvocateBFailure_DoesNotCallJudge()
+    {
+        var request = CreateRequest();
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var aHash = LlmDecisionRequestHasher.ComputeHash(aReq);
+        var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(
+            new FakeLlmDecisionClient(CreateDecisionResult(aHash)),
+            new ThrowingFakeLlmDecisionClient("advocate b failed"),
+            judge,
+            new InMemoryLlmMagiCassette(),
+            LlmCassetteMode.Live);
+
+        var completion = DispatchAndGetCompletion(handler, request);
+        Assert.False(completion.Ok);
+        Assert.Equal(0, judge.CallCount);
+        Assert.Contains("advocateB", completion.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MagiHandler_OneAdvocateFailure_DoesNotWriteCassette()
+    {
+        var request = CreateRequest();
+        var cassette = new InMemoryLlmMagiCassette();
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var aHash = LlmDecisionRequestHasher.ComputeHash(aReq);
+        var handler = new LlmMagiDecisionHandler(
+            new FakeLlmDecisionClient(CreateDecisionResult(aHash)),
+            new ThrowingFakeLlmDecisionClient("advocate b failed"),
+            new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok")),
+            cassette,
+            LlmCassetteMode.Record);
+
+        var completion = DispatchAndGetCompletion(handler, request);
+        Assert.False(completion.Ok);
+        Assert.False(cassette.TryGet(LlmMagiRequestHasher.ComputeHash(request), out _));
+    }
+
+    [Fact]
+    public async Task MagiHandler_ParallelDispatch_PreservesAdvocateRoleSlots()
+    {
+        var request = CreateRequest();
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var aResult = CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq));
+        var bResult = CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq));
+        var aClient = GatedFakeLlmDecisionClient.Success(aResult);
+        var bClient = GatedFakeLlmDecisionClient.Success(bResult);
+        var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
+
+        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
+        bClient.Release();
+        aClient.Release();
+
+        var completion = await dispatchTask.WaitAsync(TimeSpan.FromSeconds(2));
+        var payload = Assert.IsType<LlmMagiDecisionResult>(completion.Payload);
+        Assert.Equal(request.AdvocateA, payload.AdvocateA);
+        Assert.Equal(request.AdvocateB, payload.AdvocateB);
+        Assert.Equal(request.AdvocateA.Id, payload.Judgment.PreferredProposalId);
+    }
+
+    [Fact]
+    public async Task MagiHandler_ParallelDispatch_ResultJsonRemainsDeterministic()
+    {
+        var request = CreateRequest();
+        var first = await ExecuteParallelDispatchAndSerialize(request, releaseAFirst: true);
+        var second = await ExecuteParallelDispatchAndSerialize(request, releaseAFirst: false);
+
+        Assert.Equal(first, second);
     }
 
     [Fact]
@@ -303,4 +527,88 @@ public sealed class LlmMagiDecisionHandlerTests
             new LlmDecisionOptionScore("refuse", 0.21, 3, "low")
         ],
         "overall");
+
+    private static async Task<string> ExecuteParallelDispatchAndSerialize(LlmMagiRequest request, bool releaseAFirst)
+    {
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
+        var aClient = GatedFakeLlmDecisionClient.Success(CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq)));
+        var bClient = GatedFakeLlmDecisionClient.Success(CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq)));
+        var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
+
+        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
+
+        if (releaseAFirst)
+        {
+            aClient.Release();
+            bClient.Release();
+        }
+        else
+        {
+            bClient.Release();
+            aClient.Release();
+        }
+
+        var completion = await dispatchTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(completion.Ok);
+        var payload = Assert.IsType<LlmMagiDecisionResult>(completion.Payload);
+        return System.Text.Json.JsonSerializer.Serialize(payload);
+    }
+
+    private sealed class GatedFakeLlmDecisionClient : ILlmDecisionClient
+    {
+        private readonly LlmDecisionResult? _result;
+        private readonly Exception? _exception;
+        private readonly TaskCompletionSource<bool> _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private GatedFakeLlmDecisionClient(LlmDecisionResult? result, Exception? exception)
+        {
+            _result = result;
+            _exception = exception;
+        }
+
+        public TaskCompletionSource<bool> Started => _started;
+        public int CallCount { get; private set; }
+
+        public static GatedFakeLlmDecisionClient Success(LlmDecisionResult result)
+            => new(result, null);
+
+        public static GatedFakeLlmDecisionClient Failure(Exception exception)
+            => new(null, exception);
+
+        public void Release() => _release.TrySetResult(true);
+
+        public async Task<LlmDecisionResult> ScoreOptionsAsync(
+            LlmDecisionRequest request,
+            string requestHash,
+            CancellationToken cancellationToken)
+        {
+            _started.TrySetResult(true);
+            CallCount++;
+            await _release.Task.WaitAsync(cancellationToken);
+
+            if (_exception is not null)
+            {
+                throw _exception;
+            }
+
+            return _result!;
+        }
+    }
+
+    private sealed class ThrowingFakeLlmDecisionClient : ILlmDecisionClient
+    {
+        private readonly string _message;
+
+        public ThrowingFakeLlmDecisionClient(string message)
+        {
+            _message = message;
+        }
+
+        public Task<LlmDecisionResult> ScoreOptionsAsync(LlmDecisionRequest request, string requestHash, CancellationToken cancellationToken)
+            => Task.FromException<LlmDecisionResult>(new InvalidOperationException(_message));
+    }
 }
