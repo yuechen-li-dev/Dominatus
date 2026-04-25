@@ -200,6 +200,33 @@ public static class Llm
         return new LlmDecisionOption(id, description);
     }
 
+    public static LlmMagiParticipant MagiParticipant(
+        string id,
+        string provider,
+        string model,
+        string stance,
+        double temperature = 0.0,
+        int? maxOutputTokens = null,
+        double? topP = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(provider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(model);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stance);
+
+        var sampling = new LlmSamplingOptions(
+            Provider: provider,
+            Model: model,
+            Temperature: temperature,
+            MaxOutputTokens: maxOutputTokens,
+            TopP: topP);
+
+        return new LlmMagiParticipant(
+            Id: id,
+            Sampling: sampling,
+            Stance: stance);
+    }
+
     public static AiStep Decide(
         string stableId,
         string intent,
@@ -273,6 +300,93 @@ public static class Llm
         return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, policy ?? LlmDecisionPolicy.Default);
     }
 
+    public static AiStep MagiDecide(
+        string stableId,
+        string intent,
+        string persona,
+        Action<LlmContextBuilder> context,
+        IReadOnlyList<LlmDecisionOption> options,
+        LlmMagiParticipant advocateA,
+        LlmMagiParticipant advocateB,
+        LlmMagiParticipant judge,
+        BbKey<string> storeChosenAs,
+        BbKey<string>? storeRationaleAs = null,
+        BbKey<string>? storeResultJsonAs = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(persona);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(advocateA);
+        ArgumentNullException.ThrowIfNull(advocateB);
+        ArgumentNullException.ThrowIfNull(judge);
+
+        if (string.IsNullOrWhiteSpace(storeChosenAs.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeChosenAs));
+        }
+
+        if (storeRationaleAs is BbKey<string> rationaleKey && string.IsNullOrWhiteSpace(rationaleKey.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeRationaleAs));
+        }
+
+        if (storeResultJsonAs is BbKey<string> resultJsonKey && string.IsNullOrWhiteSpace(resultJsonKey.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeResultJsonAs));
+        }
+
+        if (options.Count < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Magi decision requires at least two options.");
+        }
+
+        if (options.Any(o => o is null))
+        {
+            throw new ArgumentException("Options cannot contain null values.", nameof(options));
+        }
+
+        var duplicateOptionId = options
+            .GroupBy(o => o.Id, StringComparer.Ordinal)
+            .FirstOrDefault(g => g.Count() > 1)?.Key;
+
+        if (duplicateOptionId is not null)
+        {
+            throw new ArgumentException($"Option IDs must be unique. Duplicate ID: '{duplicateOptionId}'.", nameof(options));
+        }
+
+        var participantIds = new[] { advocateA.Id, advocateB.Id, judge.Id };
+        var duplicateParticipantId = participantIds
+            .GroupBy(id => id, StringComparer.Ordinal)
+            .FirstOrDefault(g => g.Count() > 1)?.Key;
+
+        if (duplicateParticipantId is not null)
+        {
+            throw new ArgumentException($"Participant IDs must be unique. Duplicate ID: '{duplicateParticipantId}'.");
+        }
+
+        var canonicalOptions = options.OrderBy(o => o.Id, StringComparer.Ordinal).ToArray();
+
+        var contextBuilder = new LlmContextBuilder();
+        context(contextBuilder);
+        string canonicalContextJson = contextBuilder.BuildCanonicalJson();
+
+        var request = new LlmMagiRequest(
+            StableId: stableId,
+            Intent: intent,
+            Persona: persona,
+            CanonicalContextJson: canonicalContextJson,
+            Options: canonicalOptions,
+            AdvocateA: advocateA,
+            AdvocateB: advocateB,
+            Judge: judge,
+            PromptTemplateVersion: LlmMagiRequest.DefaultPromptTemplateVersion,
+            OutputContractVersion: LlmMagiRequest.DefaultOutputContractVersion);
+
+        return new LlmMagiDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs);
+    }
+
     private sealed record LlmTextStep(LlmTextRequest Request, BbKey<string> StoreAs) : AiStep, IWaitEvent
     {
         private readonly BbKey<bool> _completedKey = new(BuildStepKey(Request.StableId, "completed"));
@@ -327,6 +441,98 @@ public static class Llm
             return true;
         }
 
+    }
+
+    private sealed record LlmMagiDecisionStep(
+        LlmMagiRequest Request,
+        BbKey<string> StoreChosenAs,
+        BbKey<string>? StoreRationaleAs,
+        BbKey<string>? StoreResultJsonAs) : AiStep, IWaitEvent
+    {
+        private readonly BbKey<bool> _completedKey = new(BuildMagiKey(Request.StableId, "completed"));
+        private readonly BbKey<string> _chosenOptionKey = new(BuildMagiKey(Request.StableId, "chosenOptionId"));
+        private readonly BbKey<string> _rationaleKey = new(BuildMagiKey(Request.StableId, "rationale"));
+        private readonly BbKey<string> _resultJsonKey = new(BuildMagiKey(Request.StableId, "resultJson"));
+        private readonly BbKey<string> _requestHashKey = new(BuildMagiKey(Request.StableId, "requestHash"));
+        private readonly BbKey<long> _pendingActuationIdKey = new(BuildMagiKey(Request.StableId, "pendingActuationId"));
+
+        public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
+        {
+            if (ctx.Bb.GetOrDefault(_completedKey, false) && ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
+            {
+                ctx.Bb.Set(StoreChosenAs, cachedChosen ?? string.Empty);
+                RestoreOptionalOutputs(ctx);
+                return true;
+            }
+
+            var pendingIdValue = ctx.Bb.GetOrDefault(_pendingActuationIdKey, 0L);
+            if (pendingIdValue == 0)
+            {
+                var dispatch = ctx.Act.Dispatch(ctx, Request);
+                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))
+                {
+                    throw new InvalidOperationException(
+                        $"Llm.MagiDecide dispatch failed for stableId '{Request.StableId}'. {dispatch.Error ?? "Actuation rejected."}");
+                }
+
+                ctx.Bb.Set(_pendingActuationIdKey, dispatch.Id.Value);
+                ctx.Bb.Set(_requestHashKey, LlmMagiRequestHasher.ComputeHash(Request));
+                pendingIdValue = dispatch.Id.Value;
+            }
+
+            var pendingId = new ActuationId(pendingIdValue);
+            if (!ctx.Events.TryConsume(
+                    ref cursor,
+                    (ActuationCompleted<LlmMagiDecisionResult> e) => e.Id.Equals(pendingId),
+                    out var completed))
+            {
+                return false;
+            }
+
+            if (!completed.Ok)
+            {
+                throw new InvalidOperationException(
+                    $"Llm.MagiDecide completion failed for stableId '{Request.StableId}'. {completed.Error ?? "Unknown error."}");
+            }
+
+            var result = completed.Payload ?? throw new InvalidOperationException(
+                $"Llm.MagiDecide completion failed for stableId '{Request.StableId}'. Missing magi decision payload.");
+
+            LlmMagiResultValidator.ValidateDecisionResultAgainstRequest(Request, result.RequestHash, result);
+            var resultJson = BuildMagiSummaryJson(result);
+
+            ctx.Bb.Set(_chosenOptionKey, result.Judgment.ChosenOptionId);
+            ctx.Bb.Set(StoreChosenAs, result.Judgment.ChosenOptionId);
+            ctx.Bb.Set(_rationaleKey, result.Judgment.Rationale);
+            if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
+            {
+                ctx.Bb.Set(rationaleStoreAs, result.Judgment.Rationale);
+            }
+
+            ctx.Bb.Set(_resultJsonKey, resultJson);
+            if (StoreResultJsonAs is BbKey<string> jsonStoreAs)
+            {
+                ctx.Bb.Set(jsonStoreAs, resultJson);
+            }
+
+            ctx.Bb.Set(_requestHashKey, result.RequestHash);
+            ctx.Bb.Set(_completedKey, true);
+            ctx.Bb.Set(_pendingActuationIdKey, 0L);
+            return true;
+        }
+
+        private void RestoreOptionalOutputs(AiCtx ctx)
+        {
+            if (StoreRationaleAs is BbKey<string> rationaleStoreAs && ctx.Bb.TryGet(_rationaleKey, out string? rationale))
+            {
+                ctx.Bb.Set(rationaleStoreAs, rationale ?? string.Empty);
+            }
+
+            if (StoreResultJsonAs is BbKey<string> jsonStoreAs && ctx.Bb.TryGet(_resultJsonKey, out string? json))
+            {
+                ctx.Bb.Set(jsonStoreAs, json ?? string.Empty);
+            }
+        }
     }
 
     private sealed record LlmDecisionStep(
@@ -604,6 +810,73 @@ public static class Llm
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    private static string BuildMagiSummaryJson(LlmMagiDecisionResult result)
+    {
+        var stream = new MemoryStream();
+        using var writer = new Utf8JsonWriter(stream);
+
+        writer.WriteStartObject();
+        writer.WriteString("requestHash", result.RequestHash);
+        writer.WriteString("chosenOptionId", result.Judgment.ChosenOptionId);
+        writer.WriteString("preferredProposalId", result.Judgment.PreferredProposalId);
+        writer.WriteString("rationale", result.Judgment.Rationale);
+
+        writer.WritePropertyName("participants");
+        writer.WriteStartObject();
+        WriteParticipant(writer, "advocateA", result.AdvocateA);
+        WriteParticipant(writer, "advocateB", result.AdvocateB);
+        WriteParticipant(writer, "judge", result.Judge);
+        writer.WriteEndObject();
+
+        WriteAdvocateResult(writer, "advocateA", result.AdvocateAResult);
+        WriteAdvocateResult(writer, "advocateB", result.AdvocateBResult);
+
+        writer.WritePropertyName("judgment");
+        writer.WriteStartObject();
+        writer.WriteString("chosenOptionId", result.Judgment.ChosenOptionId);
+        writer.WriteString("preferredProposalId", result.Judgment.PreferredProposalId);
+        writer.WriteString("rationale", result.Judgment.Rationale);
+        writer.WriteEndObject();
+
+        writer.WriteEndObject();
+        writer.Flush();
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteParticipant(Utf8JsonWriter writer, string propertyName, LlmMagiParticipant participant)
+    {
+        writer.WritePropertyName(propertyName);
+        writer.WriteStartObject();
+        writer.WriteString("id", participant.Id);
+        writer.WriteString("provider", participant.Sampling.Provider);
+        writer.WriteString("model", participant.Sampling.Model);
+        writer.WriteString("stance", participant.Stance);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteAdvocateResult(Utf8JsonWriter writer, string propertyName, LlmDecisionResult result)
+    {
+        writer.WritePropertyName(propertyName);
+        writer.WriteStartObject();
+        writer.WriteString("requestHash", result.RequestHash);
+        writer.WriteString("rankOneOptionId", result.Scores.Single(s => s.Rank == 1).OptionId);
+        writer.WriteString("rationale", result.Rationale);
+        writer.WritePropertyName("scores");
+        writer.WriteStartArray();
+        foreach (var score in result.Scores.OrderBy(s => s.OptionId, StringComparer.Ordinal))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("optionId", score.OptionId);
+            writer.WriteNumber("score", score.Score);
+            writer.WriteNumber("rank", score.Rank);
+            writer.WriteString("rationale", score.Rationale);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+    }
+
     private sealed record CommitDecision(
         string ChosenOptionId,
         double ChosenScore,
@@ -618,6 +891,9 @@ public static class Llm
 
     private static string BuildDecideKey(string stableId, string suffix)
         => $"llm.decide.{SanitizeStableId(stableId)}.{suffix}";
+
+    private static string BuildMagiKey(string stableId, string suffix)
+        => $"llm.magi.{SanitizeStableId(stableId)}.{suffix}";
 
     private static string SanitizeStableId(string stableId)
     {
