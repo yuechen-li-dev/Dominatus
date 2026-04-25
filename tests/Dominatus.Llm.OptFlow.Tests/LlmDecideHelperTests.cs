@@ -259,8 +259,11 @@ public sealed class LlmDecideHelperTests
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         Assert.Equal(result.RequestHash, root.GetProperty("requestHash").GetString());
+        Assert.Equal("negotiate", root.GetProperty("modelRankOneOptionId").GetString());
         Assert.Equal("negotiate", root.GetProperty("chosenOptionId").GetString());
         Assert.Equal(result.Rationale, root.GetProperty("rationale").GetString());
+        Assert.Equal(result.Rationale, root.GetProperty("modelRationale").GetString());
+        Assert.False(root.GetProperty("retainedPreviousChoice").GetBoolean());
 
         var scores = root.GetProperty("scores").EnumerateArray().Select(s => s.GetProperty("optionId").GetString()).ToArray();
         Assert.Equal(["attack", "negotiate", "threaten"], scores);
@@ -389,7 +392,7 @@ public sealed class LlmDecideHelperTests
 
         Assert.Equal(1, client.CallCount);
         Assert.Equal("negotiate", ctx.Bb.GetOrDefault(ChosenKey, ""));
-        Assert.Equal("Negotiation best fits guard fear and Mira's social approach.", ctx.Bb.GetOrDefault(RationaleKey, ""));
+        Assert.Contains("Reused previous choice", ctx.Bb.GetOrDefault(RationaleKey, ""), StringComparison.Ordinal);
         Assert.Contains("\"chosenOptionId\":\"negotiate\"", ctx.Bb.GetOrDefault(ResultJsonKey, ""), StringComparison.Ordinal);
     }
 
