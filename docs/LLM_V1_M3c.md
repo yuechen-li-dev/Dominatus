@@ -87,3 +87,7 @@ Potential follow-ups:
 
 - **M3d**: interrupt/force-rescore hooks.
 - **M4**: optional target-transition integration after design review.
+## Related doctrine
+
+- [LLM Casting Model](LLM_CASTING_MODEL.md)
+
