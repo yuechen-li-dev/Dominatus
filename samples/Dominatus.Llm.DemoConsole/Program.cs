@@ -6,14 +6,16 @@ using Dominatus.Core.Nodes;
 using Dominatus.Core.Runtime;
 using Dominatus.Llm.OptFlow;
 
-Console.WriteLine("Dominatus.Llm Demo — Oracle Greeting");
-
 var options = DemoOptionsParser.Parse(args);
 if (options is null)
 {
     PrintUsage();
     return;
 }
+
+Console.WriteLine(options.Scenario is DemoScenario.Decision
+    ? "Dominatus.Llm Demo — Decision"
+    : "Dominatus.Llm Demo — Oracle Greeting");
 
 try
 {
@@ -26,6 +28,17 @@ catch (Exception ex)
 }
 
 static void RunDemo(DemoOptions options)
+{
+    if (options.Scenario is DemoScenario.Decision)
+    {
+        RunDecisionDemo(options);
+        return;
+    }
+
+    RunOracleDemo(options);
+}
+
+static void RunOracleDemo(DemoOptions options)
 {
     var cassetteMode = ToCassetteMode(options.Mode);
     var factoryResult = LlmProviderClientFactory.Create(new LlmProviderClientFactoryOptions(
@@ -46,7 +59,8 @@ static void RunDemo(DemoOptions options)
     var oracleLineRequestHash = LlmRequestHasher.ComputeHash(oracleLineRequest);
     var oracleReplyRequest = OracleReplyScenario.BuildRequest(sampling);
     var oracleReplyRequestHash = LlmRequestHasher.ComputeHash(oracleReplyRequest);
-    var cassette = CreateCassette(
+
+    var cassette = CreateTextCassette(
         options,
         narrationRequestHash,
         narrationRequest,
@@ -56,18 +70,15 @@ static void RunDemo(DemoOptions options)
         oracleReplyRequest);
 
     var countingClient = new CountingLlmClient(factoryResult.Client);
-    var (world, ctx) = CreateWorldAndCtx(countingClient, cassetteMode, cassette);
-
-    var narrationStep = NarrationScenario.BuildStep(sampling);
-    var oracleLineStep = OracleLineScenario.BuildStep(sampling);
-    var oracleReplyStep = OracleReplyScenario.BuildStep(sampling);
+    var (world, ctx) = CreateTextWorldAndCtx(countingClient, cassetteMode, cassette);
 
     try
     {
-        ExecuteStep(narrationStep, ctx);
-        ExecuteStep(oracleLineStep, ctx);
-        ExecuteStep(oracleReplyStep, ctx);
+        ExecuteStep(NarrationScenario.BuildStep(sampling), ctx);
+        ExecuteStep(OracleLineScenario.BuildStep(sampling), ctx);
+        ExecuteStep(OracleReplyScenario.BuildStep(sampling), ctx);
 
+        Console.WriteLine("Scenario: oracle");
         Console.WriteLine($"Client: {options.Client.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Mode: {options.Mode.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Model: {factoryResult.Model}");
@@ -104,6 +115,58 @@ static void RunDemo(DemoOptions options)
     GC.KeepAlive(world);
 }
 
+static void RunDecisionDemo(DemoOptions options)
+{
+    var cassetteMode = ToCassetteMode(options.Mode);
+    var factoryResult = LlmProviderClientFactory.CreateDecisionClient(new LlmProviderClientFactoryOptions(
+        Client: options.Client,
+        CassetteMode: cassetteMode,
+        ModelOverride: options.Model));
+
+    var request = DecisionScenario.BuildRequest(factoryResult.Provider, factoryResult.Model);
+    var requestHash = LlmDecisionRequestHasher.ComputeHash(request);
+    var cassette = CreateDecisionCassette(options, requestHash, request);
+
+    var countingClient = new CountingDecisionClient(factoryResult.Client);
+    var (world, ctx) = CreateDecisionWorldAndCtx(countingClient, cassetteMode, cassette);
+
+    try
+    {
+        ExecuteStep(DecisionScenario.BuildStep(factoryResult.Provider, factoryResult.Model), ctx);
+
+        Console.WriteLine("Scenario: decision");
+        Console.WriteLine($"Client: {options.Client.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Mode: {options.Mode.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Model: {factoryResult.Model}");
+        Console.WriteLine($"CassettePath: {options.CassettePath ?? "<in-memory>"}");
+        Console.WriteLine($"StableId: {DecisionScenario.StableId}");
+        Console.WriteLine($"RequestHash: {requestHash}");
+        Console.WriteLine($"ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
+        Console.WriteLine($"ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Decision.Chosen: {ctx.Bb.GetOrDefault(DecisionScenario.ChosenKey, string.Empty)}");
+        Console.WriteLine($"Decision.Rationale: {ctx.Bb.GetOrDefault(DecisionScenario.RationaleKey, string.Empty)}");
+        Console.WriteLine($"Decision.ResultJson: {ctx.Bb.GetOrDefault(DecisionScenario.ResultJsonKey, string.Empty)}");
+    }
+    catch (InvalidOperationException ex) when (options.Mode is DemoMode.StrictMiss)
+    {
+        Console.WriteLine("Expected strict miss failure:");
+        Console.WriteLine("  Mode: Strict");
+        Console.WriteLine($"  CassettePath: {options.CassettePath ?? "<in-memory>"}");
+        Console.WriteLine($"  StableId: {DecisionScenario.StableId}");
+        Console.WriteLine($"  RequestHash: {requestHash}");
+        Console.WriteLine($"  ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
+        Console.WriteLine($"  ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"  Reason: {ex.Message}");
+    }
+
+    if (options.Mode is DemoMode.Record && cassette is JsonLlmDecisionCassette jsonCassette)
+    {
+        jsonCassette.Save();
+    }
+
+    GC.KeepAlive(world);
+}
+
 static LlmCassetteMode ToCassetteMode(DemoMode mode)
     => mode is DemoMode.Live
         ? LlmCassetteMode.Live
@@ -113,7 +176,7 @@ static LlmCassetteMode ToCassetteMode(DemoMode mode)
                 ? LlmCassetteMode.Replay
                 : LlmCassetteMode.Strict;
 
-static ILlmCassette CreateCassette(
+static ILlmCassette CreateTextCassette(
     DemoOptions options,
     string narrationRequestHash,
     LlmTextRequest narrationRequest,
@@ -139,6 +202,23 @@ static ILlmCassette CreateCassette(
     return cassette;
 }
 
+static ILlmDecisionCassette CreateDecisionCassette(DemoOptions options, string requestHash, LlmDecisionRequest request)
+{
+    if (!string.IsNullOrWhiteSpace(options.CassettePath))
+    {
+        return JsonLlmDecisionCassette.LoadOrCreate(options.CassettePath);
+    }
+
+    var cassette = new InMemoryLlmDecisionCassette();
+
+    if (options.Client is LlmProviderClientKind.Fake && options.Mode is DemoMode.Replay or DemoMode.Strict)
+    {
+        cassette.Put(requestHash, request, DecisionScenario.CreateFakeResult(requestHash));
+    }
+
+    return cassette;
+}
+
 static void ExecuteStep(AiStep step, AiCtx ctx)
 {
     var wait = (IWaitEvent)step;
@@ -152,13 +232,30 @@ static void ExecuteStep(AiStep step, AiCtx ctx)
         }
     }
 
-    throw new InvalidOperationException("LLM text demo step did not complete.");
+    throw new InvalidOperationException("Demo step did not complete.");
 }
 
-static (AiWorld World, AiCtx Ctx) CreateWorldAndCtx(ILlmClient client, LlmCassetteMode mode, ILlmCassette cassette)
+static (AiWorld World, AiCtx Ctx) CreateTextWorldAndCtx(ILlmClient client, LlmCassetteMode mode, ILlmCassette cassette)
 {
     var host = new ActuatorHost();
     host.Register(new LlmTextActuationHandler(client, cassette, mode));
+
+    var world = new AiWorld(host);
+
+    var graph = new HfsmGraph { Root = "Root" };
+    graph.Add(new HfsmStateDef { Id = "Root", Node = RootNode });
+
+    var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
+    world.Add(agent);
+
+    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+    return (world, ctx);
+}
+
+static (AiWorld World, AiCtx Ctx) CreateDecisionWorldAndCtx(ILlmDecisionClient client, LlmCassetteMode mode, ILlmDecisionCassette cassette)
+{
+    var host = new ActuatorHost();
+    host.Register(new LlmDecisionScoringHandler(client, cassette, mode));
 
     var world = new AiWorld(host);
 
@@ -179,7 +276,7 @@ static IEnumerator<AiStep> RootNode(AiCtx _)
 
 static void PrintUsage()
 {
-    Console.WriteLine("Usage: dotnet run --project samples/Dominatus.Llm.DemoConsole -- --mode <live|record|replay|strict|strict-miss> [--client <fake|openai|anthropic|gemini>] [--model <name>] [--cassette <path>]");
+    Console.WriteLine("Usage: dotnet run --project samples/Dominatus.Llm.DemoConsole -- --mode <live|record|replay|strict|strict-miss> [--scenario <oracle|decision>] [--client <fake|openai|anthropic|gemini>] [--model <name>] [--cassette <path>]");
 }
 
 enum DemoMode
@@ -191,13 +288,20 @@ enum DemoMode
     StrictMiss,
 }
 
-sealed record DemoOptions(DemoMode Mode, LlmProviderClientKind Client, string? Model, string? CassettePath);
+enum DemoScenario
+{
+    Oracle,
+    Decision,
+}
+
+sealed record DemoOptions(DemoMode Mode, DemoScenario Scenario, LlmProviderClientKind Client, string? Model, string? CassettePath);
 
 static class DemoOptionsParser
 {
     public static DemoOptions? Parse(string[] args)
     {
         string? modeValue = null;
+        string? scenarioValue = null;
         string? cassettePath = null;
         string? clientValue = null;
         string? model = null;
@@ -208,6 +312,12 @@ static class DemoOptionsParser
             if (string.Equals(arg, "--mode", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 modeValue = args[++i];
+                continue;
+            }
+
+            if (string.Equals(arg, "--scenario", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                scenarioValue = args[++i];
                 continue;
             }
 
@@ -244,6 +354,13 @@ static class DemoOptionsParser
             _ => (DemoMode?)null,
         };
 
+        var scenario = (scenarioValue ?? "oracle").ToLowerInvariant() switch
+        {
+            "oracle" => DemoScenario.Oracle,
+            "decision" => DemoScenario.Decision,
+            _ => (DemoScenario?)null,
+        };
+
         var client = (clientValue ?? "fake").ToLowerInvariant() switch
         {
             "fake" => LlmProviderClientKind.Fake,
@@ -253,12 +370,12 @@ static class DemoOptionsParser
             _ => (LlmProviderClientKind?)null,
         };
 
-        if (mode is null || client is null)
+        if (mode is null || scenario is null || client is null)
         {
             return null;
         }
 
-        return new DemoOptions(mode.Value, client.Value, model, cassettePath);
+        return new DemoOptions(mode.Value, scenario.Value, client.Value, model, cassettePath);
     }
 }
 
@@ -395,6 +512,75 @@ static class NarrationScenario
     }
 }
 
+static class DecisionScenario
+{
+    public static readonly BbKey<string> ChosenKey = new("decision.choice");
+    public static readonly BbKey<string> RationaleKey = new("decision.rationale");
+    public static readonly BbKey<string> ResultJsonKey = new("decision.resultJson");
+
+    public const string StableId = "demo.gandhi.alliance.response.v1";
+    public const string Intent = "decide how Gandhi responds to Victoria's defensive pact proposal";
+    public const string Persona = "Gandhi. Principled, patient, peace-seeking, but not naive.";
+
+    public static AiStep BuildStep(string provider, string model)
+        => Llm.Decide(
+            stableId: StableId,
+            intent: Intent,
+            persona: Persona,
+            context: ctx => ctx
+                .Add("otherLeader", "Victoria")
+                .Add("proposal", "defensive pact")
+                .Add("trust", 0.42)
+                .Add("sharedEnemy", "Alexander")
+                .Add("recentBrokenPromise", true),
+            options:
+            [
+                new LlmDecisionOption("accept", "Accept the defensive pact."),
+                new LlmDecisionOption("reject_politely", "Reject while preserving diplomatic tone."),
+                new LlmDecisionOption("demand_concession", "Ask for gold or policy concessions first."),
+                new LlmDecisionOption("denounce", "Publicly denounce Victoria.")
+            ],
+            storeChosenAs: ChosenKey,
+            storeRationaleAs: RationaleKey,
+            storeResultJsonAs: ResultJsonKey,
+            sampling: new LlmSamplingOptions(provider, model, Temperature: 0.0, MaxOutputTokens: 256, TopP: 1.0));
+
+    public static LlmDecisionRequest BuildRequest(string provider, string model)
+        => new(
+            StableId: StableId,
+            Intent: Intent,
+            Persona: Persona,
+            CanonicalContextJson: new LlmContextBuilder()
+                .Add("otherLeader", "Victoria")
+                .Add("proposal", "defensive pact")
+                .Add("trust", 0.42)
+                .Add("sharedEnemy", "Alexander")
+                .Add("recentBrokenPromise", true)
+                .BuildCanonicalJson(),
+            Options:
+            [
+                new LlmDecisionOption("accept", "Accept the defensive pact."),
+                new LlmDecisionOption("reject_politely", "Reject while preserving diplomatic tone."),
+                new LlmDecisionOption("demand_concession", "Ask for gold or policy concessions first."),
+                new LlmDecisionOption("denounce", "Publicly denounce Victoria.")
+            ],
+            Sampling: new LlmSamplingOptions(provider, model, Temperature: 0.0, MaxOutputTokens: 256, TopP: 1.0),
+            PromptTemplateVersion: LlmDecisionRequest.DefaultPromptTemplateVersion,
+            OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion);
+
+    public static LlmDecisionResult CreateFakeResult(string requestHash)
+        => new(
+            RequestHash: requestHash,
+            Scores:
+            [
+                new LlmDecisionOptionScore("reject_politely", Score: 0.79, Rank: 1, Rationale: "Recent broken promises lower trust, so decline while preserving diplomacy."),
+                new LlmDecisionOptionScore("demand_concession", Score: 0.71, Rank: 2, Rationale: "Conditional acceptance is plausible but risk remains elevated."),
+                new LlmDecisionOptionScore("accept", Score: 0.42, Rank: 3, Rationale: "Shared enemy matters, yet trust is too low for full pact acceptance."),
+                new LlmDecisionOptionScore("denounce", Score: 0.19, Rank: 4, Rationale: "Public denouncement escalates conflict and undermines Gandhi's posture.")
+            ],
+            Rationale: "Reject politely for now due to broken trust, while leaving room for future cooperation.");
+}
+
 sealed class CountingLlmClient : ILlmClient
 {
     private readonly ILlmClient _inner;
@@ -410,5 +596,23 @@ sealed class CountingLlmClient : ILlmClient
     {
         CallCount++;
         return await _inner.GenerateTextAsync(request, requestHash, cancellationToken).ConfigureAwait(false);
+    }
+}
+
+sealed class CountingDecisionClient : ILlmDecisionClient
+{
+    private readonly ILlmDecisionClient _inner;
+
+    public int CallCount { get; private set; }
+
+    public CountingDecisionClient(ILlmDecisionClient inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    }
+
+    public async Task<LlmDecisionResult> ScoreOptionsAsync(LlmDecisionRequest request, string requestHash, CancellationToken cancellationToken)
+    {
+        CallCount++;
+        return await _inner.ScoreOptionsAsync(request, requestHash, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -23,6 +23,14 @@ public sealed record LlmProviderClientFactoryResult(
     bool ApiKeyPresent,
     string? RequiredApiKeyEnvironmentVariable);
 
+public sealed record LlmProviderDecisionClientFactoryResult(
+    ILlmDecisionClient Client,
+    string Provider,
+    string Model,
+    Uri Endpoint,
+    bool ApiKeyPresent,
+    string? RequiredApiKeyEnvironmentVariable);
+
 public static class LlmProviderClientFactory
 {
     public const string OpenAiApiKeyEnvironmentVariable = "OPENAI_API_KEY";
@@ -47,11 +55,40 @@ public static class LlmProviderClientFactory
         };
     }
 
+    public static LlmProviderDecisionClientFactoryResult CreateDecisionClient(LlmProviderClientFactoryOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var environment = options.Environment ?? ProcessLlmEnvironment.Instance;
+        var transportFactory = options.TransportFactory ?? (() => new HttpClientLlmTransport());
+
+        return options.Client switch
+        {
+            LlmProviderClientKind.Fake => CreateFakeDecision(options),
+            LlmProviderClientKind.OpenAi => CreateOpenAiDecision(options, environment, transportFactory),
+            LlmProviderClientKind.Anthropic => CreateAnthropicDecision(options, environment, transportFactory),
+            LlmProviderClientKind.Gemini => CreateGeminiDecision(options, environment, transportFactory),
+            _ => throw new InvalidOperationException($"Unsupported provider client kind '{options.Client}'.")
+        };
+    }
+
     private static LlmProviderClientFactoryResult CreateFake(LlmProviderClientFactoryOptions options)
     {
         var model = ResolveModel(options.ModelOverride, "scripted-v1");
         return new LlmProviderClientFactoryResult(
             new FakeLlmClient("Mira, the moonlit shrine remembers your footsteps before you make them."),
+            Provider: "fake",
+            Model: model,
+            Endpoint: new Uri("https://example.invalid/fake"),
+            ApiKeyPresent: false,
+            RequiredApiKeyEnvironmentVariable: null);
+    }
+
+    private static LlmProviderDecisionClientFactoryResult CreateFakeDecision(LlmProviderClientFactoryOptions options)
+    {
+        var model = ResolveModel(options.ModelOverride, "scripted-v1");
+        return new LlmProviderDecisionClientFactoryResult(
+            new DeterministicFakeDecisionClient(),
             Provider: "fake",
             Model: model,
             Endpoint: new Uri("https://example.invalid/fake"),
@@ -76,6 +113,23 @@ public static class LlmProviderClientFactory
             createClient: apiKey => new OpenAiResponsesLlmClient(new LlmHttpProviderOptions("openai", model, endpoint, apiKey), transportFactory()));
     }
 
+    private static LlmProviderDecisionClientFactoryResult CreateOpenAiDecision(
+        LlmProviderClientFactoryOptions options,
+        ILlmEnvironment environment,
+        Func<ILlmHttpTransport> transportFactory)
+    {
+        var model = ResolveModel(options.ModelOverride, "gpt-5");
+        var endpoint = new Uri("https://api.openai.com/v1/responses");
+        return CreateHttpDecisionProvider(
+            options,
+            provider: "openai",
+            model,
+            endpoint,
+            requiredKeyMessage: OpenAiApiKeyEnvironmentVariable,
+            tryResolveApiKey: () => TryGetApiKey(environment, OpenAiApiKeyEnvironmentVariable),
+            createClient: apiKey => new OpenAiResponsesDecisionClient(new LlmHttpProviderOptions("openai", model, endpoint, apiKey), transportFactory()));
+    }
+
     private static LlmProviderClientFactoryResult CreateAnthropic(
         LlmProviderClientFactoryOptions options,
         ILlmEnvironment environment,
@@ -91,6 +145,23 @@ public static class LlmProviderClientFactory
             requiredKeyMessage: AnthropicApiKeyEnvironmentVariable,
             tryResolveApiKey: () => TryGetApiKey(environment, AnthropicApiKeyEnvironmentVariable),
             createClient: apiKey => new AnthropicMessagesLlmClient(new LlmHttpProviderOptions("anthropic", model, endpoint, apiKey), transportFactory()));
+    }
+
+    private static LlmProviderDecisionClientFactoryResult CreateAnthropicDecision(
+        LlmProviderClientFactoryOptions options,
+        ILlmEnvironment environment,
+        Func<ILlmHttpTransport> transportFactory)
+    {
+        var model = ResolveModel(options.ModelOverride, "claude-sonnet-4-20250514");
+        var endpoint = new Uri("https://api.anthropic.com/v1/messages");
+        return CreateHttpDecisionProvider(
+            options,
+            provider: "anthropic",
+            model,
+            endpoint,
+            requiredKeyMessage: AnthropicApiKeyEnvironmentVariable,
+            tryResolveApiKey: () => TryGetApiKey(environment, AnthropicApiKeyEnvironmentVariable),
+            createClient: apiKey => new AnthropicMessagesDecisionClient(new LlmHttpProviderOptions("anthropic", model, endpoint, apiKey), transportFactory()));
     }
 
     private static LlmProviderClientFactoryResult CreateGemini(
@@ -109,6 +180,24 @@ public static class LlmProviderClientFactory
             tryResolveApiKey: () => TryGetApiKey(environment, GeminiApiKeyEnvironmentVariable)
                 ?? TryGetApiKey(environment, GoogleApiKeyEnvironmentVariable),
             createClient: apiKey => new GeminiGenerateContentLlmClient(new LlmHttpProviderOptions("gemini", model, endpoint, apiKey), transportFactory()));
+    }
+
+    private static LlmProviderDecisionClientFactoryResult CreateGeminiDecision(
+        LlmProviderClientFactoryOptions options,
+        ILlmEnvironment environment,
+        Func<ILlmHttpTransport> transportFactory)
+    {
+        var model = ResolveModel(options.ModelOverride, "gemini-2.5-flash");
+        var endpoint = new Uri($"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent");
+        return CreateHttpDecisionProvider(
+            options,
+            provider: "gemini",
+            model,
+            endpoint,
+            requiredKeyMessage: $"{GeminiApiKeyEnvironmentVariable}' or '{GoogleApiKeyEnvironmentVariable}",
+            tryResolveApiKey: () => TryGetApiKey(environment, GeminiApiKeyEnvironmentVariable)
+                ?? TryGetApiKey(environment, GoogleApiKeyEnvironmentVariable),
+            createClient: apiKey => new GeminiGenerateContentDecisionClient(new LlmHttpProviderOptions("gemini", model, endpoint, apiKey), transportFactory()));
     }
 
     private static LlmProviderClientFactoryResult CreateHttpProvider(
@@ -142,6 +231,37 @@ public static class LlmProviderClientFactory
             RequiredApiKeyEnvironmentVariable: requiredKeyMessage);
     }
 
+    private static LlmProviderDecisionClientFactoryResult CreateHttpDecisionProvider(
+        LlmProviderClientFactoryOptions options,
+        string provider,
+        string model,
+        Uri endpoint,
+        string requiredKeyMessage,
+        Func<string?> tryResolveApiKey,
+        Func<string, ILlmDecisionClient> createClient)
+    {
+        var apiKey = tryResolveApiKey();
+        var apiKeyPresent = !string.IsNullOrWhiteSpace(apiKey);
+
+        if (RequiresLiveKey(options.CassetteMode) && !apiKeyPresent)
+        {
+            throw new InvalidOperationException(
+                $"Missing required API key environment variable '{requiredKeyMessage}' for client '{provider}' in mode '{options.CassetteMode}'.");
+        }
+
+        var client = RequiresLiveKey(options.CassetteMode)
+            ? createClient(apiKey!)
+            : new ThrowingDecisionClient($"Provider '{provider}' decision client should not be invoked for cassette mode '{options.CassetteMode}'.");
+
+        return new LlmProviderDecisionClientFactoryResult(
+            client,
+            Provider: provider,
+            Model: model,
+            Endpoint: endpoint,
+            ApiKeyPresent: apiKeyPresent,
+            RequiredApiKeyEnvironmentVariable: requiredKeyMessage);
+    }
+
     private static bool RequiresLiveKey(LlmCassetteMode mode)
         => mode is LlmCassetteMode.Live or LlmCassetteMode.Record;
 
@@ -167,5 +287,66 @@ public static class LlmProviderClientFactory
 
         public Task<LlmTextResult> GenerateTextAsync(LlmTextRequest request, string requestHash, CancellationToken cancellationToken)
             => throw new InvalidOperationException(_message);
+    }
+
+    private sealed class ThrowingDecisionClient : ILlmDecisionClient
+    {
+        private readonly string _message;
+
+        public ThrowingDecisionClient(string message)
+        {
+            _message = message;
+        }
+
+        public Task<LlmDecisionResult> ScoreOptionsAsync(LlmDecisionRequest request, string requestHash, CancellationToken cancellationToken)
+            => throw new InvalidOperationException(_message);
+    }
+
+    private sealed class DeterministicFakeDecisionClient : ILlmDecisionClient
+    {
+        public Task<LlmDecisionResult> ScoreOptionsAsync(LlmDecisionRequest request, string requestHash, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            ArgumentException.ThrowIfNullOrWhiteSpace(requestHash);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var ordered = request.Options
+                .OrderByDescending(option => ResolveScore(option.Id))
+                .ThenBy(option => option.Id, StringComparer.Ordinal)
+                .ToArray();
+
+            var scores = ordered
+                .Select((option, index) => new LlmDecisionOptionScore(
+                    OptionId: option.Id,
+                    Score: ResolveScore(option.Id),
+                    Rank: index + 1,
+                    Rationale: ResolveReasoning(option.Id)))
+                .ToArray();
+
+            return Task.FromResult(new LlmDecisionResult(
+                RequestHash: requestHash,
+                Scores: scores,
+                Rationale: "Reject politely for now due to broken trust, while leaving room for future cooperation."));
+        }
+
+        private static double ResolveScore(string optionId)
+            => optionId switch
+            {
+                "reject_politely" => 0.79,
+                "demand_concession" => 0.71,
+                "accept" => 0.42,
+                "denounce" => 0.19,
+                _ => 0.10
+            };
+
+        private static string ResolveReasoning(string optionId)
+            => optionId switch
+            {
+                "reject_politely" => "Recent broken promises lower trust, so decline while preserving diplomacy.",
+                "demand_concession" => "Conditional acceptance is plausible but risk remains elevated.",
+                "accept" => "Shared enemy matters, yet trust is too low for full pact acceptance.",
+                "denounce" => "Public denouncement escalates conflict and undermines Gandhi's posture.",
+                _ => "Default low-confidence fallback score for unrecognized option."
+            };
     }
 }
