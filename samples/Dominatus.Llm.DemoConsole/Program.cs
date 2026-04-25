@@ -42,31 +42,43 @@ static void RunDemo(DemoOptions options)
 
     var narrationRequest = NarrationScenario.BuildRequest(sampling);
     var narrationRequestHash = LlmRequestHasher.ComputeHash(narrationRequest);
-    var oracleRequest = OracleScenario.BuildRequest(sampling);
-    var oracleRequestHash = LlmRequestHasher.ComputeHash(oracleRequest);
-    var cassette = CreateCassette(options, narrationRequestHash, narrationRequest, oracleRequestHash, oracleRequest);
+    var oracleLineRequest = OracleLineScenario.BuildRequest(sampling);
+    var oracleLineRequestHash = LlmRequestHasher.ComputeHash(oracleLineRequest);
+    var oracleReplyRequest = OracleReplyScenario.BuildRequest(sampling);
+    var oracleReplyRequestHash = LlmRequestHasher.ComputeHash(oracleReplyRequest);
+    var cassette = CreateCassette(
+        options,
+        narrationRequestHash,
+        narrationRequest,
+        oracleLineRequestHash,
+        oracleLineRequest,
+        oracleReplyRequestHash,
+        oracleReplyRequest);
 
     var countingClient = new CountingLlmClient(factoryResult.Client);
     var (world, ctx) = CreateWorldAndCtx(countingClient, cassetteMode, cassette);
 
     var narrationStep = NarrationScenario.BuildStep(sampling);
-    var oracleStep = OracleScenario.BuildStep(sampling);
+    var oracleLineStep = OracleLineScenario.BuildStep(sampling);
+    var oracleReplyStep = OracleReplyScenario.BuildStep(sampling);
 
     try
     {
         ExecuteStep(narrationStep, ctx);
-        ExecuteStep(oracleStep, ctx);
+        ExecuteStep(oracleLineStep, ctx);
+        ExecuteStep(oracleReplyStep, ctx);
 
         Console.WriteLine($"Client: {options.Client.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Mode: {options.Mode.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Model: {factoryResult.Model}");
         Console.WriteLine($"CassettePath: {options.CassettePath ?? "<in-memory>"}");
-        Console.WriteLine($"StableId: {OracleScenario.StableId}");
-        Console.WriteLine($"RequestHash: {oracleRequestHash}");
+        Console.WriteLine($"StableId: {OracleReplyScenario.StableId}");
+        Console.WriteLine($"RequestHash: {oracleReplyRequestHash}");
         Console.WriteLine($"ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
         Console.WriteLine($"ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Narration.Text: {ctx.Bb.GetOrDefault(NarrationScenario.NarrationKey, string.Empty)}");
-        Console.WriteLine($"Oracle.Line: {ctx.Bb.GetOrDefault(OracleScenario.OracleLineKey, string.Empty)}");
+        Console.WriteLine($"Oracle.Line: {ctx.Bb.GetOrDefault(OracleLineScenario.OracleLineKey, string.Empty)}");
+        Console.WriteLine($"Oracle.Reply: {ctx.Bb.GetOrDefault(OracleReplyScenario.OracleReplyKey, string.Empty)}");
     }
     catch (InvalidOperationException ex) when (options.Mode is DemoMode.StrictMiss)
     {
@@ -75,8 +87,10 @@ static void RunDemo(DemoOptions options)
         Console.WriteLine($"  CassettePath: {options.CassettePath ?? "<in-memory>"}");
         Console.WriteLine($"  NarrationStableId: {NarrationScenario.StableId}");
         Console.WriteLine($"  NarrationRequestHash: {narrationRequestHash}");
-        Console.WriteLine($"  OracleStableId: {OracleScenario.StableId}");
-        Console.WriteLine($"  OracleRequestHash: {oracleRequestHash}");
+        Console.WriteLine($"  OracleLineStableId: {OracleLineScenario.StableId}");
+        Console.WriteLine($"  OracleLineRequestHash: {oracleLineRequestHash}");
+        Console.WriteLine($"  OracleReplyStableId: {OracleReplyScenario.StableId}");
+        Console.WriteLine($"  OracleReplyRequestHash: {oracleReplyRequestHash}");
         Console.WriteLine($"  ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
         Console.WriteLine($"  ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
         Console.WriteLine($"  Reason: {ex.Message}");
@@ -103,8 +117,10 @@ static ILlmCassette CreateCassette(
     DemoOptions options,
     string narrationRequestHash,
     LlmTextRequest narrationRequest,
-    string oracleRequestHash,
-    LlmTextRequest oracleRequest)
+    string oracleLineRequestHash,
+    LlmTextRequest oracleLineRequest,
+    string oracleReplyRequestHash,
+    LlmTextRequest oracleReplyRequest)
 {
     if (!string.IsNullOrWhiteSpace(options.CassettePath))
     {
@@ -116,7 +132,8 @@ static ILlmCassette CreateCassette(
     if (options.Client is LlmProviderClientKind.Fake && options.Mode is DemoMode.Replay or DemoMode.Strict)
     {
         cassette.Put(narrationRequestHash, narrationRequest, new LlmTextResult(NarrationScenario.FakeResponse, narrationRequestHash));
-        cassette.Put(oracleRequestHash, oracleRequest, new LlmTextResult(OracleScenario.FakeResponse, oracleRequestHash));
+        cassette.Put(oracleLineRequestHash, oracleLineRequest, new LlmTextResult(OracleLineScenario.FakeResponse, oracleLineRequestHash));
+        cassette.Put(oracleReplyRequestHash, oracleReplyRequest, new LlmTextResult(OracleReplyScenario.FakeResponse, oracleReplyRequestHash));
     }
 
     return cassette;
@@ -245,7 +262,7 @@ static class DemoOptionsParser
     }
 }
 
-static class OracleScenario
+static class OracleLineScenario
 {
     public static readonly BbKey<string> OracleLineKey = new("oracle.line");
 
@@ -272,6 +289,52 @@ static class OracleScenario
     {
         var context = new LlmContextBuilder()
             .Add(Llm.LineSpeakerContextKey, Speaker)
+            .Add("playerName", "Mira")
+            .Add("location", "moonlit shrine")
+            .Add("oracleMood", "pleased but ominous")
+            .BuildCanonicalJson();
+
+        return new LlmTextRequest(
+            StableId: StableId,
+            Intent: Intent,
+            Persona: Persona,
+            CanonicalContextJson: context,
+            Sampling: sampling,
+            PromptTemplateVersion: LlmTextRequest.DefaultPromptTemplateVersion,
+            OutputContractVersion: LlmTextRequest.DefaultOutputContractVersion);
+    }
+}
+
+static class OracleReplyScenario
+{
+    public static readonly BbKey<string> OracleReplyKey = new("oracle.reply");
+
+    public const string StableId = "demo.oracle.reply.v1";
+    public const string Speaker = "Oracle";
+    public const string Intent = "answer the player's question about the moonlit shrine";
+    public const string Persona = "Ancient oracle. Warm, cryptic, concise. Knows omens, avoids direct prophecy.";
+    public const string Input = "Why did the shrine remember me?";
+    public const string FakeResponse = "Because some thresholds remember the souls brave enough to cross them.";
+
+    public static AiStep BuildStep(LlmSamplingOptions sampling)
+        => Llm.Reply(
+            stableId: StableId,
+            speaker: Speaker,
+            intent: Intent,
+            persona: Persona,
+            input: Input,
+            context: ctx => ctx
+                .Add("playerName", "Mira")
+                .Add("location", "moonlit shrine")
+                .Add("oracleMood", "pleased but ominous"),
+            storeAs: OracleReplyKey,
+            sampling: sampling);
+
+    public static LlmTextRequest BuildRequest(LlmSamplingOptions sampling)
+    {
+        var context = new LlmContextBuilder()
+            .Add(Llm.ReplySpeakerContextKey, Speaker)
+            .Add(Llm.ReplyInputContextKey, Input)
             .Add("playerName", "Mira")
             .Add("location", "moonlit shrine")
             .Add("oracleMood", "pleased but ominous")

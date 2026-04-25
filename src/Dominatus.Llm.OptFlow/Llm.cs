@@ -10,6 +10,8 @@ public static class Llm
     public const string LineSpeakerContextKey = "__speaker";
     public const string NarrateNarratorContextKey = "__narrator";
     public const string NarrateStyleContextKey = "__narrationStyle";
+    public const string ReplySpeakerContextKey = "__replySpeaker";
+    public const string ReplyInputContextKey = "__replyInput";
 
     public static readonly LlmSamplingOptions DefaultSampling = new(
         Provider: "fake",
@@ -98,6 +100,55 @@ public static class Llm
                     throw new InvalidOperationException(
                         $"Llm.Narrate reserves context key '{reservedKey}'. " +
                         "Use different caller context keys for narration metadata.",
+                        ex);
+                }
+            },
+            storeAs: storeAs,
+            sampling: sampling);
+    }
+
+    public static AiStep Reply(
+        string stableId,
+        string speaker,
+        string intent,
+        string persona,
+        string input,
+        Action<LlmContextBuilder> context,
+        BbKey<string> storeAs,
+        LlmSamplingOptions? sampling = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(speaker);
+        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(persona);
+        ArgumentException.ThrowIfNullOrWhiteSpace(input);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Text(
+            stableId: stableId,
+            intent: intent,
+            persona: persona,
+            context: builder =>
+            {
+                builder
+                    .Add(ReplySpeakerContextKey, speaker)
+                    .Add(ReplyInputContextKey, input);
+
+                try
+                {
+                    context(builder);
+                }
+                catch (InvalidOperationException ex) when (
+                    ex.Message.Contains($"'{ReplySpeakerContextKey}'", StringComparison.Ordinal) ||
+                    ex.Message.Contains($"'{ReplyInputContextKey}'", StringComparison.Ordinal))
+                {
+                    var reservedKey = ex.Message.Contains($"'{ReplySpeakerContextKey}'", StringComparison.Ordinal)
+                        ? ReplySpeakerContextKey
+                        : ReplyInputContextKey;
+
+                    throw new InvalidOperationException(
+                        $"Llm.Reply reserves context key '{reservedKey}'. " +
+                        "Use different caller context keys for reply metadata.",
                         ex);
                 }
             },
