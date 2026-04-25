@@ -8,8 +8,8 @@ using Dominatus.Llm.OptFlow;
 
 Console.WriteLine("Dominatus.Llm Demo — Oracle Greeting");
 
-var mode = DemoModeParser.Parse(args);
-if (mode is null)
+var options = DemoOptionsParser.Parse(args);
+if (options is null)
 {
     PrintUsage();
     return;
@@ -17,7 +17,7 @@ if (mode is null)
 
 try
 {
-    RunDemo(mode.Value);
+    RunDemo(options);
 }
 catch (Exception ex)
 {
@@ -25,29 +25,47 @@ catch (Exception ex)
     Environment.ExitCode = 1;
 }
 
-static void RunDemo(DemoMode mode)
+static void RunDemo(DemoOptions options)
 {
-    var cassette = new InMemoryLlmCassette();
     var request = OracleScenario.BuildRequest();
     var requestHash = LlmRequestHasher.ComputeHash(request);
 
-    if (mode is DemoMode.Replay or DemoMode.Strict)
+    ILlmCassette cassette = CreateCassette(options, requestHash, request);
+
+    var cassetteMode = options.Mode is DemoMode.Live
+        ? LlmCassetteMode.Live
+        : options.Mode is DemoMode.Record
+            ? LlmCassetteMode.Record
+            : options.Mode is DemoMode.Replay
+                ? LlmCassetteMode.Replay
+                : LlmCassetteMode.Strict;
+
+    RunSingleMode(options, cassetteMode, cassette, requestHash);
+
+    if (options.Mode is DemoMode.Record && cassette is JsonLlmCassette jsonCassette)
+    {
+        jsonCassette.Save();
+    }
+}
+
+static ILlmCassette CreateCassette(DemoOptions options, string requestHash, LlmTextRequest request)
+{
+    if (!string.IsNullOrWhiteSpace(options.CassettePath))
+    {
+        return JsonLlmCassette.LoadOrCreate(options.CassettePath);
+    }
+
+    var cassette = new InMemoryLlmCassette();
+
+    if (options.Mode is DemoMode.Replay or DemoMode.Strict)
     {
         cassette.Put(requestHash, request, new LlmTextResult(OracleScenario.FakeResponse, requestHash));
     }
 
-    var cassetteMode = mode is DemoMode.Live
-        ? LlmCassetteMode.Live
-        : mode is DemoMode.Record
-            ? LlmCassetteMode.Record
-            : mode is DemoMode.Replay
-                ? LlmCassetteMode.Replay
-                : LlmCassetteMode.Strict;
-
-    RunSingleMode(mode, cassetteMode, cassette, requestHash);
+    return cassette;
 }
 
-static void RunSingleMode(DemoMode mode, LlmCassetteMode cassetteMode, InMemoryLlmCassette cassette, string requestHash)
+static void RunSingleMode(DemoOptions options, LlmCassetteMode cassetteMode, ILlmCassette cassette, string requestHash)
 {
     var client = new FakeLlmClient(OracleScenario.FakeResponse);
     var (world, ctx) = CreateWorldAndCtx(client, cassetteMode, cassette);
@@ -58,16 +76,18 @@ static void RunSingleMode(DemoMode mode, LlmCassetteMode cassetteMode, InMemoryL
     {
         ExecuteStep(step, ctx);
 
-        Console.WriteLine($"Mode: {mode}");
+        Console.WriteLine($"Mode: {options.Mode}");
+        Console.WriteLine($"CassettePath: {options.CassettePath ?? "<in-memory>"}");
         Console.WriteLine($"StableId: {OracleScenario.StableId}");
         Console.WriteLine($"RequestHash: {requestHash}");
         Console.WriteLine($"ProviderCalled: {client.CallCount > 0}");
         Console.WriteLine($"Oracle.Line: {ctx.Bb.GetOrDefault(OracleScenario.OracleLineKey, string.Empty)}");
     }
-    catch (InvalidOperationException ex) when (mode is DemoMode.StrictMiss)
+    catch (InvalidOperationException ex) when (options.Mode is DemoMode.StrictMiss)
     {
         Console.WriteLine("Expected strict miss failure:");
         Console.WriteLine("  Mode: Strict");
+        Console.WriteLine($"  CassettePath: {options.CassettePath ?? "<in-memory>"}");
         Console.WriteLine($"  StableId: {OracleScenario.StableId}");
         Console.WriteLine($"  RequestHash: {requestHash}");
         Console.WriteLine($"  Reason: {ex.Message}");
@@ -116,7 +136,7 @@ static IEnumerator<AiStep> RootNode(AiCtx _)
 
 static void PrintUsage()
 {
-    Console.WriteLine("Usage: dotnet run --project samples/Dominatus.Llm.DemoConsole -- --mode <live|record|replay|strict|strict-miss>");
+    Console.WriteLine("Usage: dotnet run --project samples/Dominatus.Llm.DemoConsole -- --mode <live|record|replay|strict|strict-miss> [--cassette <path>]");
 }
 
 enum DemoMode
@@ -128,24 +148,46 @@ enum DemoMode
     StrictMiss,
 }
 
-static class DemoModeParser
+sealed record DemoOptions(DemoMode Mode, string? CassettePath);
+
+static class DemoOptionsParser
 {
-    public static DemoMode? Parse(string[] args)
+    public static DemoOptions? Parse(string[] args)
     {
-        if (args.Length < 2 || !string.Equals(args[0], "--mode", StringComparison.OrdinalIgnoreCase))
+        string? modeValue = null;
+        string? cassettePath = null;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+            if (string.Equals(arg, "--mode", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                modeValue = args[++i];
+                continue;
+            }
+
+            if (string.Equals(arg, "--cassette", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                cassettePath = args[++i];
+            }
+        }
+
+        if (modeValue is null)
         {
             return null;
         }
 
-        return args[1].ToLowerInvariant() switch
+        var mode = modeValue.ToLowerInvariant() switch
         {
             "live" => DemoMode.Live,
             "record" => DemoMode.Record,
             "replay" => DemoMode.Replay,
             "strict" => DemoMode.Strict,
             "strict-miss" => DemoMode.StrictMiss,
-            _ => null,
+            _ => (DemoMode?)null,
         };
+
+        return mode is null ? null : new DemoOptions(mode.Value, cassettePath);
     }
 }
 
