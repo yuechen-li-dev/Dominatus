@@ -40,27 +40,32 @@ static void RunDemo(DemoOptions options)
         MaxOutputTokens: 64,
         TopP: 1.0);
 
-    var request = OracleScenario.BuildRequest(sampling);
-    var requestHash = LlmRequestHasher.ComputeHash(request);
-    var cassette = CreateCassette(options, requestHash, request);
+    var narrationRequest = NarrationScenario.BuildRequest(sampling);
+    var narrationRequestHash = LlmRequestHasher.ComputeHash(narrationRequest);
+    var oracleRequest = OracleScenario.BuildRequest(sampling);
+    var oracleRequestHash = LlmRequestHasher.ComputeHash(oracleRequest);
+    var cassette = CreateCassette(options, narrationRequestHash, narrationRequest, oracleRequestHash, oracleRequest);
 
     var countingClient = new CountingLlmClient(factoryResult.Client);
     var (world, ctx) = CreateWorldAndCtx(countingClient, cassetteMode, cassette);
 
-    var step = OracleScenario.BuildStep(sampling);
+    var narrationStep = NarrationScenario.BuildStep(sampling);
+    var oracleStep = OracleScenario.BuildStep(sampling);
 
     try
     {
-        ExecuteStep(step, ctx);
+        ExecuteStep(narrationStep, ctx);
+        ExecuteStep(oracleStep, ctx);
 
         Console.WriteLine($"Client: {options.Client.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Mode: {options.Mode.ToString().ToLowerInvariant()}");
         Console.WriteLine($"Model: {factoryResult.Model}");
         Console.WriteLine($"CassettePath: {options.CassettePath ?? "<in-memory>"}");
         Console.WriteLine($"StableId: {OracleScenario.StableId}");
-        Console.WriteLine($"RequestHash: {requestHash}");
+        Console.WriteLine($"RequestHash: {oracleRequestHash}");
         Console.WriteLine($"ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
         Console.WriteLine($"ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Narration.Text: {ctx.Bb.GetOrDefault(NarrationScenario.NarrationKey, string.Empty)}");
         Console.WriteLine($"Oracle.Line: {ctx.Bb.GetOrDefault(OracleScenario.OracleLineKey, string.Empty)}");
     }
     catch (InvalidOperationException ex) when (options.Mode is DemoMode.StrictMiss)
@@ -68,8 +73,10 @@ static void RunDemo(DemoOptions options)
         Console.WriteLine("Expected strict miss failure:");
         Console.WriteLine("  Mode: Strict");
         Console.WriteLine($"  CassettePath: {options.CassettePath ?? "<in-memory>"}");
-        Console.WriteLine($"  StableId: {OracleScenario.StableId}");
-        Console.WriteLine($"  RequestHash: {requestHash}");
+        Console.WriteLine($"  NarrationStableId: {NarrationScenario.StableId}");
+        Console.WriteLine($"  NarrationRequestHash: {narrationRequestHash}");
+        Console.WriteLine($"  OracleStableId: {OracleScenario.StableId}");
+        Console.WriteLine($"  OracleRequestHash: {oracleRequestHash}");
         Console.WriteLine($"  ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
         Console.WriteLine($"  ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
         Console.WriteLine($"  Reason: {ex.Message}");
@@ -92,7 +99,12 @@ static LlmCassetteMode ToCassetteMode(DemoMode mode)
                 ? LlmCassetteMode.Replay
                 : LlmCassetteMode.Strict;
 
-static ILlmCassette CreateCassette(DemoOptions options, string requestHash, LlmTextRequest request)
+static ILlmCassette CreateCassette(
+    DemoOptions options,
+    string narrationRequestHash,
+    LlmTextRequest narrationRequest,
+    string oracleRequestHash,
+    LlmTextRequest oracleRequest)
 {
     if (!string.IsNullOrWhiteSpace(options.CassettePath))
     {
@@ -103,7 +115,8 @@ static ILlmCassette CreateCassette(DemoOptions options, string requestHash, LlmT
 
     if (options.Client is LlmProviderClientKind.Fake && options.Mode is DemoMode.Replay or DemoMode.Strict)
     {
-        cassette.Put(requestHash, request, new LlmTextResult(OracleScenario.FakeResponse, requestHash));
+        cassette.Put(narrationRequestHash, narrationRequest, new LlmTextResult(NarrationScenario.FakeResponse, narrationRequestHash));
+        cassette.Put(oracleRequestHash, oracleRequest, new LlmTextResult(OracleScenario.FakeResponse, oracleRequestHash));
     }
 
     return cassette;
@@ -268,6 +281,50 @@ static class OracleScenario
             StableId: StableId,
             Intent: Intent,
             Persona: Persona,
+            CanonicalContextJson: context,
+            Sampling: sampling,
+            PromptTemplateVersion: LlmTextRequest.DefaultPromptTemplateVersion,
+            OutputContractVersion: LlmTextRequest.DefaultOutputContractVersion);
+    }
+}
+
+static class NarrationScenario
+{
+    public static readonly BbKey<string> NarrationKey = new("narration.text");
+
+    public const string StableId = "demo.shrine.arrival.narration.v1";
+    public const string Intent = "describe the player arriving at the moonlit shrine";
+    public const string Narrator = "Narrator";
+    public const string Style = "Ominous, concise, sensory, second-person.";
+    public const string FakeResponse = "The moonlight pools over the shrine stones as Mira approaches.";
+
+    public static AiStep BuildStep(LlmSamplingOptions sampling)
+        => Llm.Narrate(
+            stableId: StableId,
+            intent: Intent,
+            narrator: Narrator,
+            style: Style,
+            context: ctx => ctx
+                .Add("playerName", "Mira")
+                .Add("location", "moonlit shrine")
+                .Add("oracleMood", "pleased but ominous"),
+            storeAs: NarrationKey,
+            sampling: sampling);
+
+    public static LlmTextRequest BuildRequest(LlmSamplingOptions sampling)
+    {
+        var context = new LlmContextBuilder()
+            .Add(Llm.NarrateNarratorContextKey, Narrator)
+            .Add(Llm.NarrateStyleContextKey, Style)
+            .Add("playerName", "Mira")
+            .Add("location", "moonlit shrine")
+            .Add("oracleMood", "pleased but ominous")
+            .BuildCanonicalJson();
+
+        return new LlmTextRequest(
+            StableId: StableId,
+            Intent: Intent,
+            Persona: $"Narrator: {Narrator}\nNarration style: {Style}",
             CanonicalContextJson: context,
             Sampling: sampling,
             PromptTemplateVersion: LlmTextRequest.DefaultPromptTemplateVersion,

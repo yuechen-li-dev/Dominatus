@@ -8,6 +8,8 @@ namespace Dominatus.Llm.OptFlow;
 public static class Llm
 {
     public const string LineSpeakerContextKey = "__speaker";
+    public const string NarrateNarratorContextKey = "__narrator";
+    public const string NarrateStyleContextKey = "__narrationStyle";
 
     public static readonly LlmSamplingOptions DefaultSampling = new(
         Provider: "fake",
@@ -47,6 +49,55 @@ public static class Llm
                     throw new InvalidOperationException(
                         $"Llm.Line reserves context key '{LineSpeakerContextKey}'. " +
                         "Use a different caller context key for speaker-related data.",
+                        ex);
+                }
+            },
+            storeAs: storeAs,
+            sampling: sampling);
+    }
+
+    public static AiStep Narrate(
+        string stableId,
+        string intent,
+        string narrator,
+        string style,
+        Action<LlmContextBuilder> context,
+        BbKey<string> storeAs,
+        LlmSamplingOptions? sampling = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(narrator);
+        ArgumentException.ThrowIfNullOrWhiteSpace(style);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string persona = $"Narrator: {narrator}\nNarration style: {style}";
+
+        return Text(
+            stableId: stableId,
+            intent: intent,
+            persona: persona,
+            context: builder =>
+            {
+                builder
+                    .Add(NarrateNarratorContextKey, narrator)
+                    .Add(NarrateStyleContextKey, style);
+
+                try
+                {
+                    context(builder);
+                }
+                catch (InvalidOperationException ex) when (
+                    ex.Message.Contains($"'{NarrateNarratorContextKey}'", StringComparison.Ordinal) ||
+                    ex.Message.Contains($"'{NarrateStyleContextKey}'", StringComparison.Ordinal))
+                {
+                    var reservedKey = ex.Message.Contains($"'{NarrateNarratorContextKey}'", StringComparison.Ordinal)
+                        ? NarrateNarratorContextKey
+                        : NarrateStyleContextKey;
+
+                    throw new InvalidOperationException(
+                        $"Llm.Narrate reserves context key '{reservedKey}'. " +
+                        "Use different caller context keys for narration metadata.",
                         ex);
                 }
             },
