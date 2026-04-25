@@ -73,3 +73,7 @@ Planned future extensions:
 1. Optional parallel advocate dispatch.
 2. Provider-backed decision/judgment JSON parsing.
 3. Target/action integration under runtime authority.
+
+## Follow-on
+
+M4b adds durable file-backed persistence via `JsonLlmMagiCassette`; see `docs/LLM_V1_M4b.md` for schema and validation rules.
