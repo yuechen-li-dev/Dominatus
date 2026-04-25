@@ -209,7 +209,8 @@ public static class Llm
         BbKey<string> storeChosenAs,
         BbKey<string>? storeRationaleAs = null,
         BbKey<string>? storeResultJsonAs = null,
-        LlmSamplingOptions? sampling = null)
+        LlmSamplingOptions? sampling = null,
+        LlmDecisionPolicy? policy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(intent);
@@ -269,7 +270,7 @@ public static class Llm
             PromptTemplateVersion: LlmDecisionRequest.DefaultPromptTemplateVersion,
             OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion);
 
-        return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs);
+        return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, policy ?? LlmDecisionPolicy.Default);
     }
 
     private sealed record LlmTextStep(LlmTextRequest Request, BbKey<string> StoreAs) : AiStep, IWaitEvent
@@ -332,21 +333,26 @@ public static class Llm
         LlmDecisionRequest Request,
         BbKey<string> StoreChosenAs,
         BbKey<string>? StoreRationaleAs,
-        BbKey<string>? StoreResultJsonAs) : AiStep, IWaitEvent
+        BbKey<string>? StoreResultJsonAs,
+        LlmDecisionPolicy Policy) : AiStep, IWaitEvent
     {
         private readonly BbKey<bool> _completedKey = new(BuildDecideKey(Request.StableId, "completed"));
         private readonly BbKey<string> _chosenOptionKey = new(BuildDecideKey(Request.StableId, "chosenOptionId"));
+        private readonly BbKey<double> _chosenScoreKey = new(BuildDecideKey(Request.StableId, "chosenScore"));
         private readonly BbKey<string> _rationaleKey = new(BuildDecideKey(Request.StableId, "rationale"));
         private readonly BbKey<string> _resultJsonKey = new(BuildDecideKey(Request.StableId, "resultJson"));
         private readonly BbKey<string> _requestHashKey = new(BuildDecideKey(Request.StableId, "requestHash"));
+        private readonly BbKey<long> _lastScoredTickKey = new(BuildDecideKey(Request.StableId, "lastScoredTick"));
+        private readonly BbKey<long> _committedUntilTickKey = new(BuildDecideKey(Request.StableId, "committedUntilTick"));
         private readonly BbKey<long> _pendingActuationIdKey = new(BuildDecideKey(Request.StableId, "pendingActuationId"));
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
-            if (ctx.Bb.GetOrDefault(_completedKey, false) && ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
+            var currentTick = GetCurrentTick(ctx);
+
+            if (TryReuseCommittedChoice(ctx, currentTick, out var reuseReason))
             {
-                ctx.Bb.Set(StoreChosenAs, cachedChosen ?? string.Empty);
-                RestoreOptionalOutputs(ctx);
+                WriteCommitRationaleAndOutputs(ctx, reuseReason, updateCachedRationale: true);
                 return true;
             }
 
@@ -384,19 +390,22 @@ public static class Llm
             var result = completed.Payload ?? throw new InvalidOperationException(
                 $"Llm.Decide completion failed for stableId '{Request.StableId}'. Missing decision payload.");
 
-            var chosen = result.Scores.SingleOrDefault(s => s.Rank == 1)
+            var modelRankOne = result.Scores.SingleOrDefault(s => s.Rank == 1)
                 ?? throw new InvalidOperationException(
                     $"Llm.Decide completion failed for stableId '{Request.StableId}'. No Rank=1 score found.");
 
-            ctx.Bb.Set(_chosenOptionKey, chosen.OptionId);
-            ctx.Bb.Set(StoreChosenAs, chosen.OptionId);
-            ctx.Bb.Set(_rationaleKey, result.Rationale);
+            var decision = ChooseCommittedOption(ctx, result, modelRankOne);
+            var resultJson = BuildDecisionSummaryJson(result, decision, Policy);
+
+            ctx.Bb.Set(_chosenOptionKey, decision.ChosenOptionId);
+            ctx.Bb.Set(StoreChosenAs, decision.ChosenOptionId);
+            ctx.Bb.Set(_chosenScoreKey, decision.ChosenScore);
+            ctx.Bb.Set(_rationaleKey, decision.CommitRationale);
             if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
             {
-                ctx.Bb.Set(rationaleStoreAs, result.Rationale);
+                ctx.Bb.Set(rationaleStoreAs, decision.CommitRationale);
             }
 
-            var resultJson = BuildDecisionSummaryJson(result);
             ctx.Bb.Set(_resultJsonKey, resultJson);
             if (StoreResultJsonAs is BbKey<string> resultJsonStoreAs)
             {
@@ -404,9 +413,133 @@ public static class Llm
             }
 
             ctx.Bb.Set(_requestHashKey, result.RequestHash);
+            ctx.Bb.Set(_lastScoredTickKey, currentTick);
+            ctx.Bb.Set(_committedUntilTickKey, checked(currentTick + Policy.MinCommitTicks));
             ctx.Bb.Set(_completedKey, true);
             ctx.Bb.Set(_pendingActuationIdKey, 0L);
             return true;
+        }
+
+        private bool TryReuseCommittedChoice(AiCtx ctx, long currentTick, out string reason)
+        {
+            reason = string.Empty;
+            if (!ctx.Bb.GetOrDefault(_completedKey, false) || !ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(cachedChosen) && currentTick < ctx.Bb.GetOrDefault(_committedUntilTickKey, 0L))
+            {
+                ctx.Bb.Set(StoreChosenAs, cachedChosen);
+                reason = $"Reused previous choice within min-commit window (until tick {ctx.Bb.GetOrDefault(_committedUntilTickKey, 0L)}).";
+                return true;
+            }
+
+            var lastScoredTick = ctx.Bb.GetOrDefault(_lastScoredTickKey, -1L);
+            if (lastScoredTick >= 0 && currentTick < checked(lastScoredTick + Policy.RescoreEveryTicks))
+            {
+                ctx.Bb.Set(StoreChosenAs, cachedChosen ?? string.Empty);
+                reason = $"Reused previous choice within rescore cadence window (next rescore at tick {lastScoredTick + Policy.RescoreEveryTicks}).";
+                return true;
+            }
+
+            return false;
+        }
+
+        private void WriteCommitRationaleAndOutputs(AiCtx ctx, string reason, bool updateCachedRationale)
+        {
+            if (updateCachedRationale)
+            {
+                ctx.Bb.Set(_rationaleKey, reason);
+            }
+
+            if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
+            {
+                ctx.Bb.Set(rationaleStoreAs, reason);
+            }
+
+            if (StoreResultJsonAs is BbKey<string> resultJsonStoreAs)
+            {
+                if (ctx.Bb.TryGet(_resultJsonKey, out string? resultJson))
+                {
+                    ctx.Bb.Set(resultJsonStoreAs, resultJson ?? string.Empty);
+                }
+            }
+        }
+
+        private CommitDecision ChooseCommittedOption(AiCtx ctx, LlmDecisionResult result, LlmDecisionOptionScore modelRankOne)
+        {
+            if (!ctx.Bb.GetOrDefault(_completedKey, false) || !ctx.Bb.TryGet(_chosenOptionKey, out string? previousChosen))
+            {
+                return new CommitDecision(
+                    ChosenOptionId: modelRankOne.OptionId,
+                    ChosenScore: modelRankOne.Score,
+                    ModelRankOneOptionId: modelRankOne.OptionId,
+                    RetainedPreviousChoice: false,
+                    RetentionReason: null,
+                    CommitRationale: result.Rationale,
+                    ModelRationale: result.Rationale);
+            }
+
+            var previousId = previousChosen ?? string.Empty;
+            if (!Request.Options.Any(o => string.Equals(o.Id, previousId, StringComparison.Ordinal)))
+            {
+                return new CommitDecision(
+                    ChosenOptionId: modelRankOne.OptionId,
+                    ChosenScore: modelRankOne.Score,
+                    ModelRankOneOptionId: modelRankOne.OptionId,
+                    RetainedPreviousChoice: false,
+                    RetentionReason: "Previous option removed from current option set.",
+                    CommitRationale: "Committed new rank-1 option because previous option was removed.",
+                    ModelRationale: result.Rationale);
+            }
+
+            var previousScore = result.Scores.SingleOrDefault(s => string.Equals(s.OptionId, previousId, StringComparison.Ordinal));
+            if (previousScore is null)
+            {
+                return new CommitDecision(
+                    ChosenOptionId: modelRankOne.OptionId,
+                    ChosenScore: modelRankOne.Score,
+                    ModelRankOneOptionId: modelRankOne.OptionId,
+                    RetainedPreviousChoice: false,
+                    RetentionReason: "Previous option missing from decision scores.",
+                    CommitRationale: "Committed new rank-1 option because previous option was not scored.",
+                    ModelRationale: result.Rationale);
+            }
+
+            if (string.Equals(previousId, modelRankOne.OptionId, StringComparison.Ordinal))
+            {
+                return new CommitDecision(
+                    ChosenOptionId: modelRankOne.OptionId,
+                    ChosenScore: modelRankOne.Score,
+                    ModelRankOneOptionId: modelRankOne.OptionId,
+                    RetainedPreviousChoice: false,
+                    RetentionReason: null,
+                    CommitRationale: result.Rationale,
+                    ModelRationale: result.Rationale);
+            }
+
+            var switchThreshold = previousScore.Score + Policy.HysteresisMargin;
+            if (modelRankOne.Score >= switchThreshold)
+            {
+                return new CommitDecision(
+                    ChosenOptionId: modelRankOne.OptionId,
+                    ChosenScore: modelRankOne.Score,
+                    ModelRankOneOptionId: modelRankOne.OptionId,
+                    RetainedPreviousChoice: false,
+                    RetentionReason: "Switched because rank-1 option cleared hysteresis margin.",
+                    CommitRationale: $"Switched to '{modelRankOne.OptionId}' because it cleared hysteresis margin over '{previousId}'.",
+                    ModelRationale: result.Rationale);
+            }
+
+            return new CommitDecision(
+                ChosenOptionId: previousId,
+                ChosenScore: previousScore.Score,
+                ModelRankOneOptionId: modelRankOne.OptionId,
+                RetainedPreviousChoice: true,
+                RetentionReason: "Rank-1 option did not clear hysteresis margin.",
+                CommitRationale: $"Retained '{previousId}' because rank-1 option '{modelRankOne.OptionId}' did not clear hysteresis margin.",
+                ModelRationale: result.Rationale);
         }
 
         private void RestoreOptionalOutputs(AiCtx ctx)
@@ -421,9 +554,12 @@ public static class Llm
                 ctx.Bb.Set(resultJsonStoreAs, resultJson ?? string.Empty);
             }
         }
+
+        private static long GetCurrentTick(AiCtx ctx)
+            => checked((long)Math.Floor(ctx.World.Clock.Time));
     }
 
-    private static string BuildDecisionSummaryJson(LlmDecisionResult result)
+    private static string BuildDecisionSummaryJson(LlmDecisionResult result, CommitDecision decision, LlmDecisionPolicy policy)
     {
         var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
@@ -431,9 +567,23 @@ public static class Llm
         writer.WriteStartObject();
         writer.WriteString("requestHash", result.RequestHash);
 
-        var chosen = result.Scores.Single(s => s.Rank == 1);
-        writer.WriteString("chosenOptionId", chosen.OptionId);
-        writer.WriteString("rationale", result.Rationale);
+        writer.WriteString("modelRankOneOptionId", decision.ModelRankOneOptionId);
+        writer.WriteString("chosenOptionId", decision.ChosenOptionId);
+        writer.WriteBoolean("retainedPreviousChoice", decision.RetainedPreviousChoice);
+        if (!string.IsNullOrWhiteSpace(decision.RetentionReason))
+        {
+            writer.WriteString("retentionReason", decision.RetentionReason);
+        }
+
+        writer.WritePropertyName("policy");
+        writer.WriteStartObject();
+        writer.WriteNumber("minCommitTicks", policy.MinCommitTicks);
+        writer.WriteNumber("rescoreEveryTicks", policy.RescoreEveryTicks);
+        writer.WriteNumber("hysteresisMargin", policy.HysteresisMargin);
+        writer.WriteEndObject();
+
+        writer.WriteString("rationale", decision.CommitRationale);
+        writer.WriteString("modelRationale", decision.ModelRationale);
 
         writer.WritePropertyName("scores");
         writer.WriteStartArray();
@@ -453,6 +603,15 @@ public static class Llm
 
         return Encoding.UTF8.GetString(stream.ToArray());
     }
+
+    private sealed record CommitDecision(
+        string ChosenOptionId,
+        double ChosenScore,
+        string ModelRankOneOptionId,
+        bool RetainedPreviousChoice,
+        string? RetentionReason,
+        string CommitRationale,
+        string ModelRationale);
 
     private static string BuildStepKey(string stableId, string suffix)
         => $"llm.{SanitizeStableId(stableId)}.{suffix}";
