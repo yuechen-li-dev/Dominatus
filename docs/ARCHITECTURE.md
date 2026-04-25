@@ -488,6 +488,7 @@ public sealed class MyCommandHandler : IActuationHandler<MyCommand>
 `IActuationPolicy` is a pre-dispatch hook. If any registered policy returns
 `Deny`, the command never reaches its handler and an immediate failed
 `ActuationCompleted` is published instead. This is the safety/governance layer.
+See `docs/ACTUATION_POLICY.md` for the Core helper API and composition model.
 
 ---
 

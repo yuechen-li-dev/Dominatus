@@ -1,3 +1,4 @@
+using CoreActuationPolicies = Dominatus.Core.Runtime.ActuationPolicies;
 using Dominatus.Core.Runtime;
 
 namespace Dominatus.OptFlow;
@@ -9,24 +10,26 @@ public static class ActuationPolicies
 {
     public sealed class AllowAll : IActuationPolicy
     {
+        private static readonly IActuationPolicy Inner = CoreActuationPolicies.AllowAll;
+
         public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
-            => ActuationPolicyDecision.Allow();
+            => Inner.Evaluate(ctx, command);
     }
 
     public sealed class DenyAll(string? reason = null) : IActuationPolicy
     {
+        private readonly IActuationPolicy _inner = CoreActuationPolicies.DenyAll(reason ?? "All actuations are disabled.");
+
         public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
-            => ActuationPolicyDecision.Deny(reason ?? "All actuations are disabled.");
+            => _inner.Evaluate(ctx, command);
     }
 
     public sealed class BlockCommandTypes(params Type[] blockedTypes) : IActuationPolicy
     {
-        private readonly HashSet<Type> _blocked = new(blockedTypes ?? Array.Empty<Type>());
+        private readonly IActuationPolicy _inner = CoreActuationPolicies.BlockCommandTypes(blockedTypes);
 
         public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
-            => _blocked.Contains(command.GetType())
-                ? ActuationPolicyDecision.Deny($"Blocked command type: {command.GetType().Name}")
-                : ActuationPolicyDecision.Allow();
+            => _inner.Evaluate(ctx, command);
     }
 
     public sealed class Predicate(Func<AiCtx, IActuationCommand, ActuationPolicyDecision> fn) : IActuationPolicy
