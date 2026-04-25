@@ -242,3 +242,8 @@ Possible follow-ups:
 - interrupt/force-rescore policies
 - provider-backed decision JSON parsing
 - game-specific examples (for example Civ diplomacy and hybrid chess coach)
+
+## Advanced pattern note (M4a)
+
+For rare high-consequence decisions, V1 M4a adds `Llm.MagiDecide(...)` in `Dominatus.Llm.OptFlow`: two advocate proposals plus a judge over a closed option set, with runtime-sovereign validation and cassette replay.
+
