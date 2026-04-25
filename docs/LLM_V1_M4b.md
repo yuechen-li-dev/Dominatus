@@ -82,6 +82,6 @@ M4b only swaps cassette storage implementation when using JSON persistence.
 
 ## Possible next milestones
 
-- parallel advocate dispatch
+- parallel advocate dispatch (implemented in M4c)
 - provider-backed decision JSON parsing
 - target/action integration
