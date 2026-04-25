@@ -7,10 +7,52 @@ namespace Dominatus.Llm.OptFlow;
 
 public static class Llm
 {
+    public const string LineSpeakerContextKey = "__speaker";
+
     public static readonly LlmSamplingOptions DefaultSampling = new(
         Provider: "fake",
         Model: "scripted-v1",
         Temperature: 0.0);
+
+    public static AiStep Line(
+        string stableId,
+        string speaker,
+        string intent,
+        string persona,
+        Action<LlmContextBuilder> context,
+        BbKey<string> storeAs,
+        LlmSamplingOptions? sampling = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(speaker);
+        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(persona);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Text(
+            stableId: stableId,
+            intent: intent,
+            persona: persona,
+            context: builder =>
+            {
+                builder.Add(LineSpeakerContextKey, speaker);
+
+                try
+                {
+                    context(builder);
+                }
+                catch (InvalidOperationException ex) when (
+                    ex.Message.Contains($"'{LineSpeakerContextKey}'", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Llm.Line reserves context key '{LineSpeakerContextKey}'. " +
+                        "Use a different caller context key for speaker-related data.",
+                        ex);
+                }
+            },
+            storeAs: storeAs,
+            sampling: sampling);
+    }
 
     public static AiStep Text(
         string stableId,

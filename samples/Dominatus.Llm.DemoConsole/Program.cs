@@ -237,13 +237,15 @@ static class OracleScenario
     public static readonly BbKey<string> OracleLineKey = new("oracle.line");
 
     public const string StableId = "demo.oracle.greeting.v1";
+    public const string Speaker = "Oracle";
     public const string Intent = "greet the player at the shrine";
     public const string Persona = "Ancient oracle. Warm, cryptic, concise.";
     public const string FakeResponse = "Mira, the moonlit shrine remembers your footsteps before you make them.";
 
     public static AiStep BuildStep(LlmSamplingOptions sampling)
-        => Llm.Text(
+        => Llm.Line(
             stableId: StableId,
+            speaker: Speaker,
             intent: Intent,
             persona: Persona,
             context: ctx => ctx
@@ -256,6 +258,7 @@ static class OracleScenario
     public static LlmTextRequest BuildRequest(LlmSamplingOptions sampling)
     {
         var context = new LlmContextBuilder()
+            .Add(Llm.LineSpeakerContextKey, Speaker)
             .Add("playerName", "Mira")
             .Add("location", "moonlit shrine")
             .Add("oracleMood", "pleased but ominous")
