@@ -27,26 +27,70 @@ catch (Exception ex)
 
 static void RunDemo(DemoOptions options)
 {
-    var request = OracleScenario.BuildRequest();
+    var cassetteMode = ToCassetteMode(options.Mode);
+    var factoryResult = LlmProviderClientFactory.Create(new LlmProviderClientFactoryOptions(
+        Client: options.Client,
+        CassetteMode: cassetteMode,
+        ModelOverride: options.Model));
+
+    var sampling = new LlmSamplingOptions(
+        Provider: factoryResult.Provider,
+        Model: factoryResult.Model,
+        Temperature: 0.0,
+        MaxOutputTokens: 64,
+        TopP: 1.0);
+
+    var request = OracleScenario.BuildRequest(sampling);
     var requestHash = LlmRequestHasher.ComputeHash(request);
+    var cassette = CreateCassette(options, requestHash, request);
 
-    ILlmCassette cassette = CreateCassette(options, requestHash, request);
+    var countingClient = new CountingLlmClient(factoryResult.Client);
+    var (world, ctx) = CreateWorldAndCtx(countingClient, cassetteMode, cassette);
 
-    var cassetteMode = options.Mode is DemoMode.Live
-        ? LlmCassetteMode.Live
-        : options.Mode is DemoMode.Record
-            ? LlmCassetteMode.Record
-            : options.Mode is DemoMode.Replay
-                ? LlmCassetteMode.Replay
-                : LlmCassetteMode.Strict;
+    var step = OracleScenario.BuildStep(sampling);
 
-    RunSingleMode(options, cassetteMode, cassette, requestHash);
+    try
+    {
+        ExecuteStep(step, ctx);
+
+        Console.WriteLine($"Client: {options.Client.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Mode: {options.Mode.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Model: {factoryResult.Model}");
+        Console.WriteLine($"CassettePath: {options.CassettePath ?? "<in-memory>"}");
+        Console.WriteLine($"StableId: {OracleScenario.StableId}");
+        Console.WriteLine($"RequestHash: {requestHash}");
+        Console.WriteLine($"ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
+        Console.WriteLine($"ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"Oracle.Line: {ctx.Bb.GetOrDefault(OracleScenario.OracleLineKey, string.Empty)}");
+    }
+    catch (InvalidOperationException ex) when (options.Mode is DemoMode.StrictMiss)
+    {
+        Console.WriteLine("Expected strict miss failure:");
+        Console.WriteLine("  Mode: Strict");
+        Console.WriteLine($"  CassettePath: {options.CassettePath ?? "<in-memory>"}");
+        Console.WriteLine($"  StableId: {OracleScenario.StableId}");
+        Console.WriteLine($"  RequestHash: {requestHash}");
+        Console.WriteLine($"  ProviderCalled: {(countingClient.CallCount > 0).ToString().ToLowerInvariant()}");
+        Console.WriteLine($"  ApiKeyPresent: {factoryResult.ApiKeyPresent.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"  Reason: {ex.Message}");
+    }
 
     if (options.Mode is DemoMode.Record && cassette is JsonLlmCassette jsonCassette)
     {
         jsonCassette.Save();
     }
+
+    GC.KeepAlive(world);
 }
+
+static LlmCassetteMode ToCassetteMode(DemoMode mode)
+    => mode is DemoMode.Live
+        ? LlmCassetteMode.Live
+        : mode is DemoMode.Record
+            ? LlmCassetteMode.Record
+            : mode is DemoMode.Replay
+                ? LlmCassetteMode.Replay
+                : LlmCassetteMode.Strict;
 
 static ILlmCassette CreateCassette(DemoOptions options, string requestHash, LlmTextRequest request)
 {
@@ -57,43 +101,12 @@ static ILlmCassette CreateCassette(DemoOptions options, string requestHash, LlmT
 
     var cassette = new InMemoryLlmCassette();
 
-    if (options.Mode is DemoMode.Replay or DemoMode.Strict)
+    if (options.Client is LlmProviderClientKind.Fake && options.Mode is DemoMode.Replay or DemoMode.Strict)
     {
         cassette.Put(requestHash, request, new LlmTextResult(OracleScenario.FakeResponse, requestHash));
     }
 
     return cassette;
-}
-
-static void RunSingleMode(DemoOptions options, LlmCassetteMode cassetteMode, ILlmCassette cassette, string requestHash)
-{
-    var client = new FakeLlmClient(OracleScenario.FakeResponse);
-    var (world, ctx) = CreateWorldAndCtx(client, cassetteMode, cassette);
-
-    var step = OracleScenario.BuildStep();
-
-    try
-    {
-        ExecuteStep(step, ctx);
-
-        Console.WriteLine($"Mode: {options.Mode}");
-        Console.WriteLine($"CassettePath: {options.CassettePath ?? "<in-memory>"}");
-        Console.WriteLine($"StableId: {OracleScenario.StableId}");
-        Console.WriteLine($"RequestHash: {requestHash}");
-        Console.WriteLine($"ProviderCalled: {client.CallCount > 0}");
-        Console.WriteLine($"Oracle.Line: {ctx.Bb.GetOrDefault(OracleScenario.OracleLineKey, string.Empty)}");
-    }
-    catch (InvalidOperationException ex) when (options.Mode is DemoMode.StrictMiss)
-    {
-        Console.WriteLine("Expected strict miss failure:");
-        Console.WriteLine("  Mode: Strict");
-        Console.WriteLine($"  CassettePath: {options.CassettePath ?? "<in-memory>"}");
-        Console.WriteLine($"  StableId: {OracleScenario.StableId}");
-        Console.WriteLine($"  RequestHash: {requestHash}");
-        Console.WriteLine($"  Reason: {ex.Message}");
-    }
-
-    GC.KeepAlive(world);
 }
 
 static void ExecuteStep(AiStep step, AiCtx ctx)
@@ -136,7 +149,7 @@ static IEnumerator<AiStep> RootNode(AiCtx _)
 
 static void PrintUsage()
 {
-    Console.WriteLine("Usage: dotnet run --project samples/Dominatus.Llm.DemoConsole -- --mode <live|record|replay|strict|strict-miss> [--cassette <path>]");
+    Console.WriteLine("Usage: dotnet run --project samples/Dominatus.Llm.DemoConsole -- --mode <live|record|replay|strict|strict-miss> [--client <fake|openai|anthropic|gemini>] [--model <name>] [--cassette <path>]");
 }
 
 enum DemoMode
@@ -148,7 +161,7 @@ enum DemoMode
     StrictMiss,
 }
 
-sealed record DemoOptions(DemoMode Mode, string? CassettePath);
+sealed record DemoOptions(DemoMode Mode, LlmProviderClientKind Client, string? Model, string? CassettePath);
 
 static class DemoOptionsParser
 {
@@ -156,6 +169,8 @@ static class DemoOptionsParser
     {
         string? modeValue = null;
         string? cassettePath = null;
+        string? clientValue = null;
+        string? model = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -169,6 +184,18 @@ static class DemoOptionsParser
             if (string.Equals(arg, "--cassette", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 cassettePath = args[++i];
+                continue;
+            }
+
+            if (string.Equals(arg, "--client", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                clientValue = args[++i];
+                continue;
+            }
+
+            if (string.Equals(arg, "--model", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                model = args[++i];
             }
         }
 
@@ -187,7 +214,21 @@ static class DemoOptionsParser
             _ => (DemoMode?)null,
         };
 
-        return mode is null ? null : new DemoOptions(mode.Value, cassettePath);
+        var client = (clientValue ?? "fake").ToLowerInvariant() switch
+        {
+            "fake" => LlmProviderClientKind.Fake,
+            "openai" => LlmProviderClientKind.OpenAi,
+            "anthropic" => LlmProviderClientKind.Anthropic,
+            "gemini" => LlmProviderClientKind.Gemini,
+            _ => (LlmProviderClientKind?)null,
+        };
+
+        if (mode is null || client is null)
+        {
+            return null;
+        }
+
+        return new DemoOptions(mode.Value, client.Value, model, cassettePath);
     }
 }
 
@@ -200,7 +241,7 @@ static class OracleScenario
     public const string Persona = "Ancient oracle. Warm, cryptic, concise.";
     public const string FakeResponse = "Mira, the moonlit shrine remembers your footsteps before you make them.";
 
-    public static AiStep BuildStep()
+    public static AiStep BuildStep(LlmSamplingOptions sampling)
         => Llm.Text(
             stableId: StableId,
             intent: Intent,
@@ -209,9 +250,10 @@ static class OracleScenario
                 .Add("playerName", "Mira")
                 .Add("location", "moonlit shrine")
                 .Add("oracleMood", "pleased but ominous"),
-            storeAs: OracleLineKey);
+            storeAs: OracleLineKey,
+            sampling: sampling);
 
-    public static LlmTextRequest BuildRequest()
+    public static LlmTextRequest BuildRequest(LlmSamplingOptions sampling)
     {
         var context = new LlmContextBuilder()
             .Add("playerName", "Mira")
@@ -224,8 +266,26 @@ static class OracleScenario
             Intent: Intent,
             Persona: Persona,
             CanonicalContextJson: context,
-            Sampling: Llm.DefaultSampling,
+            Sampling: sampling,
             PromptTemplateVersion: LlmTextRequest.DefaultPromptTemplateVersion,
             OutputContractVersion: LlmTextRequest.DefaultOutputContractVersion);
+    }
+}
+
+sealed class CountingLlmClient : ILlmClient
+{
+    private readonly ILlmClient _inner;
+
+    public int CallCount { get; private set; }
+
+    public CountingLlmClient(ILlmClient inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    }
+
+    public async Task<LlmTextResult> GenerateTextAsync(LlmTextRequest request, string requestHash, CancellationToken cancellationToken)
+    {
+        CallCount++;
+        return await _inner.GenerateTextAsync(request, requestHash, cancellationToken).ConfigureAwait(false);
     }
 }
