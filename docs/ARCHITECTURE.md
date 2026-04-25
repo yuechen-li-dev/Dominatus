@@ -883,3 +883,10 @@ world.Tick(dt)
                                 ├─ Act → dispatch command, continue same tick
                                 └─ Goto/Push/Pop/Succeed/Fail/Decide → ApplyEmittedStep
 ```
+
+## Connectors
+
+For engine integration, use connector packages rather than adding engine dependencies to `Dominatus.Core`.
+
+- Stride runtime bridge docs: `docs/STRIDECONN_M0.md`
+
