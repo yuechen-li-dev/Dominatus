@@ -1,6 +1,8 @@
+using Dominatus.Core.Runtime;
+
 namespace Dominatus.Llm.OptFlow;
 
-public sealed record LlmTextRequest
+public sealed record LlmTextRequest : IActuationCommand
 {
     public const string DefaultPromptTemplateVersion = "llm.text.prompt.v1";
     public const string DefaultOutputContractVersion = "llm.text.v1";
