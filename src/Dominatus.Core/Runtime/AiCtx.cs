@@ -12,4 +12,5 @@ public readonly record struct AiCtx(
     IAiActuator Act)
 {
     public Blackboard.Blackboard Bb => Agent.Bb;
+    public Blackboard.Blackboard WorldBb => World.Bb;
 }
