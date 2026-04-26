@@ -25,6 +25,8 @@ Authentication uses:
 
 M0 does **not** include WebSocket, MQTT, discovery-based permission grants, or YAML automation replacement.
 
+For M1 WebSocket observation bridge (`state_changed`), see `docs/ACTUATORS_HOMEASSISTANT_M1_WEBSOCKET.md`.
+
 ## Options and capability gating
 
 Capability is not granted by package installation alone.
