@@ -12,6 +12,8 @@ It does **not** require LLMs to function. It is fully usable on its own as a det
 
 Dominatus is a general-purpose runtime for any domain that needs agents with memory, structured control flow, commands, and save/restore semantics — including video games, simulations, and industrial control systems.
 
+For practical typed non-LLM side effects, see `Dominatus.Actuators.Standard` (sandboxed file commands + wall-clock actuators): `docs/ACTUATORS_STANDARD_M0.md`.
+
 ---
 
 ## 1. The Five Layers
