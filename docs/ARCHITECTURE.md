@@ -135,6 +135,8 @@ ctx.Bb.Set(Health, hp - 10);
 Nodes should use explicit blackboard surfaces for mutable durable state:
 `ctx.Bb` for agent-local state and `ctx.WorldBb` for shared world/session
 state. World-blackboard dirty-key transition integration is future work.
+For squad/team coordination patterns — and why Dominatus does not currently
+expose native writable team blackboards — see `docs/TEAM_COORDINATION.md`.
 
 ---
 
@@ -510,6 +512,8 @@ an event that was published before the wait began.
 
 The mailbox (`IAiMailbox`) lets you publish events to another agent's bus
 from outside a node: `world.Mail.Send(targetId, message)`.
+For recommended team/squad ownership patterns using mailbox + lead-owned memory,
+see `docs/TEAM_COORDINATION.md`.
 
 ---
 
