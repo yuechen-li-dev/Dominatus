@@ -124,6 +124,15 @@ ctx.WorldBb.Set(Keys.Weather, "rain");
 ctx.Bb.Set(Health, hp - 10);
 ```
 
+**Temporary facts with explicit TTL (simulation time):**
+```csharp
+ctx.Bb.SetFor(Keys.LastSeenEnemy, enemyId, ctx.World.Clock.Time, ttlSeconds: 2.0f);
+if (ctx.Bb.TryGet(Keys.LastSeenEnemy, out var recentEnemy))
+{
+    // still present and not expired by tick-boundary cleanup
+}
+```
+
 **Key properties of the Blackboard:**
 
 - **Revision counter** — incremented on every write where the value actually
@@ -135,6 +144,19 @@ ctx.Bb.Set(Health, hp - 10);
   already stored is a true no-op: no revision bump, no dirty mark, no hook.
 - **`OnSet` hook** — wired at agent construction to `BbChangeTracker`, which
   journals every mutation for the persistence layer.
+- **TTL is opt-in and deterministic** — normal `Set` writes non-expiring values
+  and clears any existing TTL; `SetFor`/`SetUntil` create or refresh key-level
+  expiry metadata using simulation time (`AiWorld.Clock.Time`).
+- **Expiry timing** — expiry occurs at deterministic tick boundaries (world BB
+  after clock advance and before agent ticks; agent BB before brain tick). Reads
+  (`TryGet`, `GetOrDefault`) never mutate or expire data.
+- **Expiry mutation semantics** — runtime expiry behaves like removal: key is
+  removed, key becomes dirty, and revision increments.
+- **Persistence-aware TTL** — snapshot entries can include `exp` (expiry time).
+  Old snapshots without `exp` deserialize as non-expiring.
+- **Not a scheduler** — blackboard TTL has no callbacks/alarms. Use
+  `WaitEvent` timeout for waiting behavior, and Standard time actuators for
+  wall-clock concerns.
 
 Nodes should use explicit blackboard surfaces for mutable durable state:
 `ctx.Bb` for agent-local state and `ctx.WorldBb` for shared world/session

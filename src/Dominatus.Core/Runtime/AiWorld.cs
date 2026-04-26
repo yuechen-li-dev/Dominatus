@@ -48,6 +48,7 @@ public sealed class AiWorld
     public void Tick(float dt)
     {
         Clock.Advance(dt);
+        Bb.Expire(Clock.Time);
 
         if (Actuator is ITickableActuator tickable)
             tickable.Tick(this);
