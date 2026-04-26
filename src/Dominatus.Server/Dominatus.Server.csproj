@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>Dominatus.Server</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Yuechen Li</Authors>
+    <Description>ASP.NET Core server integration for Dominatus. Provides read-only inspection endpoints over AiWorld state, agents, blackboards, public snapshots, and active HFSM paths so web UIs can be built on top.</Description>
+    <PackageTags>ai;agent;server;aspnetcore;minimal-api;inspection;dominatus</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial preview ASP.NET Core inspection package for Dominatus. Includes a thread-safe runtime wrapper and read-only Minimal API endpoints for world, agent, blackboard, public snapshot, and HFSM path inspection.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+  </ItemGroup>
+</Project>

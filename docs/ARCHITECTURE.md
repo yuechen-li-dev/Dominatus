@@ -16,6 +16,7 @@ For practical typed non-LLM side effects, see `Dominatus.Actuators.Standard` (sa
 
 For Home Assistant REST integration as a typed allowlisted actuator bridge, see `Dominatus.Actuators.HomeAssistant`: `docs/ACTUATORS_HOMEASSISTANT_M0.md`.
 For Home Assistant WebSocket `state_changed` environment observation bridge, see `docs/ACTUATORS_HOMEASSISTANT_M1_WEBSOCKET.md`.
+For ASP.NET inspection endpoints suitable for custom web UIs, see `Dominatus.Server` (`docs/DOMINATUS_SERVER_M0.md`).
 
 ---
 
