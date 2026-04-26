@@ -15,4 +15,12 @@
 
     <PackageReference Include="Stride.Core.Assets.CompilerApp" Version="4.3.0.2507" IncludeAssets="build;buildTransitive" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+    <ProjectReference Include="..\..\..\src\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
+    <ProjectReference Include="..\..\..\src\Dominatus.StrideConn\Dominatus.StrideConn.csproj" />
+  </ItemGroup>
+
 </Project>
