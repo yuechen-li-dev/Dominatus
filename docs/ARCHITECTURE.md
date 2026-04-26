@@ -506,6 +506,9 @@ event with that id appears on the agent's event bus.
 Typed payload completions are NativeAOT-friendly: use generic completion paths
 (`HandlerResult.CompletedWithPayload<T>(...)` / `CompleteLater<T>(...)`) so `T` is statically
 closed and no runtime generic reflection is required.
+Core persistence JSON is also NativeAOT-friendly: blackboard snapshot/delta blobs are
+encoded manually with a tagged primitive codec, while checkpoint/replay/cursor DTOs use
+source-generated `System.Text.Json` metadata in `DominatusJsonContext`.
 
 ### Registering a handler
 

@@ -22,7 +22,7 @@ public static class EventCursorCodec
     /// suitable for storage in <see cref="AgentCheckpoint.EventCursorBlob"/>.
     /// </summary>
     public static byte[] Serialize(EventCursorSnapshot snapshot)
-        => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot));
+        => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot, DominatusJsonContext.Default.EventCursorSnapshot));
 
     /// <summary>
     /// Deserializes a blob produced by <see cref="Serialize"/>.
@@ -37,7 +37,7 @@ public static class EventCursorCodec
         if (json.Trim() == "{\"v\":1}")
             return new EventCursorSnapshot(Version, Array.Empty<PendingActuation>());
 
-        return JsonSerializer.Deserialize<EventCursorSnapshot>(json)
+        return JsonSerializer.Deserialize(json, DominatusJsonContext.Default.EventCursorSnapshot)
                ?? new EventCursorSnapshot(Version, Array.Empty<PendingActuation>());
     }
 

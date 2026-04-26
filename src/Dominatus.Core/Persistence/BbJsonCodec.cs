@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using System.Text;
+﻿using System.IO;
 using System.Text.Json;
 using Dominatus.Core.Blackboard;
 
@@ -34,19 +33,32 @@ public static class BbJsonCodec
     /// </summary>
     public static byte[] SerializeSnapshot(IEnumerable<BlackboardEntrySnapshot> entries)
     {
-        var list = new List<BbEntryJson>();
+        using var ms = new MemoryStream();
+        using var writer = new Utf8JsonWriter(ms);
 
+        writer.WriteStartObject();
+        writer.WriteNumber("v", SnapshotVersion);
+        writer.WritePropertyName("entries");
+        writer.WriteStartArray();
         foreach (var entry in entries)
         {
             var k = entry.Key;
             var val = entry.Value;
             if (val is null) continue;
             if (!TryToTyped(val, out var tv)) continue;
-            list.Add(new BbEntryJson(k, tv.t, tv.v, entry.ExpiresAt));
+
+            writer.WriteStartObject();
+            writer.WriteString("k", k);
+            WriteTypedValue(writer, tv);
+            if (entry.ExpiresAt.HasValue)
+                writer.WriteNumber("exp", entry.ExpiresAt.Value);
+            writer.WriteEndObject();
         }
 
-        var snap = new BbSnapshotJson(SnapshotVersion, list.ToArray());
-        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snap));
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+        writer.Flush();
+        return ms.ToArray();
     }
 
     /// <summary>
@@ -72,13 +84,32 @@ public static class BbJsonCodec
     /// </summary>
     public static BlackboardEntrySnapshot[] DeserializeSnapshotEntries(byte[] blob)
     {
-        var json = Encoding.UTF8.GetString(blob);
-        var snap = JsonSerializer.Deserialize<BbSnapshotJson>(json)
-                   ?? throw new InvalidOperationException("Bad BB snapshot json.");
+        using var doc = JsonDocument.Parse(blob);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Bad BB snapshot json: root must be an object.");
 
-        var entries = new List<BlackboardEntrySnapshot>(snap.entries.Length);
-        foreach (var e in snap.entries)
-            entries.Add(new BlackboardEntrySnapshot(e.k, FromTyped(e.t, e.v), e.exp));
+        if (!root.TryGetProperty("entries", out var entriesElement) || entriesElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Bad BB snapshot json: missing entries array.");
+
+        var entries = new List<BlackboardEntrySnapshot>(entriesElement.GetArrayLength());
+        foreach (var e in entriesElement.EnumerateArray())
+        {
+            if (e.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Bad BB snapshot json: entry must be an object.");
+
+            var key = ReadRequiredString(e, "k");
+            var value = ReadTypedObject(e);
+            float? exp = null;
+            if (e.TryGetProperty("exp", out var expProp))
+            {
+                if (expProp.ValueKind != JsonValueKind.Number || !expProp.TryGetSingle(out var expValue))
+                    throw new InvalidOperationException("Bad BB snapshot json: exp must be a number.");
+                exp = expValue;
+            }
+
+            entries.Add(new BlackboardEntrySnapshot(key, value, exp));
+        }
 
         return entries.ToArray();
     }
@@ -92,24 +123,39 @@ public static class BbJsonCodec
     /// </summary>
     public static byte[] SerializeDeltaLog(IEnumerable<BbDeltaEntry> entries)
     {
-        var list = new List<BbDeltaEntryJson>();
+        using var ms = new MemoryStream();
+        using var writer = new Utf8JsonWriter(ms);
 
+        writer.WriteStartObject();
+        writer.WriteNumber("v", DeltaVersion);
+        writer.WritePropertyName("entries");
+        writer.WriteStartArray();
         foreach (var e in entries)
         {
-            BbTypedValue? oldTv = null;
-            BbTypedValue? newTv = null;
+            writer.WriteStartObject();
+            writer.WriteNumber("ts", e.TimeSeconds);
+            writer.WriteString("k", e.KeyId);
+            writer.WriteString("op", e.Op);
 
             if (e.OldValue is not null && TryToTyped(e.OldValue, out var oldT))
-                oldTv = new BbTypedValue(oldT.t, oldT.v);
+            {
+                writer.WritePropertyName("old");
+                WriteTypedValueObject(writer, oldT);
+            }
 
             if (e.NewValue is not null && TryToTyped(e.NewValue, out var newT))
-                newTv = new BbTypedValue(newT.t, newT.v);
+            {
+                writer.WritePropertyName("new");
+                WriteTypedValueObject(writer, newT);
+            }
 
-            list.Add(new BbDeltaEntryJson(e.TimeSeconds, e.KeyId, e.Op, oldTv, newTv));
+            writer.WriteEndObject();
         }
 
-        var log = new BbDeltaLogJson(DeltaVersion, list.ToArray());
-        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(log));
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+        writer.Flush();
+        return ms.ToArray();
     }
 
     /// <summary>
@@ -117,16 +163,40 @@ public static class BbJsonCodec
     /// </summary>
     public static BbDeltaEntry[] DeserializeDeltaLog(byte[] blob)
     {
-        var json = Encoding.UTF8.GetString(blob);
-        var log = JsonSerializer.Deserialize<BbDeltaLogJson>(json)
-                   ?? throw new InvalidOperationException("Bad BB delta json.");
+        using var doc = JsonDocument.Parse(blob);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Bad BB delta json: root must be an object.");
+        if (!root.TryGetProperty("entries", out var entriesElement) || entriesElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Bad BB delta json: missing entries array.");
 
-        var outList = new List<BbDeltaEntry>(log.entries.Length);
-        foreach (var e in log.entries)
+        var outList = new List<BbDeltaEntry>(entriesElement.GetArrayLength());
+        foreach (var e in entriesElement.EnumerateArray())
         {
-            object? oldV = e.old is null ? null : FromTyped(e.old.t, e.old.v);
-            object? newV = e.@new is null ? null : FromTyped(e.@new.t, e.@new.v);
-            outList.Add(new BbDeltaEntry(e.ts, e.k, e.op, oldV, newV));
+            if (e.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Bad BB delta json: entry must be an object.");
+
+            var ts = ReadRequiredSingle(e, "ts");
+            var key = ReadRequiredString(e, "k");
+            var op = ReadRequiredString(e, "op");
+
+            object? oldV = null;
+            object? newV = null;
+            if (e.TryGetProperty("old", out var oldProp))
+            {
+                if (oldProp.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("Bad BB delta json: old must be an object.");
+                oldV = ReadTypedObject(oldProp);
+            }
+
+            if (e.TryGetProperty("new", out var newProp))
+            {
+                if (newProp.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("Bad BB delta json: new must be an object.");
+                newV = ReadTypedObject(newProp);
+            }
+
+            outList.Add(new BbDeltaEntry(ts, key, op, oldV, newV));
         }
 
         return outList.ToArray();
@@ -165,21 +235,85 @@ public static class BbJsonCodec
     /// and parse from there, which is unambiguous for all supported types.
     /// </para>
     /// </summary>
-    private static object FromTyped(string t, object v)
+    private static object FromTyped(string t, JsonElement valueElement)
     {
-        // STJ deserialises object-typed fields as JsonElement — unwrap to string first.
-        string raw = v is JsonElement je ? je.GetRawText().Trim('"') : Convert.ToString(v) ?? "";
-
         return t switch
         {
-            "bool" => bool.Parse(raw),
-            "int" => int.Parse(raw),
-            "long" => long.Parse(raw),
-            "float" => float.Parse(raw, CultureInfo.InvariantCulture),
-            "double" => double.Parse(raw, CultureInfo.InvariantCulture),
-            "string" => raw,
-            "guid" => Guid.Parse(raw),
+            "bool" => valueElement.ValueKind == JsonValueKind.True || valueElement.ValueKind == JsonValueKind.False
+                ? valueElement.GetBoolean()
+                : throw new InvalidOperationException("Bad typed value: bool expected."),
+            "int" => valueElement.TryGetInt32(out var intValue)
+                ? intValue
+                : throw new InvalidOperationException("Bad typed value: int expected."),
+            "long" => valueElement.TryGetInt64(out var longValue)
+                ? longValue
+                : throw new InvalidOperationException("Bad typed value: long expected."),
+            "float" => valueElement.TryGetSingle(out var floatValue)
+                ? floatValue
+                : throw new InvalidOperationException("Bad typed value: float expected."),
+            "double" => valueElement.TryGetDouble(out var doubleValue)
+                ? doubleValue
+                : throw new InvalidOperationException("Bad typed value: double expected."),
+            "string" => valueElement.ValueKind == JsonValueKind.String
+                ? valueElement.GetString() ?? string.Empty
+                : throw new InvalidOperationException("Bad typed value: string expected."),
+            "guid" => valueElement.ValueKind == JsonValueKind.String
+                ? Guid.Parse(valueElement.GetString() ?? string.Empty)
+                : throw new InvalidOperationException("Bad typed value: guid string expected."),
             _ => throw new NotSupportedException($"Unsupported BB type '{t}'.")
         };
+    }
+
+    private static void WriteTypedValue(Utf8JsonWriter writer, (string t, object v) tv)
+    {
+        writer.WriteString("t", tv.t);
+        writer.WritePropertyName("v");
+        WritePrimitive(writer, tv);
+    }
+
+    private static void WriteTypedValueObject(Utf8JsonWriter writer, (string t, object v) tv)
+    {
+        writer.WriteStartObject();
+        WriteTypedValue(writer, tv);
+        writer.WriteEndObject();
+    }
+
+    private static void WritePrimitive(Utf8JsonWriter writer, (string t, object v) tv)
+    {
+        switch (tv.t)
+        {
+            case "bool": writer.WriteBooleanValue((bool)tv.v); break;
+            case "int": writer.WriteNumberValue((int)tv.v); break;
+            case "long": writer.WriteNumberValue((long)tv.v); break;
+            case "float": writer.WriteNumberValue((float)tv.v); break;
+            case "double": writer.WriteNumberValue((double)tv.v); break;
+            case "string": writer.WriteStringValue((string)tv.v); break;
+            case "guid": writer.WriteStringValue((string)tv.v); break;
+            default:
+                throw new NotSupportedException($"Unsupported BB type '{tv.t}'.");
+        }
+    }
+
+    private static object ReadTypedObject(JsonElement element)
+    {
+        var t = ReadRequiredString(element, "t");
+        if (!element.TryGetProperty("v", out var valueElement))
+            throw new InvalidOperationException("Bad typed value: missing v.");
+
+        return FromTyped(t, valueElement);
+    }
+
+    private static string ReadRequiredString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException($"Bad json: missing string property '{propertyName}'.");
+        return value.GetString() ?? string.Empty;
+    }
+
+    private static float ReadRequiredSingle(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Number || !value.TryGetSingle(out var parsed))
+            throw new InvalidOperationException($"Bad json: missing numeric property '{propertyName}'.");
+        return parsed;
     }
 }
