@@ -92,3 +92,62 @@ Installer behavior:
 - Scene asset was not auto-edited; script attachment is manual.
 - UI is intentionally minimal and not styled/polished.
 - Ask input is functional but includes fallback quick-answer button for rapid testing.
+
+## M1.1 visibility + diagnostics update
+
+M1.1 makes the dialogue surface explicitly visible and self-diagnosing in runtime logs.
+
+### Visibility/layout changes
+
+- `StrideDialogueSurface` now initializes a full-screen root `Grid` with explicit stretch alignment and an obvious tinted background.
+- The dialogue panel is explicitly bottom-aligned with a fixed height and opaque background.
+- Speaker/body/prompt text uses larger, high-contrast colors and wrapping.
+- Choice buttons and ask buttons use explicit readable text styling.
+
+### Runtime breadcrumbs (expected logs)
+
+At startup in sandbox logs, expect lines similar to:
+
+- `InstallDominatusRustSimulator.Start entered`
+- `StrideDominatusSystem existing` or `StrideDominatusSystem created`
+- `IDominatusStrideRuntime resolved`
+- `StrideDialogueSurface initialized`
+- `Ariadne dialogue handlers registered`
+- `RustSimulator graph registered`
+- `AiAgent added`
+- `InstallDominatusRustSimulator.Update active` (one-time on first update)
+
+During dialogue command actuation, expect:
+
+- `TryShowLine called with speaker/text`
+- `TryShowChoose called with prompt/option count`
+- `TryShowAsk called with prompt`
+
+### HFSM root-frame option note
+
+M1.1 uses `new HfsmInstance(graph)` (default `KeepRootFrame = false`) for Rust Simulator.
+This is intentional because Rust Simulator `Root` is a bootstrap flow state, not a root-frame overlay planner.
+
+### Completion behavior note
+
+`StrideDialogueActuationHandler` continues to complete dialogue commands via:
+
+- `host.CompleteLater(ctx, id, ctx.World.Clock.Time, ...)`
+
+This remains the intended M1 pattern; tests verify completion is observed on the next actuator/world tick.
+
+### Linux build limitation note
+
+- The broad Stride sandbox solution can include Windows launcher targets (`net10.0-windows`) that are not buildable on Linux.
+- For M1.1 validation on Linux, use the narrow game project and test projects (`net10.0`) as the source of truth.
+
+## Manual verification checklist (Stride Game Studio on Windows)
+
+1. Open `samples/Dominatus.StrideSandbox/Dominatus.StrideSandbox.sln` in Stride Game Studio on Windows.
+2. Ensure `MainScene` has an entity with `InstallDominatusRustSimulator` attached.
+3. Run the game.
+4. Confirm the first Rust Simulator line appears in a visible dialogue box:
+   - `2:13 AM. The office is empty except for you, a flickering monitor, and a build that refuses to forgive.`
+5. Press Space/Enter or click **Next** to advance.
+6. Confirm choices appear and clickable buttons advance the story.
+7. Confirm Ask step accepts typed input or the `drop(player);` fallback button.

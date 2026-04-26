@@ -38,18 +38,33 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         if (_ui is not null)
             return;
 
+        Console.WriteLine("[Dominatus.StrideConn] StrideDialogueSurface.EnsureInitialized entered");
+
         _ui = _entity.Get<UIComponent>() ?? new UIComponent();
         if (_entity.Get<UIComponent>() is null)
             _entity.Components.Add(_ui);
 
-        _speaker = new TextBlock();
-        _body = new TextBlock();
-        _prompt = new TextBlock();
-        _advanceButton = new Button { Content = new TextBlock { Text = "Next (Space/Enter)" } };
-        _choicePanel = new StackPanel();
+        _speaker = new TextBlock
+        {
+            TextColor = Color.Yellow
+        };
+        _body = new TextBlock
+        {
+            TextColor = Color.White
+        };
+        _prompt = new TextBlock
+        {
+            TextColor = Color.Aqua
+        };
+        _advanceButton = new Button { Content = new TextBlock { Text = "Next (Space/Enter)", TextColor = Color.White } };
+        _choicePanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
         _askInput = new EditText { Text = "" };
-        _askSubmitButton = new Button { Content = new TextBlock { Text = "Submit" } };
-        _askDefaultButton = new Button { Content = new TextBlock { Text = "Use drop(player);" } };
+        _askSubmitButton = new Button { Content = new TextBlock { Text = "Submit", TextColor = Color.White } };
+        _askDefaultButton = new Button { Content = new TextBlock { Text = "Use drop(player);", TextColor = Color.White } };
 
         _advanceButton.Click += (_, _) => CompleteLine();
         _askSubmitButton.Click += (_, _) => CompleteAsk(_askInput.Text ?? string.Empty);
@@ -59,7 +74,9 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         {
             Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Bottom
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Height = 420,
+            BackgroundColor = new Color(0, 0, 0, 230)
         };
 
         panel.Children.Add(_speaker);
@@ -73,11 +90,14 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
 
         _root = new Grid
         {
-            BackgroundColor = new Color(10, 10, 10, 180)
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            BackgroundColor = new Color(20, 30, 60, 140)
         };
         _root.Children.Add(panel);
 
         _ui.Page = new UIPage { RootElement = _root };
+        Console.WriteLine("[Dominatus.StrideConn] StrideDialogueSurface initialized");
         Refresh();
     }
 
@@ -111,6 +131,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         if (_state.IsBusy)
             return false;
 
+        Console.WriteLine($"[Dominatus.StrideConn] TryShowLine called with speaker='{command.Speaker ?? string.Empty}', text='{command.Text}'");
         _state.ShowLine(command);
         _onAdvance = onAdvance;
         _onChoose = null;
@@ -124,6 +145,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         if (_state.IsBusy)
             return false;
 
+        Console.WriteLine($"[Dominatus.StrideConn] TryShowChoose called with prompt='{command.Prompt}', optionCount={command.Options.Count}");
         _state.ShowChoose(command);
         _onAdvance = null;
         _onChoose = onChoose;
@@ -137,6 +159,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         if (_state.IsBusy)
             return false;
 
+        Console.WriteLine($"[Dominatus.StrideConn] TryShowAsk called with prompt='{command.Prompt}'");
         _state.ShowAsk(command);
         _onAdvance = null;
         _onChoose = null;
@@ -221,7 +244,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
                 var option = _state.Options[i];
                 var button = new Button
                 {
-                    Content = new TextBlock { Text = $"{i + 1}. {option.Text}" }
+                    Content = new TextBlock { Text = $"{i + 1}. {option.Text}", TextColor = Color.White }
                 };
                 var key = option.Key;
                 button.Click += (_, _) => CompleteChoose(key);
