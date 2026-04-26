@@ -151,3 +151,78 @@ This remains the intended M1 pattern; tests verify completion is observed on the
 5. Press Space/Enter or click **Next** to advance.
 6. Confirm choices appear and clickable buttons advance the story.
 7. Confirm Ask step accepts typed input or the `drop(player);` fallback button.
+
+## M1.2 dialogue-path proof + robust UI attachment
+
+M1.2 focuses on proving the command path in the running sandbox and making UI attachment more robust without relying on manual scene asset edits.
+
+### What changed in M1.2
+
+- `StrideDialogueSurface` now supports a caller-provided `UIComponent` and can also self-host a dedicated child entity with a `UIComponent` when none exists. If the installer entity is already in a scene, the UI host is explicitly added to that scene; otherwise it falls back to attaching UI directly on the installer entity.
+- `EnsureInitialized()` writes explicit UI diagnostics (attach result, enabled state, page/root presence, root alignment/visibility).
+- A persistent status text is shown immediately after initialize, independent of dialogue actuation state.
+- Dialogue panel visibility now toggles independently of the root UI component so status remains visible while idle.
+- `InstallDominatusRustSimulator` now emits one-time startup breadcrumbs and updates visible status text through startup.
+- Added diagnostic startup option:
+  - `ShowStartupSmokeLine` (default `true`) for explicit startup status text: `Dominatus Stride dialogue surface initialized.`
+
+### Runtime breadcrumbs (expected logs)
+
+At startup:
+
+- `InstallDominatusRustSimulator.Start entered`
+- `StrideDominatusSystem created` or `StrideDominatusSystem found`
+- `runtime resolved`
+- `surface initialized`
+- `handlers registered`
+- `graph registered`
+- `agent added`
+- `Update active`
+
+During dialogue actuation:
+
+- `TryShowLine called`
+- `TryShowChoose called`
+- `TryShowAsk called`
+- `line completed`
+- `choice completed`
+- `ask completed`
+
+### Troubleshooting
+
+#### Where to look for logs
+
+- Run the sandbox from Stride Game Studio or via `dotnet run` and watch standard output.
+- Search for `[Dominatus.StrideSandbox]` and `[Dominatus.StrideConn]` prefixes.
+
+#### What visible startup/status text should appear
+
+At minimum, one or more of the following should be visible in the game window status overlay:
+
+- `Dominatus installer started`
+- `Dominatus world ticked`
+- `RustSimulator agent added`
+- `Waiting for first dialogue...`
+- `DiagLine received: ...`
+
+#### Startup status appears, but RustSimulator line does not
+
+This usually means UI bootstrapping succeeded but RustSimulator did not emit (or did not reach) `DiagLineCommand` yet.
+Use breadcrumbs to verify ordering through `graph registered`, `agent added`, and first `TryShowLine called`.
+
+#### Logs show `TryShowLine called`, but no UI appears
+
+This strongly indicates a rendering/attachment issue rather than command dispatch.
+Check UI diagnostics for:
+
+- `UIComponent attached: true`
+- `UIComponent.Enabled: true`
+- `UIComponent.Page != null: true`
+- `UIPage.RootElement != null: true`
+
+If those are all true and line logs fire, inspect scene/game compositor/UI rendering configuration next.
+
+#### Scene asset editing note
+
+Stride scene asset YAML is fragile; M1 avoids hand-editing scene YAML wherever possible.
+Runtime script wiring and runtime UI host attachment are preferred for this milestone.

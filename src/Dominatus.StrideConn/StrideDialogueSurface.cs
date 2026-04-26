@@ -14,7 +14,10 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
     private readonly Entity _entity;
 
     private UIComponent? _ui;
+    private Entity? _uiHostEntity;
     private Grid? _root;
+    private StackPanel? _dialoguePanel;
+    private TextBlock? _status;
     private TextBlock? _speaker;
     private TextBlock? _body;
     private TextBlock? _prompt;
@@ -28,41 +31,60 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
     private Action<string>? _onChoose;
     private Action<string>? _onAsk;
 
+    private string _statusText = "Dominatus installer started";
+    private bool _loggedUiAttachment;
+    private bool _uiHostAddedToScene;
+
     public StrideDialogueSurface(Entity entity)
+        : this(entity, existingUiComponent: null)
+    {
+    }
+
+    public StrideDialogueSurface(Entity entity, UIComponent? existingUiComponent)
     {
         _entity = entity ?? throw new ArgumentNullException(nameof(entity));
+        _ui = existingUiComponent;
     }
 
     public void EnsureInitialized()
     {
-        if (_ui is not null)
+        if (_root is not null)
             return;
 
         Console.WriteLine("[Dominatus.StrideConn] StrideDialogueSurface.EnsureInitialized entered");
 
-        _ui = _entity.Get<UIComponent>() ?? new UIComponent();
-        if (_entity.Get<UIComponent>() is null)
-            _entity.Components.Add(_ui);
+        EnsureUiComponentAttached();
+
+        _status = new TextBlock
+        {
+            TextColor = Color.Orange,
+            Text = _statusText
+        };
 
         _speaker = new TextBlock
         {
             TextColor = Color.Yellow
         };
+
         _body = new TextBlock
         {
-            TextColor = Color.White
+            TextColor = Color.White,
+            Text = "Dominatus Stride dialogue surface initialized."
         };
+
         _prompt = new TextBlock
         {
-            TextColor = Color.Aqua
+            TextColor = Color.Aqua,
+            Text = "Waiting for first dialogue..."
         };
+
         _advanceButton = new Button { Content = new TextBlock { Text = "Next (Space/Enter)", TextColor = Color.White } };
         _choicePanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        _askInput = new EditText { Text = "" };
+        _askInput = new EditText { Text = string.Empty };
         _askSubmitButton = new Button { Content = new TextBlock { Text = "Submit", TextColor = Color.White } };
         _askDefaultButton = new Button { Content = new TextBlock { Text = "Use drop(player);", TextColor = Color.White } };
 
@@ -70,35 +92,51 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         _askSubmitButton.Click += (_, _) => CompleteAsk(_askInput.Text ?? string.Empty);
         _askDefaultButton.Click += (_, _) => CompleteAsk("drop(player);");
 
-        var panel = new StackPanel
+        _dialoguePanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Bottom,
             Height = 420,
-            BackgroundColor = new Color(0, 0, 0, 230)
+            BackgroundColor = new Color(0, 0, 0, 230),
+            Visibility = Visibility.Collapsed
         };
 
-        panel.Children.Add(_speaker);
-        panel.Children.Add(_body);
-        panel.Children.Add(_prompt);
-        panel.Children.Add(_choicePanel);
-        panel.Children.Add(_askInput);
-        panel.Children.Add(_askSubmitButton);
-        panel.Children.Add(_askDefaultButton);
-        panel.Children.Add(_advanceButton);
+        _dialoguePanel.Children.Add(_speaker);
+        _dialoguePanel.Children.Add(_body);
+        _dialoguePanel.Children.Add(_prompt);
+        _dialoguePanel.Children.Add(_choicePanel);
+        _dialoguePanel.Children.Add(_askInput);
+        _dialoguePanel.Children.Add(_askSubmitButton);
+        _dialoguePanel.Children.Add(_askDefaultButton);
+        _dialoguePanel.Children.Add(_advanceButton);
 
         _root = new Grid
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
-            BackgroundColor = new Color(20, 30, 60, 140)
+            BackgroundColor = new Color(20, 30, 60, 40)
         };
-        _root.Children.Add(panel);
+        _root.Children.Add(_status);
+        _root.Children.Add(_dialoguePanel);
 
+        _ui!.Enabled = true;
         _ui.Page = new UIPage { RootElement = _root };
+
+        LogUiDiagnostics();
         Console.WriteLine("[Dominatus.StrideConn] StrideDialogueSurface initialized");
+
         Refresh();
+    }
+
+    public void SetStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return;
+
+        _statusText = status;
+        if (_status is not null)
+            _status.Text = status;
     }
 
     public void Update(InputManager input)
@@ -132,6 +170,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
             return false;
 
         Console.WriteLine($"[Dominatus.StrideConn] TryShowLine called with speaker='{command.Speaker ?? string.Empty}', text='{command.Text}'");
+        SetStatus($"DiagLine received: {command.Text}");
         _state.ShowLine(command);
         _onAdvance = onAdvance;
         _onChoose = null;
@@ -146,6 +185,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
             return false;
 
         Console.WriteLine($"[Dominatus.StrideConn] TryShowChoose called with prompt='{command.Prompt}', optionCount={command.Options.Count}");
+        SetStatus($"Choose received: {command.Prompt}");
         _state.ShowChoose(command);
         _onAdvance = null;
         _onChoose = onChoose;
@@ -160,6 +200,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
             return false;
 
         Console.WriteLine($"[Dominatus.StrideConn] TryShowAsk called with prompt='{command.Prompt}'");
+        SetStatus($"Ask received: {command.Prompt}");
         _state.ShowAsk(command);
         _onAdvance = null;
         _onChoose = null;
@@ -168,11 +209,68 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         return true;
     }
 
+    private void EnsureUiComponentAttached()
+    {
+        if (_ui is not null)
+        {
+            if (_entity.Get<UIComponent>() is null)
+                _entity.Components.Add(_ui);
+
+            return;
+        }
+
+        _ui = _entity.Get<UIComponent>();
+        if (_ui is not null)
+            return;
+
+        if (_entity.Scene is null)
+        {
+            // Fallback for tests or unusual initialization order before the entity has a Scene.
+            _ui = new UIComponent();
+            _entity.Components.Add(_ui);
+            return;
+        }
+
+        _uiHostEntity = new Entity("DominatusDialogueUiHost");
+        _ui = new UIComponent();
+        _uiHostEntity.Components.Add(_ui);
+        _uiHostEntity.Transform.Parent = _entity.Transform;
+        _entity.Scene.Entities.Add(_uiHostEntity);
+        _uiHostAddedToScene = true;
+    }
+
+    private void LogUiDiagnostics()
+    {
+        if (_loggedUiAttachment || _ui is null)
+            return;
+
+        var ui = _ui;
+        _loggedUiAttachment = true;
+        Console.WriteLine($"[Dominatus.StrideConn] UIComponent attached: {ui is not null}");
+        Console.WriteLine($"[Dominatus.StrideConn] UIComponent.Enabled: {ui!.Enabled}");
+        Console.WriteLine($"[Dominatus.StrideConn] UIComponent.Page != null: {ui.Page is not null}");
+        Console.WriteLine($"[Dominatus.StrideConn] UIPage.RootElement != null: {ui.Page?.RootElement is not null}");
+
+        if (_root is not null)
+        {
+            Console.WriteLine($"[Dominatus.StrideConn] Root alignment: H={_root.HorizontalAlignment}, V={_root.VerticalAlignment}");
+            Console.WriteLine($"[Dominatus.StrideConn] Root visibility: {_root.Visibility}");
+        }
+
+        if (_uiHostEntity is not null)
+        {
+            Console.WriteLine($"[Dominatus.StrideConn] UIComponent hosted by child entity '{_uiHostEntity.Name}'");
+            Console.WriteLine($"[Dominatus.StrideConn] UI host added to scene: {_uiHostAddedToScene}");
+        }
+    }
+
     private void CompleteLine()
     {
         if (_state.Mode != DialogueMode.Line)
             return;
 
+        Console.WriteLine("[Dominatus.StrideConn] line completed");
+        SetStatus("Waiting for first dialogue...");
         var callback = _onAdvance;
         ResetSurface();
         callback?.Invoke();
@@ -195,6 +293,8 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         if (_state.Mode != DialogueMode.Choose)
             return;
 
+        Console.WriteLine($"[Dominatus.StrideConn] choice completed: {choice}");
+        SetStatus("Waiting for first dialogue...");
         var callback = _onChoose;
         ResetSurface();
         callback?.Invoke(choice);
@@ -205,9 +305,12 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         if (_state.Mode != DialogueMode.Ask)
             return;
 
+        var resolved = string.IsNullOrWhiteSpace(answer) ? "drop(player);" : answer;
+        Console.WriteLine($"[Dominatus.StrideConn] ask completed: {resolved}");
+        SetStatus("Waiting for first dialogue...");
         var callback = _onAsk;
         ResetSurface();
-        callback?.Invoke(string.IsNullOrWhiteSpace(answer) ? "drop(player);" : answer);
+        callback?.Invoke(resolved);
     }
 
     private void ResetSurface()
@@ -221,15 +324,17 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
 
     private void Refresh()
     {
-        if (_ui is null || _speaker is null || _body is null || _prompt is null || _advanceButton is null || _choicePanel is null || _askInput is null || _askSubmitButton is null || _askDefaultButton is null)
+        if (_ui is null || _status is null || _dialoguePanel is null || _speaker is null || _body is null || _prompt is null || _advanceButton is null || _choicePanel is null || _askInput is null || _askSubmitButton is null || _askDefaultButton is null)
             return;
 
-        _ui.Enabled = _state.IsBusy;
+        _ui.Enabled = true;
+        _status.Text = _statusText;
 
         _speaker.Text = string.IsNullOrWhiteSpace(_state.Speaker) ? string.Empty : $"[{_state.Speaker}]";
         _body.Text = _state.BodyText;
         _prompt.Text = _state.Prompt;
 
+        _dialoguePanel.Visibility = _state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
         _advanceButton.Visibility = _state.Mode == DialogueMode.Line ? Visibility.Visible : Visibility.Collapsed;
         _choicePanel.Visibility = _state.Mode == DialogueMode.Choose ? Visibility.Visible : Visibility.Collapsed;
         _askInput.Visibility = _state.Mode == DialogueMode.Ask ? Visibility.Visible : Visibility.Collapsed;
