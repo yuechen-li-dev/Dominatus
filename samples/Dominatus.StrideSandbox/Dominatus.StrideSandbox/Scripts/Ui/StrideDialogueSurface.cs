@@ -1,3 +1,6 @@
+#nullable enable
+using System;
+using Dominatus.StrideConn;
 using Ariadne.OptFlow.Commands;
 using Stride.Core.Mathematics;
 using Stride.Engine;
@@ -6,7 +9,7 @@ using Stride.UI;
 using Stride.UI.Controls;
 using Stride.UI.Panels;
 
-namespace Dominatus.StrideConn;
+namespace Dominatus.StrideSandbox.Scripts.Ui;
 
 public sealed class StrideDialogueSurface : IStrideDialogueSurface
 {

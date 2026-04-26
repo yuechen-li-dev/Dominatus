@@ -9,9 +9,11 @@ M0 includes:
 - `StrideEntityRegistry` for explicit ID→`Entity` bindings
 - `DominatusAgentComponent` for editor-friendly explicit agent IDs
 - minimal transform actuation commands/handler (`SetEntityPositionCommand`, `MoveEntityByCommand`, `StrideTransformActuationHandler`)
+- dialogue surface contracts/handler (`IStrideDialogueSurface`, `StrideDialogueState`, `StrideDialogueActuationHandler`)
 
 M0 does **not** include:
 
+- concrete demo dialogue UI (`StrideDialogueSurface` lives in `samples/Dominatus.StrideSandbox`)
 - LLM/provider integration
 - InputMan dependency
 - editor tooling, visual graph tooling, or automatic package registration
@@ -61,3 +63,8 @@ yield return Ai.Act(
 ## Next milestone
 
 - See `docs/STRIDECONN_M1_RUST_SIMULATOR.md` for the M1 Rust Simulator dialogue-box integration.
+
+
+## Publish-readiness note
+
+`Dominatus.StrideConn` is packable (`IsPackable=true`) and intentionally keeps a reusable package surface only: runtime bridge, registry, transform actuators, and dialogue contracts/handler. Sample-specific UI and sandbox wiring stay in the sample project.
