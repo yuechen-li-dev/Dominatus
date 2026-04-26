@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.Actuators.Standard\Dominatus.Actuators.Standard.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+    <ProjectReference Include="..\Dominatus.Actuators.Standard.ProcessTestTool\Dominatus.Actuators.Standard.ProcessTestTool.csproj" />
   </ItemGroup>
 
   <ItemGroup>
