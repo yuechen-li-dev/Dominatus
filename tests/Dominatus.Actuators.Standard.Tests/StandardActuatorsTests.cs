@@ -338,13 +338,17 @@ public sealed class StandardActuatorsTests
     }
 
     [Fact]
-    public void PackageProject_DoesNotReferenceForbiddenPackages()
+    public void StandardPackage_DoesNotReferenceForbiddenPackages()
     {
         var text = File.ReadAllText(Path.Combine(ProjectRoot(), "src", "Dominatus.Actuators.Standard", "Dominatus.Actuators.Standard.csproj"));
         Assert.DoesNotContain("Dominatus.OptFlow", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Dominatus.Llm.OptFlow", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Ariadne.OptFlow", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("StrideConn", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Polly", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("RestSharp", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Flurl", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Microsoft.Extensions.Http", text, StringComparison.OrdinalIgnoreCase);
     }
 
     private static SandboxedFileResolver NewResolver(string rootPath)
