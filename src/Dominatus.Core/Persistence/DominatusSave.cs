@@ -23,18 +23,19 @@ public static class DominatusSave
         // Meta chunk: logical save-format version for chunk interpretation.
         ctx.AddUtf8Json(
             ChunkId.Meta,
-            JsonSerializer.Serialize(new
-            {
-                format = "dominatus-save",
-                v = CurrentVersion,
-                checkpointVersion = checkpoint.Version
-            }));
+            JsonSerializer.Serialize(
+                new DominatusSaveMetaJson("dominatus-save", CurrentVersion, checkpoint.Version),
+                DominatusJsonContext.Default.DominatusSaveMetaJson));
 
         // Core checkpoint payload.
-        ctx.AddUtf8Json(ChunkId.Hfsm, JsonSerializer.Serialize(checkpoint));
+        ctx.AddUtf8Json(
+            ChunkId.Hfsm,
+            JsonSerializer.Serialize(checkpoint, DominatusJsonContext.Default.DominatusCheckpoint));
 
         if (replayLog is not null)
-            ctx.AddUtf8Json(ChunkId.ReplayLog, JsonSerializer.Serialize(replayLog));
+            ctx.AddUtf8Json(
+                ChunkId.ReplayLog,
+                JsonSerializer.Serialize(replayLog, DominatusJsonContext.Default.ReplayLog));
 
         extra?.WriteChunks(ctx);
 
@@ -69,13 +70,13 @@ public static class DominatusSave
         if (!ctx.TryGetUtf8Json(ChunkId.Hfsm, out var checkpointJson))
             throw new InvalidOperationException("Missing dom.hfsm chunk.");
 
-        var checkpoint = JsonSerializer.Deserialize<DominatusCheckpoint>(checkpointJson)
+        var checkpoint = JsonSerializer.Deserialize(checkpointJson, DominatusJsonContext.Default.DominatusCheckpoint)
             ?? throw new InvalidOperationException("Failed to deserialize checkpoint.");
 
         ReplayLog? log = null;
         if (ctx.TryGetUtf8Json(ChunkId.ReplayLog, out var logJson))
         {
-            log = JsonSerializer.Deserialize<ReplayLog>(logJson)
+            log = JsonSerializer.Deserialize(logJson, DominatusJsonContext.Default.ReplayLog)
                   ?? throw new InvalidOperationException("Failed to deserialize replay log.");
         }
 
