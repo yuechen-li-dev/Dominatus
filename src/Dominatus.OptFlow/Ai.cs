@@ -45,6 +45,13 @@ public static class Ai
         Action<AiAgent, T>? onConsumed = null) where T : notnull
         => new(filter, onConsumed);
 
+    public static WaitEvent<T> Event<T>(
+        float timeoutSeconds,
+        Func<T, bool>? filter = null,
+        Action<AiAgent, T>? onConsumed = null,
+        Action<AiAgent>? onTimeout = null) where T : notnull
+        => new(filter, onConsumed, timeoutSeconds, onTimeout);
+
     public static Act Act(IActuationCommand cmd, BbKey<ActuationId>? storeIdAs = null)
     => new(cmd, storeIdAs);
 
