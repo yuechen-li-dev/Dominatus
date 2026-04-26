@@ -17,7 +17,15 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     // Deferred completions: emitted later as ActuationCompleted into the target agent's event bus.
     private readonly List<PendingCompletion> _pending = new();
 
-    private readonly struct PendingCompletion(AgentId agentId, ActuationId id, float dueTime, bool ok, string? error, object? payload, Type? payloadType)
+    private readonly struct PendingCompletion(
+        AgentId agentId,
+        ActuationId id,
+        float dueTime,
+        bool ok,
+        string? error,
+        object? payload,
+        string? payloadTypeTag,
+        Action<AiEventBus, ActuationId, bool, string?, object?>? typedPublisher)
     {
         public readonly AgentId AgentId = agentId;
         public readonly ActuationId Id = id;
@@ -25,7 +33,8 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         public readonly bool Ok = ok;
         public readonly string? Error = error;
         public readonly object? Payload = payload;
-        public readonly Type? PayloadType = payloadType;
+        public readonly string? PayloadTypeTag = payloadTypeTag;
+        public readonly Action<AiEventBus, ActuationId, bool, string?, object?>? TypedPublisher = typedPublisher;
     }
 
     public void Register<TCmd>(IActuationHandler<TCmd> handler) where TCmd : notnull, IActuationCommand
@@ -79,38 +88,31 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         {
             // Immediate completion — publish and ensure not lingering in in-flight set.
             ctx.Agent.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
-
-            if (r.PayloadType is not null)
-            {
-                var completedT = typeof(ActuationCompleted<>).MakeGenericType(r.PayloadType);
-                var typedEvt = Activator.CreateInstance(
-                    completedT,
-                    new object?[] { res.Id, res.Ok, res.Error, res.Payload });
-                ctx.Agent.Events.PublishObject(typedEvt!);
-            }
+            r.TypedPublisher?.Invoke(ctx.Agent.Events, res.Id, res.Ok, res.Error, res.Payload);
         }
         else if (res.Accepted)
         {
             // Deferred completion — register as in-flight so checkpoint capture can record it.
             // Prefer the handler result payload type, but if the handler only supplied the
             // payload type through CompleteLater(...), recover it from the pending queue entry.
-            Type? effectivePayloadType = r.PayloadType;
+            string? effectivePayloadTypeTag = r.PayloadType is not null
+                ? PayloadTypeToTag(r.PayloadType)
+                : null;
 
-            if (effectivePayloadType is null)
+            if (effectivePayloadTypeTag is null)
             {
                 for (int i = _pending.Count - 1; i >= 0; i--)
                 {
                     var p = _pending[i];
                     if (p.AgentId.Equals(ctx.Agent.Id) && p.Id.Equals(id))
                     {
-                        effectivePayloadType = p.PayloadType;
+                        effectivePayloadTypeTag = p.PayloadTypeTag;
                         break;
                     }
                 }
             }
 
-            var tag = PayloadTypeToTag(effectivePayloadType);
-            ctx.Agent.InFlightActuations.Add(new PendingActuation(id.Value, tag));
+            ctx.Agent.InFlightActuations.Add(new PendingActuation(id.Value, effectivePayloadTypeTag));
         }
 
         return res;
@@ -122,7 +124,15 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     /// </summary>
     public void CompleteLater(AiCtx ctx, ActuationId id, float dueTime, bool ok, string? error = null, object? payload = null, Type? payloadType = default)
     {
-        _pending.Add(new PendingCompletion(ctx.Agent.Id, id, dueTime, ok, error, payload, payloadType));
+        _pending.Add(new PendingCompletion(
+            ctx.Agent.Id,
+            id,
+            dueTime,
+            ok,
+            error,
+            payload,
+            PayloadTypeToTag(payloadType),
+            typedPublisher: null));
     }
 
     public void CompleteLater<T>(AiCtx ctx, ActuationId id, float dueTime, bool ok, string? error = null, T? payload = default)
@@ -134,7 +144,8 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
             ok,
             error,
             payload,
-            typeof(T)));
+            PayloadTypeToTag(typeof(T)),
+            PublishTypedCompletion<T>));
     }
 
     public void Tick(AiWorld world)
@@ -153,15 +164,7 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
                 if (agent is not null)
                 {
                     agent.Events.Publish(new ActuationCompleted(p.Id, p.Ok, p.Error, p.Payload));
-
-                    if (p.PayloadType is not null)
-                    {
-                        var completedT = typeof(ActuationCompleted<>).MakeGenericType(p.PayloadType);
-                        var typedEvt = Activator.CreateInstance(
-                            completedT,
-                            new object?[] { p.Id, p.Ok, p.Error, p.Payload });
-                        agent.Events.PublishObject(typedEvt!);
-                    }
+                    p.TypedPublisher?.Invoke(agent.Events, p.Id, p.Ok, p.Error, p.Payload);
 
                     // Deferred completion fired — remove from in-flight set.
                     agent.InFlightActuations.Remove(new PendingActuation(p.Id.Value, null));
@@ -207,6 +210,16 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         _ => null   // unsupported — treat as untyped
     };
 
+    private static void PublishTypedCompletion<T>(
+        AiEventBus bus,
+        ActuationId id,
+        bool ok,
+        string? error,
+        object? payload)
+    {
+        bus.Publish(new ActuationCompleted<T>(id, ok, error, (T?)payload));
+    }
+
     // ----------------- handler plumbing -----------------
 
     public interface IHandler
@@ -220,7 +233,29 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
         bool Ok,
         string? Error = null,
         object? Payload = null,
-        Type? PayloadType = null);
+        Type? PayloadType = null,
+        Action<AiEventBus, ActuationId, bool, string?, object?>? TypedPublisher = null)
+    {
+        public static HandlerResult CompletedOk()
+            => new(Accepted: true, Completed: true, Ok: true);
+
+        public static HandlerResult CompletedFailure(string error)
+            => new(Accepted: true, Completed: true, Ok: false, Error: error);
+
+        public static HandlerResult DeferredAccepted()
+            => new(Accepted: true, Completed: false, Ok: true);
+
+        public static HandlerResult CompletedWithPayload<T>(T payload, bool ok = true, string? error = null)
+            => new(
+                Accepted: true,
+                Completed: true,
+                Ok: ok,
+                Error: error,
+                Payload: payload,
+                PayloadType: typeof(T),
+                TypedPublisher: static (bus, id, completedOk, completedError, p) =>
+                    bus.Publish(new ActuationCompleted<T>(id, completedOk, completedError, (T?)p)));
+    }
 
     private sealed class HandlerAdapter<TCmd> : IHandler where TCmd : notnull, IActuationCommand
     {

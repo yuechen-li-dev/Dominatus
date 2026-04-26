@@ -5,7 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Dominatus.Core</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
+    <IsAotCompatible>true</IsAotCompatible>
     <Authors>Dominatus Contributors</Authors>
     <Description>A deterministic .NET runtime kernel for stateful agents, built on hierarchical finite state machines and utility-based decisions.</Description>
     <PackageTags>ai;agents;hfsm;utility-ai;game-ai;simulation;control-systems;runtime</PackageTags>

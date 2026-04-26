@@ -30,10 +30,10 @@ public sealed class TimeActuationHandler :
         => _clock = clock ?? new StandardSystemClock();
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, GetUtcNowCommand cmd)
-        => new(Accepted: true, Completed: true, Ok: true, Payload: new TimeResult(_clock.UtcNow), PayloadType: typeof(TimeResult));
+        => ActuatorHost.HandlerResult.CompletedWithPayload(new TimeResult(_clock.UtcNow));
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, GetLocalNowCommand cmd)
-        => new(Accepted: true, Completed: true, Ok: true, Payload: new TimeResult(_clock.LocalNow), PayloadType: typeof(TimeResult));
+        => ActuatorHost.HandlerResult.CompletedWithPayload(new TimeResult(_clock.LocalNow));
 }
 
 public static class StandardActuatorRegistration

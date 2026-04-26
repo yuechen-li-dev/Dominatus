@@ -56,21 +56,18 @@ public static class DiagSteps
 
     // Normalise immediate completions so steps are robust against IAiActuator impls
     // that complete synchronously without publishing events.
-    private static void EnsureCompletionEvents(AiCtx ctx, ActuationDispatchResult res, Type? payloadType)
+    private static void EnsureCompletionEvents(AiCtx ctx, ActuationDispatchResult res)
     {
         if (!res.Completed) return;
 
         ctx.Events.Publish(new ActuationCompleted(res.Id, res.Ok, res.Error, res.Payload));
+    }
 
-        if (payloadType is not null)
-        {
-            var completedT = typeof(ActuationCompleted<>).MakeGenericType(payloadType);
-            var typedEvt = Activator.CreateInstance(
-                completedT,
-                new object?[] { res.Id, res.Ok, res.Error, res.Payload });
-
-            ctx.Events.PublishObject(typedEvt!);
-        }
+    private static void EnsureCompletionEvents<T>(AiCtx ctx, ActuationDispatchResult res)
+    {
+        EnsureCompletionEvents(ctx, res);
+        if (res.Completed)
+            ctx.Events.Publish(new ActuationCompleted<T>(res.Id, res.Ok, res.Error, (T?)res.Payload));
     }
 
     /// <summary>
@@ -94,7 +91,7 @@ public static class DiagSteps
                 var res = ctx.Act.Dispatch(ctx, _cmd);
                 ctx.Bb.Set(pendingIdKey, res.Id.Value);
                 ctx.Bb.Set(startedKey, true);
-                EnsureCompletionEvents(ctx, res, payloadType: null);
+                EnsureCompletionEvents(ctx, res);
             }
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));
@@ -130,7 +127,7 @@ public static class DiagSteps
                 var res = ctx.Act.Dispatch(ctx, _cmd);
                 ctx.Bb.Set(pendingIdKey, res.Id.Value);
                 ctx.Bb.Set(startedKey, true);
-                EnsureCompletionEvents(ctx, res, payloadType: typeof(string));
+                EnsureCompletionEvents<string>(ctx, res);
             }
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));
@@ -172,7 +169,7 @@ public static class DiagSteps
                 var res = ctx.Act.Dispatch(ctx, _cmd);
                 ctx.Bb.Set(pendingIdKey, res.Id.Value);
                 ctx.Bb.Set(startedKey, true);
-                EnsureCompletionEvents(ctx, res, payloadType: typeof(string));
+                EnsureCompletionEvents<string>(ctx, res);
             }
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));

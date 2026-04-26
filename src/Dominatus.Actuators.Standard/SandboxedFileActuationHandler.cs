@@ -35,7 +35,7 @@ public sealed class SandboxedFileActuationHandler :
                 return Fail($"Read rejected: file exceeds MaxReadBytes ({_maxReadBytes}).");
 
             var content = File.ReadAllText(resolved.FullPath, Utf8);
-            return Ok(content, typeof(string));
+            return Ok(content);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
@@ -60,7 +60,7 @@ public sealed class SandboxedFileActuationHandler :
 
             EnsureParent(resolved.FullPath);
             File.WriteAllText(resolved.FullPath, cmd.Text, Utf8);
-            return Ok(new FileWriteResult(cmd.Root, resolved.RelativePath, bytes), typeof(FileWriteResult));
+            return Ok(new FileWriteResult(cmd.Root, resolved.RelativePath, bytes));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
@@ -82,7 +82,7 @@ public sealed class SandboxedFileActuationHandler :
             var resolved = _resolver.Resolve(cmd.Root, cmd.Path);
             EnsureParent(resolved.FullPath);
             File.AppendAllText(resolved.FullPath, cmd.Text, Utf8);
-            return Ok(new FileWriteResult(cmd.Root, resolved.RelativePath, bytes), typeof(FileWriteResult));
+            return Ok(new FileWriteResult(cmd.Root, resolved.RelativePath, bytes));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
@@ -95,7 +95,7 @@ public sealed class SandboxedFileActuationHandler :
         try
         {
             var resolved = _resolver.Resolve(cmd.Root, cmd.Path);
-            return Ok(File.Exists(resolved.FullPath), typeof(bool));
+            return Ok(File.Exists(resolved.FullPath));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -115,7 +115,7 @@ public sealed class SandboxedFileActuationHandler :
 
             var resolved = _resolver.Resolve(cmd.Root, cmd.Path, allowEmptyPath: true);
             if (!Directory.Exists(resolved.FullPath))
-                return Ok(new FileListResult([]), typeof(FileListResult));
+                return Ok(new FileListResult([]));
 
             var files = Directory.EnumerateFiles(
                     resolved.FullPath,
@@ -125,7 +125,7 @@ public sealed class SandboxedFileActuationHandler :
                 .OrderBy(path => path, StringComparer.Ordinal)
                 .ToArray();
 
-            return Ok(new FileListResult(files), typeof(FileListResult));
+            return Ok(new FileListResult(files));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
@@ -142,8 +142,8 @@ public sealed class SandboxedFileActuationHandler :
             Directory.CreateDirectory(parent);
     }
 
-    private static ActuatorHost.HandlerResult Ok(object payload, Type payloadType)
-        => new(Accepted: true, Completed: true, Ok: true, Payload: payload, PayloadType: payloadType);
+    private static ActuatorHost.HandlerResult Ok<T>(T payload)
+        => ActuatorHost.HandlerResult.CompletedWithPayload(payload);
 
     private static ActuatorHost.HandlerResult Fail(string message)
         => new(Accepted: true, Completed: true, Ok: false, Error: message);

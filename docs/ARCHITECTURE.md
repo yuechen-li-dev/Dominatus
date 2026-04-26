@@ -503,6 +503,9 @@ yield return Ai.Await(Keys.LastActuationId);
 `Act` dispatches the command to the `ActuatorHost` and stores the resulting
 `ActuationId` in the blackboard key. `Await` pauses until an `ActuationCompleted`
 event with that id appears on the agent's event bus.
+Typed payload completions are NativeAOT-friendly: use generic completion paths
+(`HandlerResult.CompletedWithPayload<T>(...)` / `CompleteLater<T>(...)`) so `T` is statically
+closed and no runtime generic reflection is required.
 
 ### Registering a handler
 
