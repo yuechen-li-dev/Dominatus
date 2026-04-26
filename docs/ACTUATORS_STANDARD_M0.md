@@ -97,6 +97,11 @@ yield return Ai.Await(LastWriteId, LastWriteResult);
 
 `Ai.Act` / `Ai.Await` are authoring helpers from `Dominatus.OptFlow`. They are not required by this actuator package itself.
 
+
+## Related docs
+
+- [M1 HTTP allowlisted actuators](ACTUATORS_STANDARD_M1_HTTP.md)
+
 ## Non-goals (M0)
 
 - Formal OS sandbox.
