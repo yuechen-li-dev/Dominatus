@@ -13,6 +13,7 @@ public sealed class M5a_SaveContractTests
         var checkpoint = new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: 123.45f,
+            WorldBlackboardBlob: new byte[] { 5, 6, 7 },
             Agents: new[]
             {
                 new AgentCheckpoint(
@@ -46,6 +47,7 @@ public sealed class M5a_SaveContractTests
         Assert.NotNull(loadedCheckpoint);
         Assert.Equal(checkpoint.Version, loadedCheckpoint.Version);
         Assert.Equal(checkpoint.WorldTimeSeconds, loadedCheckpoint.WorldTimeSeconds, 3);
+        Assert.True(loadedCheckpoint.WorldBlackboardBlob!.SequenceEqual(new byte[] { 5, 6, 7 }));
 
         Assert.Single(loadedCheckpoint.Agents);
         var a = loadedCheckpoint.Agents[0];
@@ -77,6 +79,7 @@ public sealed class M5a_SaveContractTests
         var checkpoint = new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: 1.0f,
+            WorldBlackboardBlob: Array.Empty<byte>(),
             Agents: Array.Empty<AgentCheckpoint>());
 
         var chunks = DominatusSave.CreateCheckpointChunks(checkpoint, replayLog: null);

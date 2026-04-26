@@ -45,6 +45,7 @@ knowing anything about persistence.
 `AiWorld` is the simulation container. It holds:
 
 - **`Clock`** — a monotonically advancing `AiClock` (driven by `Tick(float dt)`).
+- **`Bb`** — a world/session `Blackboard`, shared durable memory for this `AiWorld` instance.
 - **`Agents`** — the list of all `AiAgent` instances.
 - **`View`** — an `IAiWorldView` for reading public agent snapshots (position, team, alive).
 - **`Mail`** — an `IAiMailbox` for sending typed messages between agents.
@@ -82,11 +83,13 @@ public readonly record struct AiCtx(
     IAiActuator Act)
 {
     public Blackboard Bb => Agent.Bb;
+    public Blackboard WorldBb => World.Bb;
 }
 ```
 
-`ctx` is the one thing every node receives, and `ctx.Bb` is how almost all
-node-to-node communication happens.
+`ctx` is the one thing every node receives. Nodes use explicit blackboard
+surfaces: `ctx.Bb` for agent-local state and `ctx.WorldBb` for shared
+world/session state.
 
 ---
 
@@ -102,7 +105,7 @@ public static readonly BbKey<bool> IsAlerted  = new("Agent.IsAlerted");
 public static readonly BbKey<string> LastInput = new("Player.LastInput");
 ```
 
-**Reading:**
+**Reading agent-local memory:**
 ```csharp
 var hp = ctx.Bb.GetOrDefault(Health, defaultValue: 100);
 
@@ -112,6 +115,8 @@ if (ctx.Bb.TryGet(IsAlerted, out bool alerted) && alerted)
 
 **Writing:**
 ```csharp
+ctx.Bb.Set(Keys.CurrentTarget, "goblin-12");
+ctx.WorldBb.Set(Keys.Weather, "rain");
 ctx.Bb.Set(Health, hp - 10);
 ```
 
@@ -127,9 +132,9 @@ ctx.Bb.Set(Health, hp - 10);
 - **`OnSet` hook** — wired at agent construction to `BbChangeTracker`, which
   journals every mutation for the persistence layer.
 
-The Blackboard is intentionally the *only* mutable state that nodes are
-expected to touch. Anything a node needs to communicate to the outside world,
-or to later states, should go through `Bb.Set`.
+Nodes should use explicit blackboard surfaces for mutable durable state:
+`ctx.Bb` for agent-local state and `ctx.WorldBb` for shared world/session
+state. World-blackboard dirty-key transition integration is future work.
 
 ---
 
@@ -563,7 +568,8 @@ Enumerator state cannot be treated as a reliable, portable persistence boundary 
 
 So the persistence model is:
 
-* save blackboard state
+* save world blackboard state
+* save per-agent blackboard state
 * save the active HFSM path
 * save pending runtime obligations and cursor state
 * restore those durable surfaces
@@ -576,7 +582,8 @@ This is a bounded and explicit restore model, not “serialize the entire runnin
 A **`DominatusCheckpoint`** captures the durable parts of runtime state needed for reconstruction:
 
 * the **HFSM active path** — the ordered list of currently active state IDs
-* a **blackboard snapshot** — all current key/value pairs, serialized via `BbJsonCodec`
+* a **world blackboard snapshot** — world/session key/value pairs serialized via `BbJsonCodec`
+* a **per-agent blackboard snapshot** — each agent's key/value pairs serialized via `BbJsonCodec`
 * **event cursor / in-flight actuation state** — enough information for replay and pending completion handling to resume coherently
 
 This means Dominatus persists the *meaningful control state* of the agent, not the raw internal shape of a suspended iterator object.
@@ -591,11 +598,12 @@ Restore does **not** mean:
 
 Instead, restore means:
 
-1. restore the blackboard
-2. restore the active HFSM path
-3. reconstruct pending runtime obligations
-4. replay nondeterministic post-checkpoint inputs
-5. continue execution from the rebuilt runtime state
+1. restore the world blackboard
+2. restore per-agent blackboards
+3. restore the active HFSM path
+4. reconstruct pending runtime obligations
+5. replay nondeterministic post-checkpoint inputs
+6. continue execution from the rebuilt runtime state
 
 A good way to think about this is:
 
@@ -721,7 +729,8 @@ Its goal is narrower and more practical:
 
 The persistence model can be summarized like this:
 
-* **Blackboard** stores durable memory
+* **World Blackboard** (`ctx.WorldBb` / `world.Bb`) stores shared durable memory
+* **Agent Blackboard** (`ctx.Bb` / `agent.Bb`) stores per-agent durable memory
 * **HFSM path** stores durable control position
 * **Replay** restores post-checkpoint causality
 * **Iterator internals are not the persistence boundary**
@@ -891,4 +900,3 @@ world.Tick(dt)
 For engine integration, use connector packages rather than adding engine dependencies to `Dominatus.Core`.
 
 - Stride runtime bridge docs: `docs/STRIDECONN_M0.md`
-

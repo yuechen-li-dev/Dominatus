@@ -14,6 +14,8 @@ public sealed class AiWorld
     public IAiMailbox Mail { get; }
 
     public AiClock Clock { get; } = new();
+    /// <summary>World/session-scoped blackboard shared by all agents in this <see cref="AiWorld"/>.</summary>
+    public Blackboard.Blackboard Bb { get; } = new();
 
     public IAiActuator Actuator { get; }
 

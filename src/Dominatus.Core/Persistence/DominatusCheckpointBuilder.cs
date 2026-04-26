@@ -28,6 +28,7 @@ public static class DominatusCheckpointBuilder
     public static DominatusCheckpoint Capture(AiWorld world)
     {
         var agents = new AgentCheckpoint[world.Agents.Count];
+        var worldBbBlob = BbJsonCodec.SerializeSnapshot(world.Bb.EnumerateEntries());
 
         for (int i = 0; i < world.Agents.Count; i++)
         {
@@ -56,6 +57,7 @@ public static class DominatusCheckpointBuilder
         return new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: world.Clock.Time,
+            WorldBlackboardBlob: worldBbBlob,
             Agents: agents);
     }
 
@@ -71,6 +73,13 @@ public static class DominatusCheckpointBuilder
     public static EventCursorSnapshot[] Restore(AiWorld world, DominatusCheckpoint checkpoint)
     {
         var cursorSnapshots = new EventCursorSnapshot[world.Agents.Count];
+        world.Bb.Clear();
+        if (checkpoint.WorldBlackboardBlob is { Length: > 0 })
+        {
+            var worldBbMap = BbJsonCodec.DeserializeSnapshot(checkpoint.WorldBlackboardBlob);
+            foreach (var kv in worldBbMap)
+                world.Bb.SetRaw(kv.Key, kv.Value);
+        }
 
         for (int i = 0; i < cursorSnapshots.Length; i++)
             cursorSnapshots[i] = new EventCursorSnapshot(EventCursorCodec.Version, Array.Empty<PendingActuation>());
