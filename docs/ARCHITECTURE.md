@@ -190,7 +190,7 @@ the step and either handles it internally (for waits) or passes it up to the
 |------|--------|
 | `WaitSeconds(float)` | Pause until `n` seconds have elapsed on `world.Clock` |
 | `WaitUntil(Func<AiCtx, bool>)` | Pause until the predicate returns true |
-| `WaitEvent<T>` | Pause until a matching typed event is consumed from the agent's event bus |
+| `WaitEvent<T>` | Pause until a matching typed event is consumed from the agent's event bus; optional simulation-time timeout is supported |
 | `Act(command, storeIdAs?)` | Dispatch a command; continue immediately in same tick |
 | `AwaitActuation(idKey)` | Pause until the actuation stored in `idKey` completes |
 | `AwaitActuation<T>(idKey, storePayloadAs?)` | Same, but also captures a typed payload into BB |
@@ -221,6 +221,11 @@ yield return Ai.Act(new SomeCommand(), Keys.CommandId);
 yield return Ai.Await(Keys.CommandId);
 yield return Ai.Await(Keys.CommandId, Keys.ResultPayload);  // typed
 yield return Ai.Decide(options, hysteresis: 0.1f, minCommitSeconds: 0.5f);
+yield return Ai.Event<DoorOpened>(
+    timeoutSeconds: 5f,
+    filter: e => e.DoorId == doorId,
+    onConsumed: (agent, e) => agent.Bb.Set(Keys.DoorOpened, true),
+    onTimeout: agent => agent.Bb.Set(Keys.DoorOpenTimedOut, true));
 ```
 ## 5a. How Dominatus is Implemented
 
@@ -340,9 +345,11 @@ enumerator — no ghost continuations.
    passed, return `Running`. Otherwise clear the wait and continue.
 2. If a `WaitUntil` is active, evaluate the predicate. If not true yet,
    return `Running`. Otherwise clear and continue.
-3. If a `WaitEvent` is active, try to consume the event from the bus. If
-   not available yet, return `Running`. Otherwise clear and continue in
-   the *same tick* (important for replay correctness).
+3. If a `WaitEvent` is active, try to consume the event from the bus. Event
+   consumption is checked before timeout handling, so if both are possible on
+   the same tick, the event wins. If no event is consumed and timeout is
+   configured and elapsed, invoke timeout callback once, clear wait, and
+   continue in the same tick.
 4. Call `_it.MoveNext()`. If the iterator is exhausted, return `Succeeded`.
 5. Examine the yielded step:
    - Wait steps: store the wait state, return `Running`.

@@ -25,9 +25,16 @@ public sealed record Decide(
 
 public sealed record WaitEvent<T>(
     Func<T, bool>? Filter = null,
-    Action<AiAgent, T>? OnConsumed = null
+    Action<AiAgent, T>? OnConsumed = null,
+    float? TimeoutSeconds = null,
+    Action<AiAgent>? OnTimeout = null
 ) : AiStep, IWaitEvent where T : notnull
 {
+    float? IWaitEvent.TimeoutSeconds => TimeoutSeconds;
+
+    void IWaitEvent.OnTimeout(AiCtx ctx)
+        => OnTimeout?.Invoke(ctx.Agent);
+
     public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
     {
         if (!ctx.Events.TryConsume(ref cursor, Filter, out T value))

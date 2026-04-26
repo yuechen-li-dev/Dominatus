@@ -1,8 +1,6 @@
 ﻿using Dominatus.Core.Blackboard;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
-using System.Threading.Channels;
-using System.Xml.Linq;
 
 namespace Dominatus.Core.Nodes;
 
@@ -34,6 +32,7 @@ public sealed class NodeRunner(AiNode node)
     private CancellationTokenSource? _cts;
     private IWaitEvent? _waitEvent;
     private EventCursor _waitEventCursor;
+    private float _waitEventStartTime;
     private static AiCtx MakeCtx(AiWorld world, AiAgent agent, CancellationToken cancel)
     => new(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator);
 
@@ -66,6 +65,7 @@ public sealed class NodeRunner(AiNode node)
         _waitUntil = null;
         _waitEvent = null;
         _waitEventCursor = default;
+        _waitEventStartTime = 0;
         _waitStartTime = 0;
 
         _cts?.Dispose();
@@ -117,15 +117,29 @@ public sealed class NodeRunner(AiNode node)
                 if (ctx.Cancel.IsCancellationRequested)
                     return NodeTickResult.Completed(NodeStatus.Failed);
 
-                if (!_waitEvent.TryConsume(ctx, ref _waitEventCursor))
-                    return NodeTickResult.Running();
+                // Event consumption must win over timeout checks on the same tick.
+                if (_waitEvent.TryConsume(ctx, ref _waitEventCursor))
+                {
+                    _waitEvent = null;
+                    _waitEventCursor = default;
+                    _waitEventStartTime = 0;
 
-                _waitEvent = null;
-                _waitEventCursor = default;
+                    // Event consumed successfully; continue in the same tick so restore+replay
+                    // can progress through Await<T> immediately when the replayed event is already present.
+                    continue;
+                }
 
-                // Event consumed successfully; continue in the same tick so restore+replay
-                // can progress through Await<T> immediately when the replayed event is already present.
-                continue;
+                var timeoutSeconds = _waitEvent.TimeoutSeconds;
+                if (timeoutSeconds.HasValue && world.Clock.Time - _waitEventStartTime >= timeoutSeconds.Value)
+                {
+                    _waitEvent.OnTimeout(ctx);
+                    _waitEvent = null;
+                    _waitEventCursor = default;
+                    _waitEventStartTime = 0;
+                    continue;
+                }
+
+                return NodeTickResult.Running();
             }
 
             // Advance enumerator
@@ -173,6 +187,7 @@ public sealed class NodeRunner(AiNode node)
                 case IWaitEvent we:
                     _waitEvent = we;
                     _waitEventCursor = default;
+                    _waitEventStartTime = world.Clock.Time;
 
                     // Try immediate consume once so restore+replay works when the event
                     // was already published before this wait step was re-installed.
@@ -180,6 +195,17 @@ public sealed class NodeRunner(AiNode node)
                     {
                         _waitEvent = null;
                         _waitEventCursor = default;
+                        _waitEventStartTime = 0;
+                        continue;
+                    }
+
+                    var installTimeoutSeconds = _waitEvent.TimeoutSeconds;
+                    if (installTimeoutSeconds.HasValue && world.Clock.Time - _waitEventStartTime >= installTimeoutSeconds.Value)
+                    {
+                        _waitEvent.OnTimeout(ctx);
+                        _waitEvent = null;
+                        _waitEventCursor = default;
+                        _waitEventStartTime = 0;
                         continue;
                     }
 
@@ -227,6 +253,7 @@ public sealed class NodeRunner(AiNode node)
                         );
 
                         _waitEventCursor = default;
+                        _waitEventStartTime = world.Clock.Time;
 
                         // Try immediate consume once so replayed completions already sitting in the bus
                         // are observed on the first tick after restore.
@@ -234,6 +261,7 @@ public sealed class NodeRunner(AiNode node)
                         {
                             _waitEvent = null;
                             _waitEventCursor = default;
+                            _waitEventStartTime = 0;
                             continue;
                         }
 
