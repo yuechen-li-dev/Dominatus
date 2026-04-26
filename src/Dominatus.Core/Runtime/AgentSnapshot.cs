@@ -8,5 +8,5 @@ namespace Dominatus.Core.Runtime;
 public readonly record struct AgentSnapshot(
     AgentId Id,
     int Team,
-    Vector2 Position,
+    Vector3 Position,
     bool IsAlive = true);

@@ -35,7 +35,7 @@ public sealed class AiWorld
 
         // Seed public snapshot (defaults)
         if (!_public.ContainsKey(agent.Id))
-            _public[agent.Id] = new AgentSnapshot(agent.Id, Team: 0, Position: Vector2.Zero, IsAlive: true);
+            _public[agent.Id] = new AgentSnapshot(agent.Id, Team: 0, Position: Vector3.Zero, IsAlive: true);
     }
 
     public IReadOnlyList<AiAgent> Agents => _agents;

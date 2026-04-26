@@ -103,8 +103,8 @@ public sealed class AgentCoordinationTests
         world.Add(a1); // 1
         world.Add(a2); // 2
 
-        world.SetPublic(a1.Id, new AgentSnapshot(a1.Id, Team: 1, Position: new Vector2(10, 0), IsAlive: true));
-        world.SetPublic(a2.Id, new AgentSnapshot(a2.Id, Team: 1, Position: new Vector2(0, 0), IsAlive: true));
+        world.SetPublic(a1.Id, new AgentSnapshot(a1.Id, Team: 1, Position: new Vector3(10, 0, 0), IsAlive: true));
+        world.SetPublic(a2.Id, new AgentSnapshot(a2.Id, Team: 1, Position: new Vector3(0, 0, 0), IsAlive: true));
 
         // A tiny "view probe": Agent2 can see Agent1 via ctx.View and compute distance.
         // We assert the view returns snapshots and does not throw / expose BB.
@@ -137,8 +137,8 @@ public sealed class AgentCoordinationTests
         world.Add(a1);
         world.Add(a2);
 
-        world.SetPublic(a1.Id, new AgentSnapshot(a1.Id, Team: 1, Position: new Vector2(10, 0), IsAlive: true));
-        world.SetPublic(a2.Id, new AgentSnapshot(a2.Id, Team: 1, Position: new Vector2(0, 0), IsAlive: true));
+        world.SetPublic(a1.Id, new AgentSnapshot(a1.Id, Team: 1, Position: new Vector3(10, 0, 0), IsAlive: true));
+        world.SetPublic(a2.Id, new AgentSnapshot(a2.Id, Team: 1, Position: new Vector3(0, 0, 0), IsAlive: true));
 
         world.Tick(0.01f);
 

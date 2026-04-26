@@ -54,6 +54,10 @@ knowing anything about persistence.
 Calling `world.Tick(dt)` advances the clock, ticks the actuator (for deferred
 completions), and ticks every agent in order.
 
+`AgentSnapshot.Position` is an engine-agnostic `System.Numerics.Vector3`. 2D
+games/simulations can use `Z = 0` by convention. 3D connectors own how their
+engine axes map into X/Y/Z.
+
 ### AiAgent
 
 `AiAgent` is one agent. It holds:
