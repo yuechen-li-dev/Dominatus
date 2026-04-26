@@ -77,26 +77,99 @@ public sealed class StrideDialogueActuationHandlerTests
         Assert.Equal("drop(player);", completed.Payload);
     }
 
+
+    [Fact]
+    public void Line_WhenSurfaceBusy_ReturnsExpectedFailure()
+    {
+        var surface = new FakeSurface { AcceptLine = false };
+        var handler = new StrideDialogueActuationHandler(surface);
+        var host = new ActuatorHost();
+
+        var world = new AiWorld(host);
+        var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
+        world.Add(agent);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+
+        var result = handler.Handle(host, ctx, new ActuationId(10), new DiagLineCommand("hello", "narrator"));
+
+        Assert.False(result.Accepted);
+        Assert.True(result.Completed);
+        Assert.False(result.Ok);
+        Assert.Equal("Dialogue surface is busy.", result.Error);
+    }
+
+    [Fact]
+    public void Choose_WhenSurfaceBusy_ReturnsExpectedFailure()
+    {
+        var surface = new FakeSurface { AcceptChoose = false };
+        var handler = new StrideDialogueActuationHandler(surface);
+        var host = new ActuatorHost();
+
+        var world = new AiWorld(host);
+        var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
+        world.Add(agent);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+
+        var result = handler.Handle(host, ctx, new ActuationId(11), new DiagChooseCommand("pick", [new DiagChoice("a", "A")]));
+
+        Assert.False(result.Accepted);
+        Assert.True(result.Completed);
+        Assert.False(result.Ok);
+        Assert.Equal("Dialogue surface is busy.", result.Error);
+    }
+
+    [Fact]
+    public void Ask_WhenSurfaceBusy_ReturnsExpectedFailure()
+    {
+        var surface = new FakeSurface { AcceptAsk = false };
+        var handler = new StrideDialogueActuationHandler(surface);
+        var host = new ActuatorHost();
+
+        var world = new AiWorld(host);
+        var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
+        world.Add(agent);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+
+        var result = handler.Handle(host, ctx, new ActuationId(12), new DiagAskCommand("ask"));
+
+        Assert.False(result.Accepted);
+        Assert.True(result.Completed);
+        Assert.False(result.Ok);
+        Assert.Equal("Dialogue surface is busy.", result.Error);
+    }
     private sealed class FakeSurface : IStrideDialogueSurface
     {
         private Action? _advance;
         private Action<string>? _choose;
         private Action<string>? _ask;
 
+        public bool AcceptLine { get; set; } = true;
+        public bool AcceptChoose { get; set; } = true;
+        public bool AcceptAsk { get; set; } = true;
+
         public bool TryShowLine(DiagLineCommand command, Action onAdvance)
         {
+            if (!AcceptLine)
+                return false;
+
             _advance = onAdvance;
             return true;
         }
 
         public bool TryShowChoose(DiagChooseCommand command, Action<string> onChoose)
         {
+            if (!AcceptChoose)
+                return false;
+
             _choose = onChoose;
             return true;
         }
 
         public bool TryShowAsk(DiagAskCommand command, Action<string> onSubmit)
         {
+            if (!AcceptAsk)
+                return false;
+
             _ask = onSubmit;
             return true;
         }
