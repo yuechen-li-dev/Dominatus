@@ -1,5 +1,7 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using Dominatus.Core.Blackboard;
 
 namespace Dominatus.Core.Persistence;
 
@@ -22,13 +24,25 @@ public static class BbJsonCodec
     /// </summary>
     public static byte[] SerializeSnapshot(IEnumerable<(string Key, object? Value)> entries)
     {
+        var snapshotEntries = entries.Select(e => new BlackboardEntrySnapshot(e.Key, e.Value, null));
+        return SerializeSnapshot(snapshotEntries);
+    }
+
+    /// <summary>
+    /// Serializes snapshot entries (key, value, optional expiry metadata) to a UTF-8 JSON blob.
+    /// Entries whose runtime type is not in the supported type table are silently skipped.
+    /// </summary>
+    public static byte[] SerializeSnapshot(IEnumerable<BlackboardEntrySnapshot> entries)
+    {
         var list = new List<BbEntryJson>();
 
-        foreach (var (k, val) in entries)
+        foreach (var entry in entries)
         {
+            var k = entry.Key;
+            var val = entry.Value;
             if (val is null) continue;
             if (!TryToTyped(val, out var tv)) continue;
-            list.Add(new BbEntryJson(k, tv.t, tv.v));
+            list.Add(new BbEntryJson(k, tv.t, tv.v, entry.ExpiresAt));
         }
 
         var snap = new BbSnapshotJson(SnapshotVersion, list.ToArray());
@@ -41,15 +55,32 @@ public static class BbJsonCodec
     /// </summary>
     public static Dictionary<string, object> DeserializeSnapshot(byte[] blob)
     {
+        var entries = DeserializeSnapshotEntries(blob);
+        var map = new Dictionary<string, object>();
+        foreach (var entry in entries)
+        {
+            if (entry.Value is null) continue;
+            map[entry.Key] = entry.Value;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Deserializes a blob produced by <see cref="SerializeSnapshot(IEnumerable{BlackboardEntrySnapshot})"/>
+    /// into typed snapshot entries with optional expiry metadata.
+    /// </summary>
+    public static BlackboardEntrySnapshot[] DeserializeSnapshotEntries(byte[] blob)
+    {
         var json = Encoding.UTF8.GetString(blob);
         var snap = JsonSerializer.Deserialize<BbSnapshotJson>(json)
                    ?? throw new InvalidOperationException("Bad BB snapshot json.");
 
-        var map = new Dictionary<string, object>();
+        var entries = new List<BlackboardEntrySnapshot>(snap.entries.Length);
         foreach (var e in snap.entries)
-            map[e.k] = FromTyped(e.t, e.v);
+            entries.Add(new BlackboardEntrySnapshot(e.k, FromTyped(e.t, e.v), e.exp));
 
-        return map;
+        return entries.ToArray();
     }
 
     // -----------------------------------------------------------------------
@@ -144,8 +175,8 @@ public static class BbJsonCodec
             "bool" => bool.Parse(raw),
             "int" => int.Parse(raw),
             "long" => long.Parse(raw),
-            "float" => float.Parse(raw, System.Globalization.CultureInfo.InvariantCulture),
-            "double" => double.Parse(raw, System.Globalization.CultureInfo.InvariantCulture),
+            "float" => float.Parse(raw, CultureInfo.InvariantCulture),
+            "double" => double.Parse(raw, CultureInfo.InvariantCulture),
             "string" => raw,
             "guid" => Guid.Parse(raw),
             _ => throw new NotSupportedException($"Unsupported BB type '{t}'.")

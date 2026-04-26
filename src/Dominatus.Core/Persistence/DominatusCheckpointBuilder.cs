@@ -28,7 +28,7 @@ public static class DominatusCheckpointBuilder
     public static DominatusCheckpoint Capture(AiWorld world)
     {
         var agents = new AgentCheckpoint[world.Agents.Count];
-        var worldBbBlob = BbJsonCodec.SerializeSnapshot(world.Bb.EnumerateEntries());
+        var worldBbBlob = BbJsonCodec.SerializeSnapshot(world.Bb.EnumerateSnapshotEntries());
 
         for (int i = 0; i < world.Agents.Count; i++)
         {
@@ -38,7 +38,7 @@ public static class DominatusCheckpointBuilder
                              .Select(s => s.ToString())
                              .ToArray();
 
-            var bbBlob = BbJsonCodec.SerializeSnapshot(a.Bb.EnumerateEntries());
+            var bbBlob = BbJsonCodec.SerializeSnapshot(a.Bb.EnumerateSnapshotEntries());
 
             // Read in-flight actuations directly — no manual plumbing required by caller.
             var cursorSnapshot = new EventCursorSnapshot(
@@ -76,9 +76,14 @@ public static class DominatusCheckpointBuilder
         world.Bb.Clear();
         if (checkpoint.WorldBlackboardBlob is { Length: > 0 })
         {
-            var worldBbMap = BbJsonCodec.DeserializeSnapshot(checkpoint.WorldBlackboardBlob);
-            foreach (var kv in worldBbMap)
-                world.Bb.SetRaw(kv.Key, kv.Value);
+            var worldBbEntries = BbJsonCodec.DeserializeSnapshotEntries(checkpoint.WorldBlackboardBlob);
+            foreach (var entry in worldBbEntries)
+            {
+                if (entry.ExpiresAt is { } exp && exp <= checkpoint.WorldTimeSeconds)
+                    continue;
+
+                world.Bb.SetRaw(entry.Key, entry.Value, entry.ExpiresAt);
+            }
         }
 
         for (int i = 0; i < cursorSnapshots.Length; i++)
@@ -92,10 +97,15 @@ public static class DominatusCheckpointBuilder
             var agent = world.Agents[idx];
 
             // Blackboard restore — bypasses OnSet, dirty tracking, revision bump.
-            var map = BbJsonCodec.DeserializeSnapshot(ac.BlackboardBlob);
+            var entries = BbJsonCodec.DeserializeSnapshotEntries(ac.BlackboardBlob);
             agent.Bb.Clear();
-            foreach (var kv in map)
-                agent.Bb.SetRaw(kv.Key, kv.Value);
+            foreach (var entry in entries)
+            {
+                if (entry.ExpiresAt is { } exp && exp <= checkpoint.WorldTimeSeconds)
+                    continue;
+
+                agent.Bb.SetRaw(entry.Key, entry.Value, entry.ExpiresAt);
+            }
 
             // Event cursor restore — decode first so both the agent and ReplayDriver
             // can see the same pending-actuation state.
