@@ -1,3 +1,4 @@
+using System;
 using Ariadne.OptFlow.Commands;
 using Dominatus.Core.Runtime;
 
@@ -17,6 +18,7 @@ public sealed class StrideDialogueActuationHandler :
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, DiagLineCommand cmd)
     {
+        Console.WriteLine("[Dominatus.StrideConn] TryShowLine called");
         var accepted = _surface.TryShowLine(cmd, () =>
             host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true));
 
@@ -28,6 +30,7 @@ public sealed class StrideDialogueActuationHandler :
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, DiagChooseCommand cmd)
     {
+        Console.WriteLine("[Dominatus.StrideConn] TryShowChoose called");
         var accepted = _surface.TryShowChoose(cmd, choice =>
             host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true, payload: choice, payloadType: typeof(string)));
 
@@ -39,6 +42,7 @@ public sealed class StrideDialogueActuationHandler :
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, DiagAskCommand cmd)
     {
+        Console.WriteLine("[Dominatus.StrideConn] TryShowAsk called");
         var accepted = _surface.TryShowAsk(cmd, answer =>
             host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true, payload: answer, payloadType: typeof(string)));
 

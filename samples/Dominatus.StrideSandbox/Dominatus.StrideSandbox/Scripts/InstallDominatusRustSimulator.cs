@@ -11,6 +11,8 @@ namespace Dominatus.StrideSandbox;
 
 public sealed class InstallDominatusRustSimulator : SyncScript
 {
+    public bool ShowStartupSmokeLine { get; set; } = true;
+
     private StrideDialogueSurface? _surface;
     private bool _loggedUpdate;
 
@@ -22,7 +24,7 @@ public sealed class InstallDominatusRustSimulator : SyncScript
         var system = existing ?? new StrideDominatusSystem(Game.Services);
         Console.WriteLine(existing is null
             ? "[Dominatus.StrideSandbox] StrideDominatusSystem created"
-            : "[Dominatus.StrideSandbox] StrideDominatusSystem existing");
+            : "[Dominatus.StrideSandbox] StrideDominatusSystem found");
 
         if (existing is null)
             Game.GameSystems.Add(system);
@@ -30,34 +32,43 @@ public sealed class InstallDominatusRustSimulator : SyncScript
         var runtime = Game.Services.GetService<IDominatusStrideRuntime>();
         if (runtime is null)
             throw new InvalidOperationException("IDominatusStrideRuntime service was not registered.");
-        Console.WriteLine("[Dominatus.StrideSandbox] IDominatusStrideRuntime resolved");
+        Console.WriteLine("[Dominatus.StrideSandbox] runtime resolved");
 
         _surface = new StrideDialogueSurface(Entity);
         _surface.EnsureInitialized();
-        Console.WriteLine("[Dominatus.StrideSandbox] StrideDialogueSurface initialized");
+        _surface.SetStatus("Dominatus installer started");
+        Console.WriteLine("[Dominatus.StrideSandbox] surface initialized");
+
+        if (ShowStartupSmokeLine)
+        {
+            _surface.SetStatus("Dominatus Stride dialogue surface initialized.");
+            Console.WriteLine("[Dominatus.StrideSandbox] startup smoke line status enabled");
+        }
 
         var dialogueHandler = new StrideDialogueActuationHandler(_surface);
         runtime.Actuator.Register<Ariadne.OptFlow.Commands.DiagLineCommand>(dialogueHandler);
         runtime.Actuator.Register<Ariadne.OptFlow.Commands.DiagChooseCommand>(dialogueHandler);
         runtime.Actuator.Register<Ariadne.OptFlow.Commands.DiagAskCommand>(dialogueHandler);
-        Console.WriteLine("[Dominatus.StrideSandbox] Ariadne dialogue handlers registered");
+        Console.WriteLine("[Dominatus.StrideSandbox] handlers registered");
 
         var graph = new HfsmGraph { Root = "Root" };
         RustSimulator.Register(graph);
-        Console.WriteLine("[Dominatus.StrideSandbox] RustSimulator graph registered");
+        Console.WriteLine("[Dominatus.StrideSandbox] graph registered");
 
         // Rust Simulator uses normal root/leaf flow with a bootstrap root; it is not a root-frame overlay planner.
         var brain = new HfsmInstance(graph);
         var agent = new AiAgent(brain);
         runtime.World.Add(agent);
-        Console.WriteLine("[Dominatus.StrideSandbox] AiAgent added");
+        _surface.SetStatus("RustSimulator agent added");
+        Console.WriteLine("[Dominatus.StrideSandbox] agent added");
     }
 
     public override void Update()
     {
         if (!_loggedUpdate)
         {
-            Console.WriteLine("[Dominatus.StrideSandbox] InstallDominatusRustSimulator.Update active");
+            Console.WriteLine("[Dominatus.StrideSandbox] Update active");
+            _surface?.SetStatus("Dominatus world ticked");
             _loggedUpdate = true;
         }
 
