@@ -101,6 +101,7 @@ yield return Ai.Await(LastWriteId, LastWriteResult);
 ## Related docs
 
 - [M1 HTTP allowlisted actuators](ACTUATORS_STANDARD_M1_HTTP.md)
+- [M1.1 local package smoke verification](ACTUATORS_STANDARD_PACKAGE_SMOKE.md)
 
 ## Non-goals (M0)
 

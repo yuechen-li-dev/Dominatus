@@ -134,3 +134,8 @@ M1 does not add:
 - Shell/process execution
 - Browser automation
 - MCP/Telegram/email integrations
+
+
+## Related docs
+
+- [M1.1 local package smoke verification](ACTUATORS_STANDARD_PACKAGE_SMOKE.md)
