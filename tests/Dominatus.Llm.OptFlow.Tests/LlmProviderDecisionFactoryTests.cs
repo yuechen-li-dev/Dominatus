@@ -12,7 +12,7 @@ public sealed class LlmProviderDecisionFactoryTests
     private static readonly BbKey<string> DecisionChoiceKey = new("decision.choice");
 
     [Fact]
-    public void ProviderFactory_CreateFakeDecisionClient_DoesNotRequireApiKey()
+    public async Task ProviderFactory_CreateFakeDecisionClient_DoesNotRequireApiKey()
     {
         var result = LlmProviderClientFactory.CreateDecisionClient(new LlmProviderClientFactoryOptions(
             Client: LlmProviderClientKind.Fake,
@@ -21,7 +21,7 @@ public sealed class LlmProviderDecisionFactoryTests
 
         var request = BuildRequest(result.Provider, result.Model);
         var hash = LlmDecisionRequestHasher.ComputeHash(request);
-        var scored = result.Client.ScoreOptionsAsync(request, hash, CancellationToken.None).GetAwaiter().GetResult();
+        var scored = await result.Client.ScoreOptionsAsync(request, hash, CancellationToken.None);
 
         Assert.False(result.ApiKeyPresent);
         Assert.Equal("reject_politely", scored.Scores.Single(s => s.Rank == 1).OptionId);
@@ -107,7 +107,7 @@ public sealed class LlmProviderDecisionFactoryTests
     }
 
     [Fact]
-    public void ProviderFactory_CreateDecisionClient_ReplayWithoutKeyReturnsThrowingClient()
+    public async Task ProviderFactory_CreateDecisionClient_ReplayWithoutKeyReturnsThrowingClient()
     {
         var result = LlmProviderClientFactory.CreateDecisionClient(new LlmProviderClientFactoryOptions(
             Client: LlmProviderClientKind.OpenAi,
@@ -118,12 +118,12 @@ public sealed class LlmProviderDecisionFactoryTests
         var request = BuildRequest(result.Provider, result.Model);
         var hash = LlmDecisionRequestHasher.ComputeHash(request);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => result.Client.ScoreOptionsAsync(request, hash, CancellationToken.None).GetAwaiter().GetResult());
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => result.Client.ScoreOptionsAsync(request, hash, CancellationToken.None));
         Assert.Contains("should not be invoked", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ProviderFactory_CreateDecisionClient_StrictWithoutKeyReturnsThrowingClient()
+    public async Task ProviderFactory_CreateDecisionClient_StrictWithoutKeyReturnsThrowingClient()
     {
         var result = LlmProviderClientFactory.CreateDecisionClient(new LlmProviderClientFactoryOptions(
             Client: LlmProviderClientKind.OpenAi,
@@ -134,7 +134,7 @@ public sealed class LlmProviderDecisionFactoryTests
         var request = BuildRequest(result.Provider, result.Model);
         var hash = LlmDecisionRequestHasher.ComputeHash(request);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => result.Client.ScoreOptionsAsync(request, hash, CancellationToken.None).GetAwaiter().GetResult());
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => result.Client.ScoreOptionsAsync(request, hash, CancellationToken.None));
         Assert.Contains("should not be invoked", ex.Message, StringComparison.Ordinal);
     }
 
