@@ -11,6 +11,7 @@ Hierarchy:
         - ref!! 154e8c51-8a9c-49da-961d-36fc8ee3db31
         - ref!! 511b3980-93b5-4ade-9df4-e48d44a09c99
         - ref!! d5e16efc-debf-4ff8-85a5-a7b55561b942
+        - ref!! 6dfa10b1-9962-4ab8-bbc8-8e7e767d14fc
     Parts:
         -   Entity:
                 Id: 101182c7-71b1-4ef2-9d7c-1fcc1ab8b16f
@@ -68,6 +69,18 @@ Hierarchy:
                         Model: 0a79fc64-cde7-4fa4-a42d-e9894b7d877d:Ground
                         Materials: {}
         -   Entity:
+                Id: 5dd7726c-bafa-4a88-a750-1c092ec75a07
+                Name: InstallDominatusRustSimulator
+                Components:
+                    e3e06662a01d7fff8442bf741b196098: !TransformComponent
+                        Id: e4930df0-0357-4206-adef-381bb09800d5
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    2bf57d6d096daeaa4e76b3d37126eb5c: !Dominatus.StrideSandbox.InstallDominatusRustSimulator,Dominatus.StrideSandbox
+                        Id: e1dff680-8891-4819-8724-f4ef9be013af
+        -   Entity:
                 Id: 63fb5fd3-e357-4f12-a73a-6a03aed02bab
                 Name: Directional light
                 Components:
@@ -92,6 +105,17 @@ Hierarchy:
                                 ComputeTransmittance: false
                                 BiasParameters: {}
                         Intensity: 20.0
+        -   Entity:
+                Id: 6dfa10b1-9962-4ab8-bbc8-8e7e767d14fc
+                Name: Entity
+                Components:
+                    a7c7f28be3a9023a179ab8881a9e3a1e: !TransformComponent
+                        Id: a4b038fe-8dd8-43c2-af11-cb13d6978f01
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children:
+                            270acf212eaa850c4e1578762ec25e2a: ref!! e4930df0-0357-4206-adef-381bb09800d5
         -   Entity:
                 Id: d5e16efc-debf-4ff8-85a5-a7b55561b942
                 Name: Sphere

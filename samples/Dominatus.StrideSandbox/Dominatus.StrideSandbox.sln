@@ -1,13 +1,20 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.5.11716.220 stable
+VisualStudioVersion = 18.5.11716.220
 MinimumVisualStudioVersion = 16.0.0.0
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dominatus.StrideSandbox.Windows", "Dominatus.StrideSandbox.Windows\Dominatus.StrideSandbox.Windows.csproj", "{2385D46C-2436-4BD1-9928-0DF162E12DA2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dominatus.StrideSandbox", "Dominatus.StrideSandbox\Dominatus.StrideSandbox.csproj", "{A11CDFB7-D762-47DB-9443-8F90E031AC4F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dominatus.StrideSandbox.Linux", "Dominatus.StrideSandbox.Linux\Dominatus.StrideSandbox.Linux.csproj", "{D79D0826-15C9-465D-A734-6CE25E797B26}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ariadne.OptFlow", "..\..\src\Ariadne.OptFlow\Ariadne.OptFlow.csproj", "{1CEDF139-CA18-4E4D-9F4C-E1A7BAF17900}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dominatus.Core", "..\..\src\Dominatus.Core\Dominatus.Core.csproj", "{3F4454B1-2FED-498B-816D-81BBE274D79B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dominatus.OptFlow", "..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj", "{1E399A42-8F38-4B56-804B-09B4E1A5DAFA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dominatus.StrideConn", "..\..\src\Dominatus.StrideConn\Dominatus.StrideConn.csproj", "{150F1550-2481-4C4D-A8E3-5BF7878EA4F5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +34,22 @@ Global
 		{D79D0826-15C9-465D-A734-6CE25E797B26}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D79D0826-15C9-465D-A734-6CE25E797B26}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D79D0826-15C9-465D-A734-6CE25E797B26}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1CEDF139-CA18-4E4D-9F4C-E1A7BAF17900}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1CEDF139-CA18-4E4D-9F4C-E1A7BAF17900}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1CEDF139-CA18-4E4D-9F4C-E1A7BAF17900}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1CEDF139-CA18-4E4D-9F4C-E1A7BAF17900}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F4454B1-2FED-498B-816D-81BBE274D79B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F4454B1-2FED-498B-816D-81BBE274D79B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F4454B1-2FED-498B-816D-81BBE274D79B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F4454B1-2FED-498B-816D-81BBE274D79B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E399A42-8F38-4B56-804B-09B4E1A5DAFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E399A42-8F38-4B56-804B-09B4E1A5DAFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E399A42-8F38-4B56-804B-09B4E1A5DAFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E399A42-8F38-4B56-804B-09B4E1A5DAFA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{150F1550-2481-4C4D-A8E3-5BF7878EA4F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{150F1550-2481-4C4D-A8E3-5BF7878EA4F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{150F1550-2481-4C4D-A8E3-5BF7878EA4F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{150F1550-2481-4C4D-A8E3-5BF7878EA4F5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
