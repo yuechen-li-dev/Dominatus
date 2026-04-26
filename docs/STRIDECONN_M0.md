@@ -56,3 +56,8 @@ yield return Ai.Act(
 ```
 
 > Authoring helpers like `Ai.Act(...)` are in `Dominatus.OptFlow`. `Dominatus.StrideConn` itself does not depend on `Dominatus.OptFlow`.
+
+
+## Next milestone
+
+- See `docs/STRIDECONN_M1_RUST_SIMULATOR.md` for the M1 Rust Simulator dialogue-box integration.

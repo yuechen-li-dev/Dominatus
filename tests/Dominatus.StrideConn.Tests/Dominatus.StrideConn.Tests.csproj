@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dominatus.StrideConn\Dominatus.StrideConn.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\..\src\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>

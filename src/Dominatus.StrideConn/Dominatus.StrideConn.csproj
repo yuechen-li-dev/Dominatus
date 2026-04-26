@@ -20,10 +20,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
+    <ProjectReference Include="..\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Stride.Engine" Version="4.3.0.2507" />
+    <PackageReference Include="Stride.UI" Version="4.3.0.2507" />
   </ItemGroup>
 
   <ItemGroup>
