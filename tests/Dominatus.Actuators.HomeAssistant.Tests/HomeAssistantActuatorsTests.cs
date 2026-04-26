@@ -293,8 +293,10 @@ public sealed class HomeAssistantActuatorsTests
         Assert.DoesNotContain("Ariadne.OptFlow", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Stride", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("MQTT", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MQTTnet", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("HassClient", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NetDaemon", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("HomeAssistantGenerated", text, StringComparison.OrdinalIgnoreCase);
     }
 
     private static HomeAssistantActuatorOptions BaseOptions => new()
