@@ -10,11 +10,6 @@ public sealed class LogHandler : IActuationHandler<LogCommand>
     {
         // You can later route this to a logger; for now just treat as success.
         // Publish typed completion as LogCommand so Ai.Await<LogCommand> works.
-        return new ActuatorHost.HandlerResult(
-            Accepted: true,
-            Completed: true,
-            Ok: true,
-            Payload: cmd,
-            PayloadType: typeof(LogCommand));
+        return ActuatorHost.HandlerResult.CompletedWithPayload(cmd);
     }
 }

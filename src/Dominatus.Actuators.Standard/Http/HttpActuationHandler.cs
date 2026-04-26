@@ -78,7 +78,7 @@ public sealed class HttpActuationHandler :
         try
         {
             var result = action();
-            return new ActuatorHost.HandlerResult(Accepted: true, Completed: true, Ok: true, Payload: result, PayloadType: typeof(HttpTextResult));
+            return ActuatorHost.HandlerResult.CompletedWithPayload(result);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or JsonException or HttpRequestException or OperationCanceledException)
         {

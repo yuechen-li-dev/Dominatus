@@ -32,7 +32,7 @@ public sealed class StrideDialogueActuationHandler :
     {
         Console.WriteLine("[Dominatus.StrideConn] TryShowChoose called");
         var accepted = _surface.TryShowChoose(cmd, choice =>
-            host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true, payload: choice, payloadType: typeof(string)));
+            host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true, payload: choice));
 
         if (!accepted)
             return new(Accepted: false, Completed: true, Ok: false, Error: "Dialogue surface is busy.");
@@ -44,7 +44,7 @@ public sealed class StrideDialogueActuationHandler :
     {
         Console.WriteLine("[Dominatus.StrideConn] TryShowAsk called");
         var accepted = _surface.TryShowAsk(cmd, answer =>
-            host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true, payload: answer, payloadType: typeof(string)));
+            host.CompleteLater(ctx, id, ctx.World.Clock.Time, ok: true, payload: answer));
 
         if (!accepted)
             return new(Accepted: false, Completed: true, Ok: false, Error: "Dialogue surface is busy.");

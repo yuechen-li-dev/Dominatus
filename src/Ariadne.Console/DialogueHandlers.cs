@@ -17,9 +17,7 @@ public sealed class DiagLineHandler : IActuationHandler<DiagLineCommand>
         return new ActuatorHost.HandlerResult(
             Accepted: true,
             Completed: true,
-            Ok: true,
-            Payload: null,
-            PayloadType: null);
+            Ok: true);
     }
 }
 
@@ -33,12 +31,7 @@ public sealed class DiagAskHandler : IActuationHandler<DiagAskCommand>
         var input = _ui.Ask(cmd.Prompt);
 
         // Typed payload: string
-        return new ActuatorHost.HandlerResult(
-            Accepted: true,
-            Completed: true,
-            Ok: true,
-            Payload: input,
-            PayloadType: typeof(string));
+        return ActuatorHost.HandlerResult.CompletedWithPayload(input);
     }
 }
 
@@ -53,11 +46,6 @@ public sealed class DiagChooseHandler : IActuationHandler<DiagChooseCommand>
         var chosen = _ui.Choose(cmd.Prompt, options);
 
         // Typed payload: string key
-        return new ActuatorHost.HandlerResult(
-            Accepted: true,
-            Completed: true,
-            Ok: true,
-            Payload: chosen,
-            PayloadType: typeof(string));
+        return ActuatorHost.HandlerResult.CompletedWithPayload(chosen);
     }
 }

@@ -18,7 +18,7 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
         {
             var resolved = _resolver.Resolve(cmd);
             var result = RunProcess(resolved, ctx.Cancel);
-            return Ok(result, typeof(ProcessResult));
+            return Ok(result);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException)
         {
@@ -152,8 +152,8 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
         }
     }
 
-    private static ActuatorHost.HandlerResult Ok(object payload, Type payloadType)
-        => new(Accepted: true, Completed: true, Ok: true, Payload: payload, PayloadType: payloadType);
+    private static ActuatorHost.HandlerResult Ok<T>(T payload)
+        => ActuatorHost.HandlerResult.CompletedWithPayload(payload);
 
     private static ActuatorHost.HandlerResult Fail(string message)
         => new(Accepted: true, Completed: true, Ok: false, Error: message);
