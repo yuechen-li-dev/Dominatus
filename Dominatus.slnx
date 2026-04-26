@@ -17,6 +17,8 @@
   <Project Path="tests/Dominatus.UtilityLite.Tests/Dominatus.UtilityLite.Tests.csproj" Id="3b8b1313-ac5e-4e4e-8e4e-5ee97af2e7b5" />
   <Project Path="src/Dominatus.Actuators.Standard/Dominatus.Actuators.Standard.csproj" />
   <Project Path="src/Dominatus.Actuators.HomeAssistant/Dominatus.Actuators.HomeAssistant.csproj" />
+  <Project Path="src/Dominatus.Server/Dominatus.Server.csproj" />
+  <Project Path="tests/Dominatus.Server.Tests/Dominatus.Server.Tests.csproj" />
   <Project Path="tests/Dominatus.Actuators.HomeAssistant.Tests/Dominatus.Actuators.HomeAssistant.Tests.csproj" />
   <Project Path="tests/Dominatus.Actuators.Standard.Tests/Dominatus.Actuators.Standard.Tests.csproj" />
   <Project Path="tests/Dominatus.Actuators.Standard.ProcessTestTool/Dominatus.Actuators.Standard.ProcessTestTool.csproj" />
