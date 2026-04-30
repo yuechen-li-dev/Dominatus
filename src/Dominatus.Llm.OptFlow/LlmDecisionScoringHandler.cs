@@ -28,12 +28,7 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
         try
         {
             var result = Resolve(cmd, requestHash, ctx.Cancel);
-            return new ActuatorHost.HandlerResult(
-                Accepted: true,
-                Completed: true,
-                Ok: true,
-                Payload: result,
-                PayloadType: typeof(LlmDecisionResult));
+            return ActuatorHost.HandlerResult.CompletedWithPayload(result);
         }
         catch (Exception ex)
         {

@@ -10,8 +10,20 @@ public sealed class PendingActuationComparer : IEqualityComparer<PendingActuatio
     public static readonly PendingActuationComparer Instance = new();
     private PendingActuationComparer() { }
 
-    public bool Equals(PendingActuation x, PendingActuation y)
-        => x.ActuationIdValue == y.ActuationIdValue;
+    public bool Equals(PendingActuation? x, PendingActuation? y)
+    {
+        if (ReferenceEquals(x, y))
+        {
+            return true;
+        }
+
+        if (x is null || y is null)
+        {
+            return false;
+        }
+
+        return x.ActuationIdValue == y.ActuationIdValue;
+    }
 
     public int GetHashCode(PendingActuation obj)
         => obj.ActuationIdValue.GetHashCode();

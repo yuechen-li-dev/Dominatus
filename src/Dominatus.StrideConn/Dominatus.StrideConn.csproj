@@ -16,17 +16,16 @@
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial preview connector for hosting Dominatus.Core inside Stride projects. Includes StrideDominatusSystem, runtime service registration, entity registry, transform actuators, and Ariadne dialogue actuation surface contracts/handler. Concrete demo UI lives in the sandbox sample.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
     <ProjectReference Include="..\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
-    <ProjectReference Include="..\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Stride.Engine" Version="4.3.0.2507" />
-    <PackageReference Include="Stride.UI" Version="4.3.0.2507" />
   </ItemGroup>
 
   <ItemGroup>

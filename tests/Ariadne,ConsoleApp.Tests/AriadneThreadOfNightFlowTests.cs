@@ -87,12 +87,7 @@ public sealed class AriadneThreadOfNightFlowTests
         }
 
         public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, DiagAskCommand cmd)
-            => new(
-                Accepted: true,
-                Completed: true,
-                Ok: true,
-                Payload: _value,
-                PayloadType: typeof(string));
+            => ActuatorHost.HandlerResult.CompletedWithPayload(_value);
     }
 
     private sealed class SequenceChooseHandler : IActuationHandler<DiagChooseCommand>
@@ -112,12 +107,7 @@ public sealed class AriadneThreadOfNightFlowTests
 
             var choice = _choices.Count > 0 ? _choices.Dequeue() : cmd.Options[0].Key;
 
-            return new(
-                Accepted: true,
-                Completed: true,
-                Ok: true,
-                Payload: choice,
-                PayloadType: typeof(string));
+            return ActuatorHost.HandlerResult.CompletedWithPayload(choice);
         }
     }
 }

@@ -55,6 +55,7 @@ public sealed class AiAgent
         Bb.OnSet = (key, oldVal, newVal) =>
             BbTracker.MarkSet(world.Clock.Time, key, oldVal, newVal);
 
+        Bb.Expire(world.Clock.Time);
         Brain.Tick(world, this);
     }
 }

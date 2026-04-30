@@ -14,7 +14,7 @@ public sealed class ActuatorHostPolicyTests
         public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, PingCommand cmd)
         {
             Called = true;
-            return new ActuatorHost.HandlerResult(Accepted: true, Completed: true, Ok: true, Payload: cmd.Value, PayloadType: typeof(string));
+            return ActuatorHost.HandlerResult.CompletedWithPayload(cmd.Value);
         }
     }
 

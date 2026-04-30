@@ -5,6 +5,7 @@ using Dominatus.Core.Hfsm;
 using Dominatus.Core.Runtime;
 using Dominatus.StrideConn;
 using Dominatus.StrideSandbox.Scripts;
+using Dominatus.StrideSandbox.Scripts.Ui;
 using Stride.Engine;
 using Stride.Graphics;
 

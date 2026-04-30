@@ -10,10 +10,7 @@ public static class FishFactory
     public static AiAgent CreatePrey(float x, float y, float r, float cr, float cg, float cb)
     {
         var graph = new HfsmGraph { Root = "Root" };
-        graph.Add(new HfsmStateDef { Id = "Root", Node = FishNodes.Root });
-        graph.Add(new HfsmStateDef { Id = "Wander", Node = FishNodes.Wander });
-        graph.Add(new HfsmStateDef { Id = "SeekFood", Node = FishNodes.SeekFood });
-        graph.Add(new HfsmStateDef { Id = "Flee", Node = FishNodes.Flee });
+        FishNodes.RegisterPrey(graph);
 
         var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
         var agent = new AiAgent(brain);
@@ -46,9 +43,7 @@ public static class FishFactory
     public static AiAgent CreatePredator(float x, float y)
     {
         var graph = new HfsmGraph { Root = "Root" };
-        graph.Add(new HfsmStateDef { Id = "Root", Node = FishNodes.Root });
-        graph.Add(new HfsmStateDef { Id = "Wander", Node = FishNodes.Wander });
-        graph.Add(new HfsmStateDef { Id = "Hunt", Node = FishNodes.Hunt });
+        FishNodes.RegisterPredator(graph);
 
         var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
         var agent = new AiAgent(brain);

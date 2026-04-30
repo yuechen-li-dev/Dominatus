@@ -12,6 +12,12 @@ It does **not** require LLMs to function. It is fully usable on its own as a det
 
 Dominatus is a general-purpose runtime for any domain that needs agents with memory, structured control flow, commands, and save/restore semantics — including video games, simulations, and industrial control systems.
 
+For practical typed non-LLM side effects, see `Dominatus.Actuators.Standard` (sandboxed file commands + wall-clock actuators): `docs/ACTUATORS_STANDARD_M0.md`.
+
+For Home Assistant REST integration as a typed allowlisted actuator bridge, see `Dominatus.Actuators.HomeAssistant`: `docs/ACTUATORS_HOMEASSISTANT_M0.md`.
+For Home Assistant WebSocket `state_changed` environment observation bridge, see `docs/ACTUATORS_HOMEASSISTANT_M1_WEBSOCKET.md`.
+For ASP.NET inspection endpoints suitable for custom web UIs, see `Dominatus.Server` (`docs/DOMINATUS_SERVER_M0.md`).
+
 ---
 
 ## 1. The Five Layers
@@ -43,6 +49,7 @@ knowing anything about persistence.
 `AiWorld` is the simulation container. It holds:
 
 - **`Clock`** — a monotonically advancing `AiClock` (driven by `Tick(float dt)`).
+- **`Bb`** — a world/session `Blackboard`, shared durable memory for this `AiWorld` instance.
 - **`Agents`** — the list of all `AiAgent` instances.
 - **`View`** — an `IAiWorldView` for reading public agent snapshots (position, team, alive).
 - **`Mail`** — an `IAiMailbox` for sending typed messages between agents.
@@ -50,6 +57,10 @@ knowing anything about persistence.
 
 Calling `world.Tick(dt)` advances the clock, ticks the actuator (for deferred
 completions), and ticks every agent in order.
+
+`AgentSnapshot.Position` is an engine-agnostic `System.Numerics.Vector3`. 2D
+games/simulations can use `Z = 0` by convention. 3D connectors own how their
+engine axes map into X/Y/Z.
 
 ### AiAgent
 
@@ -80,11 +91,13 @@ public readonly record struct AiCtx(
     IAiActuator Act)
 {
     public Blackboard Bb => Agent.Bb;
+    public Blackboard WorldBb => World.Bb;
 }
 ```
 
-`ctx` is the one thing every node receives, and `ctx.Bb` is how almost all
-node-to-node communication happens.
+`ctx` is the one thing every node receives. Nodes use explicit blackboard
+surfaces: `ctx.Bb` for agent-local state and `ctx.WorldBb` for shared
+world/session state.
 
 ---
 
@@ -100,7 +113,7 @@ public static readonly BbKey<bool> IsAlerted  = new("Agent.IsAlerted");
 public static readonly BbKey<string> LastInput = new("Player.LastInput");
 ```
 
-**Reading:**
+**Reading agent-local memory:**
 ```csharp
 var hp = ctx.Bb.GetOrDefault(Health, defaultValue: 100);
 
@@ -110,7 +123,18 @@ if (ctx.Bb.TryGet(IsAlerted, out bool alerted) && alerted)
 
 **Writing:**
 ```csharp
+ctx.Bb.Set(Keys.CurrentTarget, "goblin-12");
+ctx.WorldBb.Set(Keys.Weather, "rain");
 ctx.Bb.Set(Health, hp - 10);
+```
+
+**Temporary facts with explicit TTL (simulation time):**
+```csharp
+ctx.Bb.SetFor(Keys.LastSeenEnemy, enemyId, ctx.World.Clock.Time, ttlSeconds: 2.0f);
+if (ctx.Bb.TryGet(Keys.LastSeenEnemy, out var recentEnemy))
+{
+    // still present and not expired by tick-boundary cleanup
+}
 ```
 
 **Key properties of the Blackboard:**
@@ -124,10 +148,25 @@ ctx.Bb.Set(Health, hp - 10);
   already stored is a true no-op: no revision bump, no dirty mark, no hook.
 - **`OnSet` hook** — wired at agent construction to `BbChangeTracker`, which
   journals every mutation for the persistence layer.
+- **TTL is opt-in and deterministic** — normal `Set` writes non-expiring values
+  and clears any existing TTL; `SetFor`/`SetUntil` create or refresh key-level
+  expiry metadata using simulation time (`AiWorld.Clock.Time`).
+- **Expiry timing** — expiry occurs at deterministic tick boundaries (world BB
+  after clock advance and before agent ticks; agent BB before brain tick). Reads
+  (`TryGet`, `GetOrDefault`) never mutate or expire data.
+- **Expiry mutation semantics** — runtime expiry behaves like removal: key is
+  removed, key becomes dirty, and revision increments.
+- **Persistence-aware TTL** — snapshot entries can include `exp` (expiry time).
+  Old snapshots without `exp` deserialize as non-expiring.
+- **Not a scheduler** — blackboard TTL has no callbacks/alarms. Use
+  `WaitEvent` timeout for waiting behavior, and Standard time actuators for
+  wall-clock concerns.
 
-The Blackboard is intentionally the *only* mutable state that nodes are
-expected to touch. Anything a node needs to communicate to the outside world,
-or to later states, should go through `Bb.Set`.
+Nodes should use explicit blackboard surfaces for mutable durable state:
+`ctx.Bb` for agent-local state and `ctx.WorldBb` for shared world/session
+state. World-blackboard dirty-key transition integration is future work.
+For squad/team coordination patterns — and why Dominatus does not currently
+expose native writable team blackboards — see `docs/TEAM_COORDINATION.md`.
 
 ---
 
@@ -181,7 +220,7 @@ the step and either handles it internally (for waits) or passes it up to the
 |------|--------|
 | `WaitSeconds(float)` | Pause until `n` seconds have elapsed on `world.Clock` |
 | `WaitUntil(Func<AiCtx, bool>)` | Pause until the predicate returns true |
-| `WaitEvent<T>` | Pause until a matching typed event is consumed from the agent's event bus |
+| `WaitEvent<T>` | Pause until a matching typed event is consumed from the agent's event bus; optional simulation-time timeout is supported |
 | `Act(command, storeIdAs?)` | Dispatch a command; continue immediately in same tick |
 | `AwaitActuation(idKey)` | Pause until the actuation stored in `idKey` completes |
 | `AwaitActuation<T>(idKey, storePayloadAs?)` | Same, but also captures a typed payload into BB |
@@ -212,6 +251,11 @@ yield return Ai.Act(new SomeCommand(), Keys.CommandId);
 yield return Ai.Await(Keys.CommandId);
 yield return Ai.Await(Keys.CommandId, Keys.ResultPayload);  // typed
 yield return Ai.Decide(options, hysteresis: 0.1f, minCommitSeconds: 0.5f);
+yield return Ai.Event<DoorOpened>(
+    timeoutSeconds: 5f,
+    filter: e => e.DoorId == doorId,
+    onConsumed: (agent, e) => agent.Bb.Set(Keys.DoorOpened, true),
+    onTimeout: agent => agent.Bb.Set(Keys.DoorOpenTimedOut, true));
 ```
 ## 5a. How Dominatus is Implemented
 
@@ -331,9 +375,11 @@ enumerator — no ghost continuations.
    passed, return `Running`. Otherwise clear the wait and continue.
 2. If a `WaitUntil` is active, evaluate the predicate. If not true yet,
    return `Running`. Otherwise clear and continue.
-3. If a `WaitEvent` is active, try to consume the event from the bus. If
-   not available yet, return `Running`. Otherwise clear and continue in
-   the *same tick* (important for replay correctness).
+3. If a `WaitEvent` is active, try to consume the event from the bus. Event
+   consumption is checked before timeout handling, so if both are possible on
+   the same tick, the event wins. If no event is consumed and timeout is
+   configured and elapsed, invoke timeout callback once, clear wait, and
+   continue in the same tick.
 4. Call `_it.MoveNext()`. If the iterator is exhausted, return `Succeeded`.
 5. Examine the yielded step:
    - Wait steps: store the wait state, return `Running`.
@@ -461,6 +507,12 @@ yield return Ai.Await(Keys.LastActuationId);
 `Act` dispatches the command to the `ActuatorHost` and stores the resulting
 `ActuationId` in the blackboard key. `Await` pauses until an `ActuationCompleted`
 event with that id appears on the agent's event bus.
+Typed payload completions are NativeAOT-friendly: use generic completion paths
+(`HandlerResult.CompletedWithPayload<T>(...)` / `CompleteLater<T>(...)`) so `T` is statically
+closed and no runtime generic reflection is required.
+Core persistence JSON is also NativeAOT-friendly: blackboard snapshot/delta blobs are
+encoded manually with a tagged primitive codec, while checkpoint/replay/cursor DTOs use
+source-generated `System.Text.Json` metadata in `DominatusJsonContext`.
 
 ### Registering a handler
 
@@ -503,6 +555,8 @@ an event that was published before the wait began.
 
 The mailbox (`IAiMailbox`) lets you publish events to another agent's bus
 from outside a node: `world.Mail.Send(targetId, message)`.
+For recommended team/squad ownership patterns using mailbox + lead-owned memory,
+see `docs/TEAM_COORDINATION.md`.
 
 ---
 
@@ -561,7 +615,8 @@ Enumerator state cannot be treated as a reliable, portable persistence boundary 
 
 So the persistence model is:
 
-* save blackboard state
+* save world blackboard state
+* save per-agent blackboard state
 * save the active HFSM path
 * save pending runtime obligations and cursor state
 * restore those durable surfaces
@@ -574,7 +629,8 @@ This is a bounded and explicit restore model, not “serialize the entire runnin
 A **`DominatusCheckpoint`** captures the durable parts of runtime state needed for reconstruction:
 
 * the **HFSM active path** — the ordered list of currently active state IDs
-* a **blackboard snapshot** — all current key/value pairs, serialized via `BbJsonCodec`
+* a **world blackboard snapshot** — world/session key/value pairs serialized via `BbJsonCodec`
+* a **per-agent blackboard snapshot** — each agent's key/value pairs serialized via `BbJsonCodec`
 * **event cursor / in-flight actuation state** — enough information for replay and pending completion handling to resume coherently
 
 This means Dominatus persists the *meaningful control state* of the agent, not the raw internal shape of a suspended iterator object.
@@ -589,11 +645,12 @@ Restore does **not** mean:
 
 Instead, restore means:
 
-1. restore the blackboard
-2. restore the active HFSM path
-3. reconstruct pending runtime obligations
-4. replay nondeterministic post-checkpoint inputs
-5. continue execution from the rebuilt runtime state
+1. restore the world blackboard
+2. restore per-agent blackboards
+3. restore the active HFSM path
+4. reconstruct pending runtime obligations
+5. replay nondeterministic post-checkpoint inputs
+6. continue execution from the rebuilt runtime state
 
 A good way to think about this is:
 
@@ -719,7 +776,8 @@ Its goal is narrower and more practical:
 
 The persistence model can be summarized like this:
 
-* **Blackboard** stores durable memory
+* **World Blackboard** (`ctx.WorldBb` / `world.Bb`) stores shared durable memory
+* **Agent Blackboard** (`ctx.Bb` / `agent.Bb`) stores per-agent durable memory
 * **HFSM path** stores durable control position
 * **Replay** restores post-checkpoint causality
 * **Iterator internals are not the persistence boundary**
@@ -889,4 +947,3 @@ world.Tick(dt)
 For engine integration, use connector packages rather than adding engine dependencies to `Dominatus.Core`.
 
 - Stride runtime bridge docs: `docs/STRIDECONN_M0.md`
-

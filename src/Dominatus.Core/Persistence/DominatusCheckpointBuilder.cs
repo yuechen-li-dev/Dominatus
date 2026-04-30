@@ -28,6 +28,7 @@ public static class DominatusCheckpointBuilder
     public static DominatusCheckpoint Capture(AiWorld world)
     {
         var agents = new AgentCheckpoint[world.Agents.Count];
+        var worldBbBlob = BbJsonCodec.SerializeSnapshot(world.Bb.EnumerateSnapshotEntries());
 
         for (int i = 0; i < world.Agents.Count; i++)
         {
@@ -37,7 +38,7 @@ public static class DominatusCheckpointBuilder
                              .Select(s => s.ToString())
                              .ToArray();
 
-            var bbBlob = BbJsonCodec.SerializeSnapshot(a.Bb.EnumerateEntries());
+            var bbBlob = BbJsonCodec.SerializeSnapshot(a.Bb.EnumerateSnapshotEntries());
 
             // Read in-flight actuations directly — no manual plumbing required by caller.
             var cursorSnapshot = new EventCursorSnapshot(
@@ -56,6 +57,7 @@ public static class DominatusCheckpointBuilder
         return new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: world.Clock.Time,
+            WorldBlackboardBlob: worldBbBlob,
             Agents: agents);
     }
 
@@ -71,6 +73,18 @@ public static class DominatusCheckpointBuilder
     public static EventCursorSnapshot[] Restore(AiWorld world, DominatusCheckpoint checkpoint)
     {
         var cursorSnapshots = new EventCursorSnapshot[world.Agents.Count];
+        world.Bb.Clear();
+        if (checkpoint.WorldBlackboardBlob is { Length: > 0 })
+        {
+            var worldBbEntries = BbJsonCodec.DeserializeSnapshotEntries(checkpoint.WorldBlackboardBlob);
+            foreach (var entry in worldBbEntries)
+            {
+                if (entry.ExpiresAt is { } exp && exp <= checkpoint.WorldTimeSeconds)
+                    continue;
+
+                world.Bb.SetRaw(entry.Key, entry.Value, entry.ExpiresAt);
+            }
+        }
 
         for (int i = 0; i < cursorSnapshots.Length; i++)
             cursorSnapshots[i] = new EventCursorSnapshot(EventCursorCodec.Version, Array.Empty<PendingActuation>());
@@ -83,10 +97,15 @@ public static class DominatusCheckpointBuilder
             var agent = world.Agents[idx];
 
             // Blackboard restore — bypasses OnSet, dirty tracking, revision bump.
-            var map = BbJsonCodec.DeserializeSnapshot(ac.BlackboardBlob);
+            var entries = BbJsonCodec.DeserializeSnapshotEntries(ac.BlackboardBlob);
             agent.Bb.Clear();
-            foreach (var kv in map)
-                agent.Bb.SetRaw(kv.Key, kv.Value);
+            foreach (var entry in entries)
+            {
+                if (entry.ExpiresAt is { } exp && exp <= checkpoint.WorldTimeSeconds)
+                    continue;
+
+                agent.Bb.SetRaw(entry.Key, entry.Value, entry.ExpiresAt);
+            }
 
             // Event cursor restore — decode first so both the agent and ReplayDriver
             // can see the same pending-actuation state.

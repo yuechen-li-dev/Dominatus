@@ -12,6 +12,7 @@ public sealed class DominatusSaveSurfaceTests
         var checkpoint = new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: 12.5f,
+            WorldBlackboardBlob: Encoding.UTF8.GetBytes("{\"v\":1,\"entries\":[]}"),
             Agents:
             [
                 new AgentCheckpoint(
@@ -40,6 +41,7 @@ public sealed class DominatusSaveSurfaceTests
         var checkpoint = new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: 42.0f,
+            WorldBlackboardBlob: Encoding.UTF8.GetBytes("{\"v\":1,\"entries\":[{\"k\":\"weather\",\"t\":\"string\",\"v\":\"rain\"}]}"),
             Agents:
             [
                 new AgentCheckpoint(
@@ -67,6 +69,9 @@ public sealed class DominatusSaveSurfaceTests
 
         Assert.Equal(checkpoint.Version, restoredCheckpoint.Version);
         Assert.Equal(checkpoint.WorldTimeSeconds, restoredCheckpoint.WorldTimeSeconds);
+        Assert.Equal(
+            Encoding.UTF8.GetString(checkpoint.WorldBlackboardBlob!),
+            Encoding.UTF8.GetString(restoredCheckpoint.WorldBlackboardBlob!));
         Assert.Equal(checkpoint.Agents.Length, restoredCheckpoint.Agents.Length);
 
         Assert.NotNull(restoredReplayLog);
@@ -104,6 +109,7 @@ public sealed class DominatusSaveSurfaceTests
         var checkpoint = new DominatusCheckpoint(
             Version: DominatusSave.CurrentVersion,
             WorldTimeSeconds: 1f,
+            WorldBlackboardBlob: Array.Empty<byte>(),
             Agents: Array.Empty<AgentCheckpoint>());
 
         var chunks = new List<SaveChunk>

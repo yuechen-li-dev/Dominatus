@@ -7,4 +7,5 @@
 public sealed record DominatusCheckpoint(
     int Version,
     float WorldTimeSeconds,
+    byte[]? WorldBlackboardBlob,
     AgentCheckpoint[] Agents);

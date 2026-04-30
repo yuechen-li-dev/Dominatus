@@ -29,12 +29,7 @@ public sealed class LlmTextActuationHandler : IActuationHandler<LlmTextRequest>
         {
             var result = Resolve(cmd, requestHash, ctx.Cancel);
 
-            return new ActuatorHost.HandlerResult(
-                Accepted: true,
-                Completed: true,
-                Ok: true,
-                Payload: result.Text,
-                PayloadType: typeof(string));
+            return ActuatorHost.HandlerResult.CompletedWithPayload(result.Text);
         }
         catch (Exception ex)
         {

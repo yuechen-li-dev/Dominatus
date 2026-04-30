@@ -51,6 +51,21 @@ ctx.Bb.Set(Level, level + 1);
 ctx.Bb.Set(PlayerAnswer, userInput);
 ```
 
+**Temporary facts without manual timestamp keys:**
+```csharp
+ctx.Bb.SetFor(Keys.LastSeenEnemy, enemyId, ctx.World.Clock.Time, ttlSeconds: 2.0f);
+
+if (ctx.Bb.TryGet(Keys.LastSeenEnemy, out var seenEnemy))
+{
+    // use recent memory
+}
+```
+
+`SetFor` / `SetUntil` are explicit, simulation-time TTL writes. Normal `Set`
+stores non-expiring values and clears any existing TTL. For simple temporary
+facts (recent threats, claimed resources, route failures), no separate
+timestamp key is needed.
+
 ---
 
 ## 3. Writing Nodes

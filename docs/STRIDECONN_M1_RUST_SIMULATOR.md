@@ -27,6 +27,7 @@ Not included:
 - Old Ariadne runner/component ownership model.
 - LLM/provider routing.
 - InputMan.
+- concrete dialogue UI inside `Dominatus.StrideConn` (connector has no package dependency on `Stride.UI`).
 
 ## Project and sample wiring
 
@@ -37,7 +38,8 @@ Added reusable dialogue bridge types:
 - `IStrideDialogueSurface`
 - `StrideDialogueState`
 - `StrideDialogueActuationHandler`
-- `StrideDialogueSurface`
+
+Concrete UI (`StrideDialogueSurface`) is sample-local under `samples/Dominatus.StrideSandbox`.
 
 `StrideDialogueActuationHandler` handles:
 
@@ -58,7 +60,7 @@ Installer behavior:
 
 1. Ensures `StrideDominatusSystem` exists in `Game.GameSystems`.
 2. Resolves `IDominatusStrideRuntime` from `Game.Services`.
-3. Creates `StrideDialogueSurface` and registers `StrideDialogueActuationHandler`.
+3. Creates sample-local `StrideDialogueSurface` and registers `StrideDialogueActuationHandler`.
 4. Builds `HfsmGraph`, sets root to `Root`, and calls `RustSimulator.Register(graph)`.
 5. Creates an `AiAgent` and adds it to `runtime.World`.
 

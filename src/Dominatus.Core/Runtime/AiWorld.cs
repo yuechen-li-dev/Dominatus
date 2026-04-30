@@ -14,6 +14,8 @@ public sealed class AiWorld
     public IAiMailbox Mail { get; }
 
     public AiClock Clock { get; } = new();
+    /// <summary>World/session-scoped blackboard shared by all agents in this <see cref="AiWorld"/>.</summary>
+    public Blackboard.Blackboard Bb { get; } = new();
 
     public IAiActuator Actuator { get; }
 
@@ -33,7 +35,7 @@ public sealed class AiWorld
 
         // Seed public snapshot (defaults)
         if (!_public.ContainsKey(agent.Id))
-            _public[agent.Id] = new AgentSnapshot(agent.Id, Team: 0, Position: Vector2.Zero, IsAlive: true);
+            _public[agent.Id] = new AgentSnapshot(agent.Id, Team: 0, Position: Vector3.Zero, IsAlive: true);
     }
 
     public IReadOnlyList<AiAgent> Agents => _agents;
@@ -46,6 +48,7 @@ public sealed class AiWorld
     public void Tick(float dt)
     {
         Clock.Advance(dt);
+        Bb.Expire(Clock.Time);
 
         if (Actuator is ITickableActuator tickable)
             tickable.Tick(this);
