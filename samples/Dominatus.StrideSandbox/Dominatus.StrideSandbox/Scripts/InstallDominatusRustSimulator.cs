@@ -6,12 +6,19 @@ using Dominatus.Core.Runtime;
 using Dominatus.StrideConn;
 using Dominatus.StrideSandbox.Scripts;
 using Stride.Engine;
+using Stride.Graphics;
 
 namespace Dominatus.StrideSandbox;
 
 public sealed class InstallDominatusRustSimulator : SyncScript
 {
     public bool ShowStartupSmokeLine { get; set; } = true;
+
+    /// <summary>
+    /// Assign a SpriteFont asset here in Game Studio so the dialogue surface can render text.
+    /// Asset View -> New Asset -> UI -> SpriteFont, then drag it into this slot.
+    /// </summary>
+    public SpriteFont? Font { get; set; }
 
     private StrideDialogueSurface? _surface;
     private bool _loggedUpdate;
@@ -34,7 +41,7 @@ public sealed class InstallDominatusRustSimulator : SyncScript
             throw new InvalidOperationException("IDominatusStrideRuntime service was not registered.");
         Console.WriteLine("[Dominatus.StrideSandbox] runtime resolved");
 
-        _surface = new StrideDialogueSurface(Entity);
+        _surface = new StrideDialogueSurface(Entity, font: Font);
         _surface.EnsureInitialized();
         _surface.SetStatus("Dominatus installer started");
         Console.WriteLine("[Dominatus.StrideSandbox] surface initialized");

@@ -1,6 +1,7 @@
 using Ariadne.OptFlow.Commands;
 using Stride.Core.Mathematics;
 using Stride.Engine;
+using Stride.Graphics;
 using Stride.Input;
 using Stride.UI;
 using Stride.UI.Controls;
@@ -12,6 +13,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
 {
     private readonly StrideDialogueState _state = new();
     private readonly Entity _entity;
+    private readonly SpriteFont? _font;
 
     private UIComponent? _ui;
     private Entity? _uiHostEntity;
@@ -36,14 +38,15 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
     private bool _uiHostAddedToScene;
 
     public StrideDialogueSurface(Entity entity)
-        : this(entity, existingUiComponent: null)
+        : this(entity, existingUiComponent: null, font: null)
     {
     }
 
-    public StrideDialogueSurface(Entity entity, UIComponent? existingUiComponent)
+    public StrideDialogueSurface(Entity entity, UIComponent? existingUiComponent = null, SpriteFont? font = null)
     {
         _entity = entity ?? throw new ArgumentNullException(nameof(entity));
         _ui = existingUiComponent;
+        _font = font;
     }
 
     public void EnsureInitialized()
@@ -55,38 +58,20 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
 
         EnsureUiComponentAttached();
 
-        _status = new TextBlock
-        {
-            TextColor = Color.Orange,
-            Text = _statusText
-        };
+        _status = MakeText("Dominatus installer started", Color.Orange);
+        _speaker = MakeText(null, Color.Yellow);
+        _body = MakeText("Dominatus Stride dialogue surface initialized.", Color.White);
+        _prompt = MakeText("Waiting for first dialogue...", Color.Aqua);
 
-        _speaker = new TextBlock
-        {
-            TextColor = Color.Yellow
-        };
-
-        _body = new TextBlock
-        {
-            TextColor = Color.White,
-            Text = "Dominatus Stride dialogue surface initialized."
-        };
-
-        _prompt = new TextBlock
-        {
-            TextColor = Color.Aqua,
-            Text = "Waiting for first dialogue..."
-        };
-
-        _advanceButton = new Button { Content = new TextBlock { Text = "Next (Space/Enter)", TextColor = Color.White } };
+        _advanceButton = MakeButton("Next (Space/Enter)");
         _choicePanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
         _askInput = new EditText { Text = string.Empty };
-        _askSubmitButton = new Button { Content = new TextBlock { Text = "Submit", TextColor = Color.White } };
-        _askDefaultButton = new Button { Content = new TextBlock { Text = "Use drop(player);", TextColor = Color.White } };
+        _askSubmitButton = MakeButton("Submit");
+        _askDefaultButton = MakeButton("Use drop(player);");
 
         _advanceButton.Click += (_, _) => CompleteLine();
         _askSubmitButton.Click += (_, _) => CompleteAsk(_askInput.Text ?? string.Empty);
@@ -209,6 +194,22 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         return true;
     }
 
+    private TextBlock MakeText(string? text, Color color)
+    {
+        var tb = new TextBlock { TextColor = color };
+        if (text is not null)
+            tb.Text = text;
+        if (_font is not null)
+            tb.Font = _font;
+        return tb;
+    }
+
+    private Button MakeButton(string label)
+    {
+        var content = MakeText(label, Color.White);
+        return new Button { Content = content };
+    }
+
     private void EnsureUiComponentAttached()
     {
         if (_ui is not null)
@@ -234,8 +235,9 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
         _uiHostEntity = new Entity("DominatusDialogueUiHost");
         _ui = new UIComponent();
         _uiHostEntity.Components.Add(_ui);
+        // Setting Transform.Parent automatically propagates the scene reference to the child entity.
+        // Do NOT also call _entity.Scene.Entities.Add(_uiHostEntity) — that would double-add and throw.
         _uiHostEntity.Transform.Parent = _entity.Transform;
-        _entity.Scene.Entities.Add(_uiHostEntity);
         _uiHostAddedToScene = true;
     }
 
@@ -347,10 +349,7 @@ public sealed class StrideDialogueSurface : IStrideDialogueSurface
             for (var i = 0; i < _state.Options.Count; i++)
             {
                 var option = _state.Options[i];
-                var button = new Button
-                {
-                    Content = new TextBlock { Text = $"{i + 1}. {option.Text}", TextColor = Color.White }
-                };
+                var button = MakeButton($"{i + 1}. {option.Text}");
                 var key = option.Key;
                 button.Click += (_, _) => CompleteChoose(key);
                 _choicePanel.Children.Add(button);

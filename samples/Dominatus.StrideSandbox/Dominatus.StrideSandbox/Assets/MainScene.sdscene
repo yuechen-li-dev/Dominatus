@@ -12,6 +12,7 @@ Hierarchy:
         - ref!! 511b3980-93b5-4ade-9df4-e48d44a09c99
         - ref!! d5e16efc-debf-4ff8-85a5-a7b55561b942
         - ref!! 6dfa10b1-9962-4ab8-bbc8-8e7e767d14fc
+        - ref!! b4013ed7-2558-40c8-9855-4ac972c6d3a0
     Parts:
         -   Entity:
                 Id: 101182c7-71b1-4ef2-9d7c-1fcc1ab8b16f
@@ -80,6 +81,8 @@ Hierarchy:
                         Children: {}
                     2bf57d6d096daeaa4e76b3d37126eb5c: !Dominatus.StrideSandbox.InstallDominatusRustSimulator,Dominatus.StrideSandbox
                         Id: e1dff680-8891-4819-8724-f4ef9be013af
+                        ShowStartupSmokeLine: true
+                        Font: bb16c84c-6bb4-4cc5-817b-86d73eeef180:SpriteFont
         -   Entity:
                 Id: 63fb5fd3-e357-4f12-a73a-6a03aed02bab
                 Name: Directional light
@@ -116,6 +119,19 @@ Hierarchy:
                         Scale: {X: 1.0, Y: 1.0, Z: 1.0}
                         Children:
                             270acf212eaa850c4e1578762ec25e2a: ref!! e4930df0-0357-4206-adef-381bb09800d5
+        -   Entity:
+                Id: b4013ed7-2558-40c8-9855-4ac972c6d3a0
+                Name: CleanUiPostFxPatch
+                Components:
+                    05c2b44a139db5876886505b079519c3: !TransformComponent
+                        Id: 6176fad8-3f57-43f8-96c6-c3c1dacaf85b
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    ea8e65c977d56b7dbe8ededb88ee50a1: !CleanUIScriptTest.CleanUiPostFxPatch,Dominatus.StrideSandbox
+                        Id: ea5cd594-b4ee-4c00-b59a-a97d09449680
+                        MoveAllUiToRenderGroup31: true
         -   Entity:
                 Id: d5e16efc-debf-4ff8-85a5-a7b55561b942
                 Name: Sphere
