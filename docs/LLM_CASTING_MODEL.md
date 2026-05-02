@@ -247,3 +247,5 @@ Possible follow-ups:
 
 For rare high-consequence decisions, V1 M4a adds `Llm.MagiDecide(...)` in `Dominatus.Llm.OptFlow`: two advocate proposals plus a judge over a closed option set, with runtime-sovereign validation and cassette replay.
 
+
+For high-risk LLM decisions, hosts can opt into a human approval actuation gate: the LLM proposes, the human can approve/change/reject, and runtime validates against the closed authored option set before commit.

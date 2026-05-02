@@ -237,7 +237,8 @@ public static class Llm
         BbKey<string>? storeRationaleAs = null,
         BbKey<string>? storeResultJsonAs = null,
         LlmSamplingOptions? sampling = null,
-        LlmDecisionPolicy? policy = null)
+        LlmDecisionPolicy? policy = null,
+        LlmDecisionApprovalPolicy? approval = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(intent);
@@ -297,7 +298,7 @@ public static class Llm
             PromptTemplateVersion: LlmDecisionRequest.DefaultPromptTemplateVersion,
             OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion);
 
-        return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, policy ?? LlmDecisionPolicy.Default);
+        return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, policy ?? LlmDecisionPolicy.Default, approval);
     }
 
     public static AiStep MagiDecide(
@@ -540,7 +541,8 @@ public static class Llm
         BbKey<string> StoreChosenAs,
         BbKey<string>? StoreRationaleAs,
         BbKey<string>? StoreResultJsonAs,
-        LlmDecisionPolicy Policy) : AiStep, IWaitEvent
+        LlmDecisionPolicy Policy,
+        LlmDecisionApprovalPolicy? Approval) : AiStep, IWaitEvent
     {
         private readonly BbKey<bool> _completedKey = new(BuildDecideKey(Request.StableId, "completed"));
         private readonly BbKey<string> _chosenOptionKey = new(BuildDecideKey(Request.StableId, "chosenOptionId"));
@@ -551,6 +553,7 @@ public static class Llm
         private readonly BbKey<long> _lastScoredTickKey = new(BuildDecideKey(Request.StableId, "lastScoredTick"));
         private readonly BbKey<long> _committedUntilTickKey = new(BuildDecideKey(Request.StableId, "committedUntilTick"));
         private readonly BbKey<long> _pendingActuationIdKey = new(BuildDecideKey(Request.StableId, "pendingActuationId"));
+        private readonly BbKey<long> _pendingApprovalActuationIdKey = new(BuildDecideKey(Request.StableId, "pendingApprovalActuationId"));
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
@@ -603,6 +606,18 @@ public static class Llm
             var decision = ChooseCommittedOption(ctx, result, modelRankOne);
             var resultJson = BuildDecisionSummaryJson(result, decision, Policy);
 
+            if (Approval?.RequireApproval == true && !decision.RetainedPreviousChoice)
+            {
+                var approval = RequireApproval(ctx, ref cursor, result, decision, resultJson);
+                if (!approval.HasValue)
+                {
+                    return false;
+                }
+
+                decision = approval.Value.Decision;
+                resultJson = BuildDecisionSummaryJson(result, decision, Policy, approval.Value.Metadata);
+            }
+
             ctx.Bb.Set(_chosenOptionKey, decision.ChosenOptionId);
             ctx.Bb.Set(StoreChosenAs, decision.ChosenOptionId);
             ctx.Bb.Set(_chosenScoreKey, decision.ChosenScore);
@@ -623,7 +638,84 @@ public static class Llm
             ctx.Bb.Set(_committedUntilTickKey, checked(currentTick + Policy.MinCommitTicks));
             ctx.Bb.Set(_completedKey, true);
             ctx.Bb.Set(_pendingActuationIdKey, 0L);
+            ctx.Bb.Set(_pendingApprovalActuationIdKey, 0L);
             return true;
+        }
+
+        private (CommitDecision Decision, ApprovalSummary Metadata)? RequireApproval(
+            AiCtx ctx,
+            ref EventCursor cursor,
+            LlmDecisionResult result,
+            CommitDecision proposedDecision,
+            string proposedResultJson)
+        {
+            var pendingApprovalId = ctx.Bb.GetOrDefault(_pendingApprovalActuationIdKey, 0L);
+            if (pendingApprovalId == 0)
+            {
+                var command = new LlmDecisionApprovalCommand(
+                    Request.StableId,
+                    Request.Intent,
+                    Request.Persona,
+                    Request.CanonicalContextJson,
+                    Request.Options,
+                    proposedDecision.ChosenOptionId,
+                    proposedDecision.CommitRationale,
+                    proposedResultJson);
+                var dispatch = ctx.Act.Dispatch(ctx, command);
+                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))
+                {
+                    throw new InvalidOperationException($"Llm.Decide approval dispatch failed for stableId '{Request.StableId}'. {dispatch.Error ?? "Actuation rejected."}");
+                }
+
+                pendingApprovalId = dispatch.Id.Value;
+                ctx.Bb.Set(_pendingApprovalActuationIdKey, pendingApprovalId);
+                if (Approval?.StoreApprovalActuationIdAs is BbKey<ActuationId> storeKey)
+                {
+                    ctx.Bb.Set(storeKey, dispatch.Id);
+                }
+            }
+
+            if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted e) => e.Id.Equals(new ActuationId(pendingApprovalId)), out var completion))
+            {
+                return null;
+            }
+
+            if (!completion.Ok)
+            {
+                throw new InvalidOperationException($"Llm.Decide approval completion failed for stableId '{Request.StableId}'. {completion.Error ?? "Unknown error."}");
+            }
+
+            if (completion.Payload is not LlmDecisionApprovalResult approvalResult)
+            {
+                throw new InvalidOperationException($"Llm.Decide approval completion failed for stableId '{Request.StableId}'. Missing or invalid approval payload.");
+            }
+
+            string chosenId = approvalResult.Outcome switch
+            {
+                LlmDecisionApprovalOutcome.Approved => string.IsNullOrWhiteSpace(approvalResult.ChosenOptionId)
+                    ? proposedDecision.ChosenOptionId
+                    : approvalResult.ChosenOptionId!,
+                LlmDecisionApprovalOutcome.Changed => !string.IsNullOrWhiteSpace(approvalResult.ChosenOptionId)
+                    ? approvalResult.ChosenOptionId!
+                    : throw new InvalidOperationException($"Llm.Decide approval change requires chosen option for stableId '{Request.StableId}'."),
+                LlmDecisionApprovalOutcome.Rejected => throw new InvalidOperationException($"Llm.Decide approval rejected for stableId '{Request.StableId}'."),
+                _ => throw new InvalidOperationException($"Llm.Decide approval returned unknown outcome for stableId '{Request.StableId}'.")
+            };
+
+            if (!Request.Options.Any(o => string.Equals(o.Id, chosenId, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException($"Llm.Decide approval selected unknown option '{chosenId}' for stableId '{Request.StableId}'.");
+            }
+
+            var approvedScore = result.Scores.Single(s => string.Equals(s.OptionId, chosenId, StringComparison.Ordinal)).Score;
+            var approvedRationale = string.IsNullOrWhiteSpace(approvalResult.Rationale) ? proposedDecision.CommitRationale : approvalResult.Rationale!;
+            return (
+                proposedDecision with { ChosenOptionId = chosenId, ChosenScore = approvedScore, CommitRationale = approvedRationale },
+                new ApprovalSummary(
+                    approvalResult.Outcome.ToString().ToLowerInvariant(),
+                    proposedDecision.ChosenOptionId,
+                    chosenId,
+                    approvalResult.Rationale));
         }
 
         private bool TryReuseCommittedChoice(AiCtx ctx, long currentTick, out string reason)
@@ -765,7 +857,7 @@ public static class Llm
             => checked((long)Math.Floor(ctx.World.Clock.Time));
     }
 
-    private static string BuildDecisionSummaryJson(LlmDecisionResult result, CommitDecision decision, LlmDecisionPolicy policy)
+    private static string BuildDecisionSummaryJson(LlmDecisionResult result, CommitDecision decision, LlmDecisionPolicy policy, ApprovalSummary? approval = null)
     {
         var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
@@ -790,6 +882,21 @@ public static class Llm
 
         writer.WriteString("rationale", decision.CommitRationale);
         writer.WriteString("modelRationale", decision.ModelRationale);
+        if (approval is not null)
+        {
+            writer.WritePropertyName("approval");
+            writer.WriteStartObject();
+            writer.WriteBoolean("required", true);
+            writer.WriteString("outcome", approval.Value.Outcome);
+            writer.WriteString("proposedOptionId", approval.Value.ProposedOptionId);
+            writer.WriteString("approvedOptionId", approval.Value.ApprovedOptionId);
+            if (!string.IsNullOrWhiteSpace(approval.Value.Rationale))
+            {
+                writer.WriteString("rationale", approval.Value.Rationale);
+            }
+
+            writer.WriteEndObject();
+        }
 
         writer.WritePropertyName("scores");
         writer.WriteStartArray();
@@ -885,6 +992,8 @@ public static class Llm
         string? RetentionReason,
         string CommitRationale,
         string ModelRationale);
+
+    private readonly record struct ApprovalSummary(string Outcome, string ProposedOptionId, string ApprovedOptionId, string? Rationale);
 
     private static string BuildStepKey(string stableId, string suffix)
         => $"llm.{SanitizeStableId(stableId)}.{suffix}";
