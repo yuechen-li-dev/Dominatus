@@ -4,6 +4,8 @@ using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
 using Dominatus.OptFlow;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Dominatus.Actuators.Standard.Tests;
 
@@ -170,14 +172,26 @@ public sealed class ProcessActuatorsTests
     }
 
     [Fact]
+    public void ProcessTestTool_CanRunStdoutSmoke()
+    {
+        using var dir = new TempDir();
+        var handler = NewHandler(BaseOptions(dir.Path));
+
+        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "smoke"));
+        var payload = AssertProcessOk(result, "smoke");
+        Assert.Equal(0, payload.ExitCode);
+        Assert.Equal("smoke", payload.Stdout);
+        Assert.Equal(string.Empty, payload.Stderr);
+    }
+
+    [Fact]
     public void RunProcess_ReturnsExitCodeStdoutAndStderr()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path));
 
         var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "hello"));
-        Assert.True(result.Ok);
-        var payload = Assert.IsType<ProcessResult>(result.Payload);
+        var payload = AssertProcessOk(result, "hello");
         Assert.Equal(0, payload.ExitCode);
         Assert.Equal("hello", payload.Stdout);
         Assert.Equal(string.Empty, payload.Stderr);
@@ -190,8 +204,7 @@ public sealed class ProcessActuatorsTests
         var handler = NewHandler(BaseOptions(dir.Path));
 
         var result = handler.Handle(null!, NewCtx(), default, ToolCommand("exit", "7"));
-        Assert.True(result.Ok);
-        var payload = Assert.IsType<ProcessResult>(result.Payload);
+        var payload = AssertProcessOk(result, "7");
         Assert.Equal(7, payload.ExitCode);
         Assert.False(payload.TimedOut);
     }
@@ -230,8 +243,7 @@ public sealed class ProcessActuatorsTests
         var handler = NewHandler(BaseOptions(dir.Path));
 
         var result = handler.Handle(null!, NewCtx(), default, ToolCommand("cwd", WorkingDirectory: "nested"));
-        Assert.True(result.Ok);
-        var payload = Assert.IsType<ProcessResult>(result.Payload);
+        var payload = AssertProcessOk(result, "nested");
         Assert.Equal(Path.GetFullPath(nested), payload.Stdout);
     }
 
@@ -242,8 +254,7 @@ public sealed class ProcessActuatorsTests
         var handler = NewHandler(BaseOptions(dir.Path));
 
         var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "a && b | c"));
-        Assert.True(result.Ok);
-        var payload = Assert.IsType<ProcessResult>(result.Payload);
+        var payload = AssertProcessOk(result, "a && b | c");
         Assert.Equal("a && b | c", payload.Stdout);
     }
 
@@ -280,8 +291,7 @@ public sealed class ProcessActuatorsTests
         });
 
         var result = handler.Handle(null!, NewCtx(), default, ToolCommand("sleep", "1000"));
-        Assert.True(result.Ok);
-        var payload = Assert.IsType<ProcessResult>(result.Payload);
+        var payload = AssertProcessOk(result, "timeout");
         Assert.True(payload.TimedOut);
         Assert.Equal(-1, payload.ExitCode);
     }
@@ -350,22 +360,120 @@ public sealed class ProcessActuatorsTests
     private static string ToolHostPath()
     {
         var hostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
-        if (!string.IsNullOrWhiteSpace(hostPath) && File.Exists(hostPath))
-            return Path.GetFullPath(hostPath);
+        if (IsUsableDotnetHost(hostPath))
+            return Path.GetFullPath(hostPath!);
 
-        if (!string.IsNullOrWhiteSpace(Environment.ProcessPath) && File.Exists(Environment.ProcessPath))
-            return Path.GetFullPath(Environment.ProcessPath);
+        var fromPath = FindDotnetOnPath();
+        if (fromPath is not null)
+            return fromPath;
 
-        throw new InvalidOperationException("Could not resolve a .NET host executable path for process tests.");
+        if (IsUsableDotnetHost(Environment.ProcessPath))
+            return Path.GetFullPath(Environment.ProcessPath!);
+
+        throw new InvalidOperationException(
+            $"Could not resolve a dotnet host executable path for process tests. DOTNET_HOST_PATH='{hostPath}', Environment.ProcessPath='{Environment.ProcessPath}'.");
     }
 
     private static string ToolAssemblyPath()
     {
         var location = typeof(ProcessTestToolMarker).Assembly.Location;
-        if (string.IsNullOrWhiteSpace(location) || !File.Exists(location))
-            throw new InvalidOperationException("Process test tool assembly path is unavailable.");
+        if (!string.IsNullOrWhiteSpace(location) && File.Exists(location) && HasRuntimeConfig(location))
+            return location;
 
-        return location;
+        var candidate = FindToolAssemblyInProjectOutput();
+        if (candidate is not null)
+            return candidate;
+
+        throw new InvalidOperationException(
+            $"Process test tool assembly path is unavailable or missing runtimeconfig. Assembly.Location='{location}'.");
+    }
+
+    private static string? FindDotnetOnPath()
+    {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var fileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dotnet.exe" : "dotnet";
+        foreach (var segment in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var candidate = Path.Combine(segment, fileName);
+            if (IsUsableDotnetHost(candidate))
+                return Path.GetFullPath(candidate);
+        }
+
+        return null;
+    }
+
+    private static bool IsUsableDotnetHost(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        var fileName = Path.GetFileName(path);
+        var isDotnetName = string.Equals(fileName, "dotnet", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(fileName, "dotnet.exe", StringComparison.OrdinalIgnoreCase);
+        if (!isDotnetName)
+            return false;
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                Arguments = "--info",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            });
+            if (process is null)
+                return false;
+            process.WaitForExit(5000);
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string? FindToolAssemblyInProjectOutput()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var tfm = CurrentTfm();
+        var projectOutput = Path.Combine(repoRoot, "tests", "Dominatus.Actuators.Standard.ProcessTestTool", "bin", "Debug", tfm);
+        var assemblyPath = Path.Combine(projectOutput, "Dominatus.Actuators.Standard.ProcessTestTool.dll");
+        if (!File.Exists(assemblyPath) || !HasRuntimeConfig(assemblyPath))
+            return null;
+
+        return assemblyPath;
+    }
+
+    private static bool HasRuntimeConfig(string assemblyPath)
+        => File.Exists(Path.ChangeExtension(assemblyPath, ".runtimeconfig.json"));
+
+    private static string CurrentTfm()
+    {
+#if NET10_0
+        return "net10.0";
+#elif NET8_0
+        return "net8.0";
+#else
+        throw new InvalidOperationException("Unsupported test target framework for process tests.");
+#endif
+    }
+
+    private static ProcessResult AssertProcessOk(ActuatorHost.HandlerResult result, string scenario)
+    {
+        if (result.Ok && result.Payload is ProcessResult payload)
+            return payload;
+
+        var hostPath = ToolHostPath();
+        var toolAssemblyPath = ToolAssemblyPath();
+        var args = $"{toolAssemblyPath} stdout {scenario}";
+        var message = $"Process invocation failed. Executable='{hostPath}', helperAssembly='{toolAssemblyPath}', arguments='{args}', workingDirectory='{Environment.CurrentDirectory}', ok='{result.Ok}', error='{result.Error}', payload='{result.Payload?.GetType().Name ?? "null"}'.";
+        throw new Xunit.Sdk.XunitException(message);
     }
 
     private static AiCtx NewCtx(CancellationToken cancellationToken = default)
