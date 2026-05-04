@@ -159,13 +159,15 @@ public sealed class LlmMagiApprovalTests
         var req = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
         var cassette = new InMemoryLlmMagiCassette();
         var hash = LlmMagiRequestHasher.ComputeHash(req);
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(req, req.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(req, req.AdvocateB);
         cassette.Put(hash, req, new LlmMagiDecisionResult(
             hash,
             req.AdvocateA,
             req.AdvocateB,
             req.Judge,
-            new LlmDecisionResult("a", [new("join",0.9,1,"r")], "a"),
-            new LlmDecisionResult("b", [new("mediate",0.9,1,"r")], "b"),
+            new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq), [new("join",0.9,1,"r"),new("mediate",0.5,2,"r"),new("refuse",0.2,3,"r")], "a"),
+            new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq), [new("mediate",0.9,1,"r"),new("join",0.5,2,"r"),new("refuse",0.2,3,"r")], "b"),
             new LlmMagiJudgment("join", p.A.Id, "judge")));
         var (a,b,j,approval,ctx)=Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale:"ok"), LlmCassetteMode.Replay, cassette);
 
