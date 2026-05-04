@@ -1,5 +1,6 @@
 ﻿using Ariadne.OptFlow;
 using Ariadne.OptFlow.Commands;
+using Dominatus.Core;
 using Dominatus.Core.Blackboard;
 using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
@@ -10,6 +11,27 @@ namespace Ariadne.ConsoleApp.Scripts;
 
 public static class AriadneThreadOfNight
 {
+    public static class States
+    {
+        public static readonly StateId Root = StateId.Of(nameof(Root));
+        public static readonly StateId Intro = StateId.Of(nameof(Intro));
+        public static readonly StateId Chamber = StateId.Of(nameof(Chamber));
+        public static readonly StateId InspectThread = StateId.Of(nameof(InspectThread));
+        public static readonly StateId InspectKnife = StateId.Of(nameof(InspectKnife));
+        public static readonly StateId ReadTablets = StateId.Of(nameof(ReadTablets));
+        public static readonly StateId VisitShrine = StateId.Of(nameof(VisitShrine));
+        public static readonly StateId Theseus = StateId.Of(nameof(Theseus));
+        public static readonly StateId TalkToTheseusWhy = StateId.Of(nameof(TalkToTheseusWhy));
+        public static readonly StateId TalkToTheseusFear = StateId.Of(nameof(TalkToTheseusFear));
+        public static readonly StateId TalkToTheseusMonster = StateId.Of(nameof(TalkToTheseusMonster));
+        public static readonly StateId DemandPromise = StateId.Of(nameof(DemandPromise));
+        public static readonly StateId Threshold = StateId.Of(nameof(Threshold));
+        public static readonly StateId Ending_ThreadAndFlight = StateId.Of(nameof(Ending_ThreadAndFlight));
+        public static readonly StateId Ending_MercyInTheDark = StateId.Of(nameof(Ending_MercyInTheDark));
+        public static readonly StateId Ending_CrownOfKnives = StateId.Of(nameof(Ending_CrownOfKnives));
+        public static readonly StateId Ending_TheDescent = StateId.Of(nameof(Ending_TheDescent));
+        public static readonly StateId Ending_ThreadlessTragedy = StateId.Of(nameof(Ending_ThreadlessTragedy));
+    }
     // ---------------------------------------------------------------------
     // Blackboard keys
     // ---------------------------------------------------------------------
@@ -49,7 +71,7 @@ public static class AriadneThreadOfNight
 
     public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
-        yield return Ai.Goto("Intro");
+        yield return Ai.Goto(States.Intro);
 
         while (true)
             yield return Ai.Wait(999f);
@@ -61,7 +83,7 @@ public static class AriadneThreadOfNight
         yield return Diag.Line("On the table before you lies a coil of thread, pale as moonlit bone.", speaker: "Narrator");
         yield return Diag.Line("Below your chamber, beyond torchlight and carved stone, the labyrinth waits.", speaker: "Narrator");
         yield return Diag.Line("By dawn, either a hero will be made there, or a myth will crack open.", speaker: "Narrator");
-        yield return Ai.Goto("Chamber");
+        yield return Ai.Goto(States.Chamber);
     }
 
     // ---------------------------------------------------------------------
@@ -95,24 +117,24 @@ public static class AriadneThreadOfNight
             switch (choice)
             {
                 case "thread":
-                    yield return Ai.Push("InspectThread");
+                    yield return Ai.Push(States.InspectThread);
                     break;
 
                 case "knife":
-                    yield return Ai.Push("InspectKnife");
+                    yield return Ai.Push(States.InspectKnife);
                     break;
 
                 case "tablets":
-                    yield return Ai.Push("ReadTablets");
+                    yield return Ai.Push(States.ReadTablets);
                     break;
 
                 case "shrine":
-                    yield return Ai.Push("VisitShrine");
+                    yield return Ai.Push(States.VisitShrine);
                     break;
 
                 case "theseus":
                     yield return Diag.Line("You send word. If he was waiting for courage, it was never his that delayed him.", speaker: "Narrator");
-                    yield return Ai.Goto("Theseus");
+                    yield return Ai.Goto(States.Theseus);
                     yield break;
             }
         }
@@ -241,19 +263,19 @@ public static class AriadneThreadOfNight
             switch (choice)
             {
                 case "why":
-                    yield return Ai.Push("TalkToTheseusWhy");
+                    yield return Ai.Push(States.TalkToTheseusWhy);
                     break;
 
                 case "fear":
-                    yield return Ai.Push("TalkToTheseusFear");
+                    yield return Ai.Push(States.TalkToTheseusFear);
                     break;
 
                 case "monster":
-                    yield return Ai.Push("TalkToTheseusMonster");
+                    yield return Ai.Push(States.TalkToTheseusMonster);
                     break;
 
                 case "promise":
-                    yield return Ai.Push("DemandPromise");
+                    yield return Ai.Push(States.DemandPromise);
                     break;
 
                 case "offer":
@@ -288,7 +310,7 @@ public static class AriadneThreadOfNight
                     }
 
                     yield return Diag.Line("Enough words. The stones below are listening.", speaker: "Theseus");
-                    yield return Ai.Goto("Threshold");
+                    yield return Ai.Goto(States.Threshold);
                     yield break;
             }
         }
@@ -419,23 +441,23 @@ public static class AriadneThreadOfNight
         switch (decision)
         {
             case "help_theseus":
-                yield return Ai.Goto("Ending_ThreadAndFlight");
+                yield return Ai.Goto(States.Ending_ThreadAndFlight);
                 yield break;
 
             case "warn_asterion":
-                yield return Ai.Goto("Ending_MercyInTheDark");
+                yield return Ai.Goto(States.Ending_MercyInTheDark);
                 yield break;
 
             case "go_alone":
-                yield return Ai.Goto("Ending_TheDescent");
+                yield return Ai.Goto(States.Ending_TheDescent);
                 yield break;
 
             case "stay_and_rule":
-                yield return Ai.Goto("Ending_CrownOfKnives");
+                yield return Ai.Goto(States.Ending_CrownOfKnives);
                 yield break;
 
             default:
-                yield return Ai.Goto("Ending_ThreadlessTragedy");
+                yield return Ai.Goto(States.Ending_ThreadlessTragedy);
                 yield break;
         }
     }
@@ -531,23 +553,23 @@ public static class AriadneThreadOfNight
 
     public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
     {
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Intro", Node = Intro });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Chamber", Node = Chamber });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "InspectThread", Node = InspectThread });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "InspectKnife", Node = InspectKnife });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "ReadTablets", Node = ReadTablets });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "VisitShrine", Node = VisitShrine });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Theseus", Node = Theseus });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "TalkToTheseusWhy", Node = TalkToTheseusWhy });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "TalkToTheseusFear", Node = TalkToTheseusFear });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "TalkToTheseusMonster", Node = TalkToTheseusMonster });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "DemandPromise", Node = DemandPromise });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Threshold", Node = Threshold });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_ThreadAndFlight", Node = Ending_ThreadAndFlight });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_MercyInTheDark", Node = Ending_MercyInTheDark });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_CrownOfKnives", Node = Ending_CrownOfKnives });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_TheDescent", Node = Ending_TheDescent });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_ThreadlessTragedy", Node = Ending_ThreadlessTragedy });
+        graph.Add(States.Root, Root);
+        graph.Add(States.Intro, Intro);
+        graph.Add(States.Chamber, Chamber);
+        graph.Add(States.InspectThread, InspectThread);
+        graph.Add(States.InspectKnife, InspectKnife);
+        graph.Add(States.ReadTablets, ReadTablets);
+        graph.Add(States.VisitShrine, VisitShrine);
+        graph.Add(States.Theseus, Theseus);
+        graph.Add(States.TalkToTheseusWhy, TalkToTheseusWhy);
+        graph.Add(States.TalkToTheseusFear, TalkToTheseusFear);
+        graph.Add(States.TalkToTheseusMonster, TalkToTheseusMonster);
+        graph.Add(States.DemandPromise, DemandPromise);
+        graph.Add(States.Threshold, Threshold);
+        graph.Add(States.Ending_ThreadAndFlight, Ending_ThreadAndFlight);
+        graph.Add(States.Ending_MercyInTheDark, Ending_MercyInTheDark);
+        graph.Add(States.Ending_CrownOfKnives, Ending_CrownOfKnives);
+        graph.Add(States.Ending_TheDescent, Ending_TheDescent);
+        graph.Add(States.Ending_ThreadlessTragedy, Ending_ThreadlessTragedy);
     }
 }
