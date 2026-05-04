@@ -51,6 +51,19 @@ public sealed class LlmDecisionApprovalTests
     }
 
     [Fact]
+    public void LlmDecide_WithApproval_ResultJsonIncludesApprovedBy_WhenProvided()
+    {
+        var client = new FakeLlmDecisionClient(CreateResult("a",0.9,"b",0.5));
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Changed, "b", "human", "user-7"));
+        var (_,ctx)=CreateWorldAndCtx(client,approval);
+
+        ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy()),ctx);
+
+        using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(ResultJsonKey, ""));
+        Assert.Equal("user-7", doc.RootElement.GetProperty("approval").GetProperty("approvedBy").GetString());
+    }
+
+    [Fact]
     public void LlmDecide_WithApproval_ResultJsonIncludesApprovalMetadata()
     {
         var client = new FakeLlmDecisionClient(CreateResult("a",0.9,"b",0.5));
