@@ -312,7 +312,8 @@ public static class Llm
         LlmMagiParticipant judge,
         BbKey<string> storeChosenAs,
         BbKey<string>? storeRationaleAs = null,
-        BbKey<string>? storeResultJsonAs = null)
+        BbKey<string>? storeResultJsonAs = null,
+        LlmMagiApprovalPolicy? approval = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(intent);
@@ -385,7 +386,7 @@ public static class Llm
             PromptTemplateVersion: LlmMagiRequest.DefaultPromptTemplateVersion,
             OutputContractVersion: LlmMagiRequest.DefaultOutputContractVersion);
 
-        return new LlmMagiDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs);
+        return new LlmMagiDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, approval);
     }
 
     private sealed record LlmTextStep(LlmTextRequest Request, BbKey<string> StoreAs) : AiStep, IWaitEvent
@@ -448,7 +449,8 @@ public static class Llm
         LlmMagiRequest Request,
         BbKey<string> StoreChosenAs,
         BbKey<string>? StoreRationaleAs,
-        BbKey<string>? StoreResultJsonAs) : AiStep, IWaitEvent
+        BbKey<string>? StoreResultJsonAs,
+        LlmMagiApprovalPolicy? Approval) : AiStep, IWaitEvent
     {
         private readonly BbKey<bool> _completedKey = new(BuildMagiKey(Request.StableId, "completed"));
         private readonly BbKey<string> _chosenOptionKey = new(BuildMagiKey(Request.StableId, "chosenOptionId"));
@@ -456,6 +458,7 @@ public static class Llm
         private readonly BbKey<string> _resultJsonKey = new(BuildMagiKey(Request.StableId, "resultJson"));
         private readonly BbKey<string> _requestHashKey = new(BuildMagiKey(Request.StableId, "requestHash"));
         private readonly BbKey<long> _pendingActuationIdKey = new(BuildMagiKey(Request.StableId, "pendingActuationId"));
+        private readonly BbKey<long> _pendingApprovalActuationIdKey = new(BuildMagiKey(Request.StableId, "pendingApprovalActuationId"));
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
@@ -500,14 +503,35 @@ public static class Llm
                 $"Llm.MagiDecide completion failed for stableId '{Request.StableId}'. Missing magi decision payload.");
 
             LlmMagiResultValidator.ValidateDecisionResultAgainstRequest(Request, result.RequestHash, result);
-            var resultJson = BuildMagiSummaryJson(result);
+            var proposedChoice = result.Judgment.ChosenOptionId;
+            var proposedRationale = result.Judgment.Rationale;
+            var proposedResultJson = BuildMagiSummaryJson(result);
 
-            ctx.Bb.Set(_chosenOptionKey, result.Judgment.ChosenOptionId);
-            ctx.Bb.Set(StoreChosenAs, result.Judgment.ChosenOptionId);
-            ctx.Bb.Set(_rationaleKey, result.Judgment.Rationale);
+            var chosenOptionId = proposedChoice;
+            var committedRationale = proposedRationale;
+            ApprovalSummary? approvalMetadata = null;
+
+            if (Approval?.RequireApproval == true)
+            {
+                var approval = RequireMagiApproval(ctx, ref cursor, result, proposedChoice, proposedRationale, proposedResultJson);
+                if (!approval.HasValue)
+                {
+                    return false;
+                }
+
+                chosenOptionId = approval.Value.ChosenOptionId;
+                committedRationale = approval.Value.Rationale;
+                approvalMetadata = approval.Value.Metadata;
+            }
+
+            var resultJson = BuildMagiSummaryJson(result, chosenOptionId, committedRationale, approvalMetadata);
+
+            ctx.Bb.Set(_chosenOptionKey, chosenOptionId);
+            ctx.Bb.Set(StoreChosenAs, chosenOptionId);
+            ctx.Bb.Set(_rationaleKey, committedRationale);
             if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
             {
-                ctx.Bb.Set(rationaleStoreAs, result.Judgment.Rationale);
+                ctx.Bb.Set(rationaleStoreAs, committedRationale);
             }
 
             ctx.Bb.Set(_resultJsonKey, resultJson);
@@ -520,6 +544,89 @@ public static class Llm
             ctx.Bb.Set(_completedKey, true);
             ctx.Bb.Set(_pendingActuationIdKey, 0L);
             return true;
+        }
+
+
+        private (string ChosenOptionId, string Rationale, ApprovalSummary Metadata)? RequireMagiApproval(
+            AiCtx ctx,
+            ref EventCursor cursor,
+            LlmMagiDecisionResult result,
+            string proposedChoice,
+            string proposedRationale,
+            string proposedResultJson)
+        {
+            var pendingApprovalId = ctx.Bb.GetOrDefault(_pendingApprovalActuationIdKey, 0L);
+            if (pendingApprovalId == 0)
+            {
+                var command = new LlmMagiApprovalCommand(
+                    Request.StableId,
+                    Request.Intent,
+                    Request.Persona,
+                    Request.CanonicalContextJson,
+                    Request.Options,
+                    Request.AdvocateA,
+                    Request.AdvocateB,
+                    Request.Judge,
+                    proposedChoice,
+                    proposedRationale,
+                    proposedResultJson);
+                var dispatch = ctx.Act.Dispatch(ctx, command);
+                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))
+                {
+                    throw new InvalidOperationException($"Llm.MagiDecide approval dispatch failed for stableId '{Request.StableId}'. {dispatch.Error ?? "Actuation rejected."}");
+                }
+
+                pendingApprovalId = dispatch.Id.Value;
+                ctx.Bb.Set(_pendingApprovalActuationIdKey, pendingApprovalId);
+                if (Approval?.StoreApprovalActuationIdAs is BbKey<ActuationId> storeKey)
+                {
+                    ctx.Bb.Set(storeKey, dispatch.Id);
+                }
+            }
+
+            if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted e) => e.Id.Equals(new ActuationId(pendingApprovalId)), out var completion))
+            {
+                return null;
+            }
+
+            if (!completion.Ok)
+            {
+                throw new InvalidOperationException($"Llm.MagiDecide approval completion failed for stableId '{Request.StableId}'. {completion.Error ?? "Unknown error."}");
+            }
+
+            if (completion.Payload is not LlmMagiApprovalResult approvalResult)
+            {
+                throw new InvalidOperationException($"Llm.MagiDecide approval completion failed for stableId '{Request.StableId}'. Missing or invalid approval payload.");
+            }
+
+            if (string.IsNullOrWhiteSpace(approvalResult.Rationale))
+            {
+                throw new InvalidOperationException($"Llm.MagiDecide approval rationale is required for stableId '{Request.StableId}'.");
+            }
+
+            string chosenId = approvalResult.Outcome switch
+            {
+                LlmDecisionApprovalOutcome.Approved => string.IsNullOrWhiteSpace(approvalResult.ChosenOptionId)
+                    ? proposedChoice
+                    : approvalResult.ChosenOptionId!,
+                LlmDecisionApprovalOutcome.Changed => !string.IsNullOrWhiteSpace(approvalResult.ChosenOptionId)
+                    ? approvalResult.ChosenOptionId!
+                    : throw new InvalidOperationException($"Llm.MagiDecide approval change requires chosen option for stableId '{Request.StableId}'."),
+                LlmDecisionApprovalOutcome.Rejected => throw new InvalidOperationException($"Llm.MagiDecide approval rejected for stableId '{Request.StableId}'."),
+                _ => throw new InvalidOperationException($"Llm.MagiDecide approval returned unknown outcome for stableId '{Request.StableId}'.")
+            };
+
+            if (!Request.Options.Any(o => string.Equals(o.Id, chosenId, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException($"Llm.MagiDecide approval selected unknown option '{chosenId}' for stableId '{Request.StableId}'.");
+            }
+
+            return (chosenId, approvalResult.Rationale!, new ApprovalSummary(
+                approvalResult.Outcome.ToString().ToLowerInvariant(),
+                proposedChoice,
+                chosenId,
+                approvalResult.Rationale,
+                approvalResult.ApprovedBy));
         }
 
         private void RestoreOptionalOutputs(AiCtx ctx)
@@ -715,7 +822,8 @@ public static class Llm
                     approvalResult.Outcome.ToString().ToLowerInvariant(),
                     proposedDecision.ChosenOptionId,
                     chosenId,
-                    approvalResult.Rationale));
+                    approvalResult.Rationale,
+                    approvalResult.ApprovedBy));
         }
 
         private bool TryReuseCommittedChoice(AiCtx ctx, long currentTick, out string reason)
@@ -895,6 +1003,11 @@ public static class Llm
                 writer.WriteString("rationale", approval.Value.Rationale);
             }
 
+            if (!string.IsNullOrWhiteSpace(approval.Value.ApprovedBy))
+            {
+                writer.WriteString("approvedBy", approval.Value.ApprovedBy);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -917,16 +1030,16 @@ public static class Llm
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static string BuildMagiSummaryJson(LlmMagiDecisionResult result)
+    private static string BuildMagiSummaryJson(LlmMagiDecisionResult result, string? approvedOptionId = null, string? committedRationale = null, ApprovalSummary? approval = null)
     {
         var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
 
         writer.WriteStartObject();
         writer.WriteString("requestHash", result.RequestHash);
-        writer.WriteString("chosenOptionId", result.Judgment.ChosenOptionId);
+        writer.WriteString("chosenOptionId", approvedOptionId ?? result.Judgment.ChosenOptionId);
         writer.WriteString("preferredProposalId", result.Judgment.PreferredProposalId);
-        writer.WriteString("rationale", result.Judgment.Rationale);
+        writer.WriteString("rationale", committedRationale ?? result.Judgment.Rationale);
 
         writer.WritePropertyName("participants");
         writer.WriteStartObject();
@@ -940,10 +1053,26 @@ public static class Llm
 
         writer.WritePropertyName("judgment");
         writer.WriteStartObject();
-        writer.WriteString("chosenOptionId", result.Judgment.ChosenOptionId);
+        writer.WriteString("chosenOptionId", approvedOptionId ?? result.Judgment.ChosenOptionId);
         writer.WriteString("preferredProposalId", result.Judgment.PreferredProposalId);
-        writer.WriteString("rationale", result.Judgment.Rationale);
+        writer.WriteString("rationale", committedRationale ?? result.Judgment.Rationale);
         writer.WriteEndObject();
+
+        if (approval is not null)
+        {
+            writer.WritePropertyName("approval");
+            writer.WriteStartObject();
+            writer.WriteBoolean("required", true);
+            writer.WriteString("outcome", approval.Value.Outcome);
+            writer.WriteString("proposedOptionId", approval.Value.ProposedOptionId);
+            writer.WriteString("approvedOptionId", approval.Value.ApprovedOptionId);
+            writer.WriteString("rationale", approval.Value.Rationale);
+            if (!string.IsNullOrWhiteSpace(approval.Value.ApprovedBy))
+            {
+                writer.WriteString("approvedBy", approval.Value.ApprovedBy);
+            }
+            writer.WriteEndObject();
+        }
 
         writer.WriteEndObject();
         writer.Flush();
@@ -993,7 +1122,7 @@ public static class Llm
         string CommitRationale,
         string ModelRationale);
 
-    private readonly record struct ApprovalSummary(string Outcome, string ProposedOptionId, string ApprovedOptionId, string? Rationale);
+    private readonly record struct ApprovalSummary(string Outcome, string ProposedOptionId, string ApprovedOptionId, string? Rationale, string? ApprovedBy = null);
 
     private static string BuildStepKey(string stableId, string suffix)
         => $"llm.{SanitizeStableId(stableId)}.{suffix}";

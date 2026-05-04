@@ -249,3 +249,7 @@ For rare high-consequence decisions, V1 M4a adds `Llm.MagiDecide(...)` in `Domin
 
 
 For high-risk LLM decisions, hosts can opt into a human approval actuation gate: the LLM proposes, the human can approve/change/reject, and runtime validates against the closed authored option set before commit.
+
+
+## M6b Magi Approval
+`Llm.MagiDecide` now supports optional human approval via actuation (`LlmMagiApprovalCommand`/`LlmMagiApprovalResult`). Approval remains closed-option only; no freeform commit path is introduced.
