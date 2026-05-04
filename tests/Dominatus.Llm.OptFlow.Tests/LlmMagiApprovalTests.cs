@@ -158,7 +158,15 @@ public sealed class LlmMagiApprovalTests
         var p = CreateParticipants();
         var req = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
         var cassette = new InMemoryLlmMagiCassette();
-        cassette.Store(LlmMagiRequestHasher.ComputeHash(req), new LlmMagiDecisionResult(new LlmDecisionResult("a", [new("join",0.9,1,"r")], "a"), new LlmDecisionResult("b", [new("mediate",0.9,1,"r")], "b"), new LlmMagiJudgment("join", p.A.Id, "judge")));
+        var hash = LlmMagiRequestHasher.ComputeHash(req);
+        cassette.Put(hash, req, new LlmMagiDecisionResult(
+            hash,
+            req.AdvocateA,
+            req.AdvocateB,
+            req.Judge,
+            new LlmDecisionResult("a", [new("join",0.9,1,"r")], "a"),
+            new LlmDecisionResult("b", [new("mediate",0.9,1,"r")], "b"),
+            new LlmMagiJudgment("join", p.A.Id, "judge")));
         var (a,b,j,approval,ctx)=Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale:"ok"), LlmCassetteMode.Replay, cassette);
 
         ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx);
