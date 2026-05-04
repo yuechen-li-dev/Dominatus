@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Dominatus.Core;
 using System.Threading;
 using Dominatus.Core.Blackboard;
 using Dominatus.Core.Hfsm;
@@ -37,6 +38,64 @@ public sealed class LlmMagiApprovalTests
         Assert.Equal("mediate", ctx.Bb.GetOrDefault(ChosenKey, ""));
     }
 
+
+
+    [Fact]
+    public void MagiDecide_WithApproval_WrongPayloadType_FailsAndDoesNotStoreOutputs()
+    {
+        var (_, _, _, approval, ctx) = Setup(payload: "wrong");
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+        Assert.Single(approval.Commands);
+    }
+
+    [Fact]
+    public void MagiDecide_WithApproval_FailedApprovalActuation_FailsAndDoesNotStoreOutputs()
+    {
+        var (_, _, _, approval, ctx) = Setup(result: ActuatorHost.HandlerResult.CompletedFailure("boom"));
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+        Assert.Single(approval.Commands);
+    }
+
+    [Fact]
+    public void MagiDecide_WithApproval_InvalidChangedOption_FailsAndDoesNotStoreOutputs()
+    {
+        var (_, _, _, _, ctx) = Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Changed, "invalid", "nope"));
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+    }
+
+    [Fact]
+    public void MagiDecide_WithApproval_ApprovedWithInvalidOverride_FailsAndDoesNotStoreOutputs()
+    {
+        var (_, _, _, _, ctx) = Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, "invalid", "ok"));
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+    }
+
+    [Theory]
+    [InlineData(LlmDecisionApprovalOutcome.Approved)]
+    [InlineData(LlmDecisionApprovalOutcome.Changed)]
+    [InlineData(LlmDecisionApprovalOutcome.Rejected)]
+    public void MagiDecide_WithApproval_BlankRationale_FailsAndDoesNotStoreOutputs(LlmDecisionApprovalOutcome outcome)
+    {
+        var chosen = outcome == LlmDecisionApprovalOutcome.Changed ? "mediate" : null;
+        var (_, _, _, _, ctx) = Setup(new LlmMagiApprovalResult(outcome, chosen, " "));
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+    }
+
     [Fact]
     public void MagiDecide_WithApproval_Rejected_FailsAndDoesNotStoreOutputs()
     {
@@ -45,6 +104,80 @@ public sealed class LlmMagiApprovalTests
         Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
         Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
         Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+    }
+
+    [Fact]
+    public void MagiDecide_WithApproval_ResultJsonOmitsApprovedBy_WhenNotProvided()
+    {
+        var (_, _, _, _, ctx) = Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "ok"));
+        ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx);
+        using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(ResultJsonKey, ""));
+        Assert.False(doc.RootElement.GetProperty("approval").TryGetProperty("approvedBy", out _));
+    }
+
+    [Fact]
+    public void MagiDecide_WithoutApproval_ResultJsonShapeRemainsCompatible()
+    {
+        var (a, b, j, approval, ctx) = Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "ok"));
+        ExecuteStep(CreateStep(null), ctx);
+        Assert.Empty(approval.Commands);
+        using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(ResultJsonKey, ""));
+        Assert.False(doc.RootElement.TryGetProperty("approval", out _));
+        Assert.Equal(1, a.CallCount);
+        Assert.Equal(1, b.CallCount);
+        Assert.Equal(1, j.CallCount);
+    }
+
+    [Fact]
+    public void MagiDecide_WithApproval_ReentryAfterCompletedDecision_DoesNotRedispatchMagiOrApproval()
+    {
+        var (a, b, j, approval, ctx) = Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "ok"));
+        ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx);
+        Assert.Equal(1, a.CallCount);
+        Assert.Equal(1, b.CallCount);
+        Assert.Equal(1, j.CallCount);
+        Assert.Single(approval.Commands);
+
+        ctx.Bb.Set(ChosenKey, string.Empty);
+        ctx.Bb.Set(RationaleKey, string.Empty);
+        ctx.Bb.Set(ResultJsonKey, string.Empty);
+
+        ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx);
+        Assert.Equal(1, a.CallCount);
+        Assert.Equal(1, b.CallCount);
+        Assert.Equal(1, j.CallCount);
+        Assert.Single(approval.Commands);
+        Assert.Equal("join", ctx.Bb.GetOrDefault(ChosenKey, ""));
+        Assert.Equal("ok", ctx.Bb.GetOrDefault(RationaleKey, ""));
+        Assert.Contains("\"approval\"", ctx.Bb.GetOrDefault(ResultJsonKey, ""), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MagiDecide_WithApproval_ReplayMagiResult_StillDispatchesApprovalForFirstCommit()
+    {
+        var p = CreateParticipants();
+        var req = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
+        var cassette = new InMemoryLlmMagiCassette();
+        var hash = LlmMagiRequestHasher.ComputeHash(req);
+        var aReq = LlmMagiResultValidator.BuildAdvocateRequest(req, req.AdvocateA);
+        var bReq = LlmMagiResultValidator.BuildAdvocateRequest(req, req.AdvocateB);
+        cassette.Put(hash, req, new LlmMagiDecisionResult(
+            hash,
+            req.AdvocateA,
+            req.AdvocateB,
+            req.Judge,
+            new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq), [new("join",0.9,1,"r"),new("mediate",0.5,2,"r"),new("refuse",0.2,3,"r")], "a"),
+            new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq), [new("mediate",0.9,1,"r"),new("join",0.5,2,"r"),new("refuse",0.2,3,"r")], "b"),
+            new LlmMagiJudgment("join", p.A.Id, "judge")));
+        var (a,b,j,approval,ctx)=Setup(new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale:"ok"), LlmCassetteMode.Replay, cassette);
+
+        ExecuteStep(CreateStep(new LlmMagiApprovalPolicy()), ctx);
+
+        Assert.Equal(0, a.CallCount);
+        Assert.Equal(0, b.CallCount);
+        Assert.Equal(0, j.CallCount);
+        Assert.Single(approval.Commands);
+        Assert.Equal("join", ctx.Bb.GetOrDefault(ChosenKey, ""));
     }
 
     [Fact]
@@ -61,7 +194,7 @@ public sealed class LlmMagiApprovalTests
         return Llm.MagiDecide("magi.approval","intent","persona",b=>b.Add("k","v"),CreateOptions(),p.A,p.B,p.J,ChosenKey,RationaleKey,ResultJsonKey,approval);
     }
 
-    private static (FakeLlmDecisionClient A, FakeLlmDecisionClient B, FakeLlmMagiJudgeClient J, FakeMagiApprovalHandler Approval, AiCtx Ctx) Setup(LlmMagiApprovalResult approvalResult)
+    private static (FakeLlmDecisionClient A, FakeLlmDecisionClient B, FakeLlmMagiJudgeClient J, FakeMagiApprovalHandler Approval, AiCtx Ctx) Setup(LlmMagiApprovalResult? approvalResult = null, LlmCassetteMode mode = LlmCassetteMode.Live, InMemoryLlmMagiCassette? cassette = null, object? payload = null, ActuatorHost.HandlerResult? result = null)
     {
         var p = CreateParticipants();
         var request = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
@@ -70,10 +203,11 @@ public sealed class LlmMagiApprovalTests
         var a = new FakeLlmDecisionClient(new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq), [new("join",0.9,1,"r"),new("mediate",0.5,2,"r"),new("refuse",0.2,3,"r")], "a"));
         var b = new FakeLlmDecisionClient(new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(bReq), [new("mediate",0.9,1,"r"),new("join",0.5,2,"r"),new("refuse",0.2,3,"r")], "b"));
         var j = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", p.A.Id, "judge rationale"));
-        var approval = new FakeMagiApprovalHandler(approvalResult);
+        var approvalPayload = payload ?? approvalResult ?? new LlmMagiApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "ok");
+        var approval = new FakeMagiApprovalHandler(result ?? ActuatorHost.HandlerResult.CompletedWithPayload(approvalPayload));
 
         var host = new ActuatorHost();
-        host.Register<LlmMagiRequest>(new LlmMagiDecisionHandler(a,b,j,new InMemoryLlmMagiCassette(),LlmCassetteMode.Live));
+        host.Register<LlmMagiRequest>(new LlmMagiDecisionHandler(a,b,j,cassette ?? new InMemoryLlmMagiCassette(),mode));
         host.Register<LlmMagiApprovalCommand>(approval);
         var world = new AiWorld(host);
         var graph = new HfsmGraph { Root = "Root" };
@@ -90,13 +224,13 @@ public sealed class LlmMagiApprovalTests
     private static IEnumerator<AiStep> Empty() { yield break; }
     private static void ExecuteStep(AiStep step, AiCtx ctx) { var cursor = default(EventCursor); for (var i=0;i<8;i++) if (((IWaitEvent)step).TryConsume(ctx, ref cursor)) return; throw new TimeoutException(); }
 
-    private sealed class FakeMagiApprovalHandler(LlmMagiApprovalResult result) : IActuationHandler<LlmMagiApprovalCommand>
+    private sealed class FakeMagiApprovalHandler(ActuatorHost.HandlerResult response) : IActuationHandler<LlmMagiApprovalCommand>
     {
         public List<LlmMagiApprovalCommand> Commands { get; } = [];
         public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, LlmMagiApprovalCommand command)
         {
             Commands.Add(command);
-            return ActuatorHost.HandlerResult.CompletedWithPayload(result);
+            return response;
         }
     }
 }
