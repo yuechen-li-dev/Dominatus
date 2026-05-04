@@ -278,6 +278,33 @@ Dominatus navigation is **stack-based**.
 
 That is one of the most important differences between Dominatus and systems that model behavior as a flat state switch or a repeatedly re-walked tree. In Dominatus, the active behavior is not just “the current state.” It is a **stack of active states**, with the leaf at the top doing the immediate work.
 
+### Prefer state catalogs over raw state strings
+
+Raw string state IDs are still supported and remain useful for dynamic/generated graphs. For authored C# scripts, prefer a typed state catalog to reduce typo-prone literals:
+
+```csharp
+public static class States
+{
+    public static readonly StateId Root = StateId.Of(nameof(Root));
+    public static readonly StateId Intro = StateId.Of(nameof(Intro));
+    public static readonly StateId Chamber = StateId.Of(nameof(Chamber));
+}
+```
+
+Then use `States.X` for navigation and registration:
+
+```csharp
+yield return Ai.Goto(States.Intro);
+yield return Ai.Push(States.Chamber);
+yield return Ai.Option("inspect", "Inspect", States.Chamber);
+
+graph.Add(States.Root, Root);
+graph.Add(States.Intro, Intro);
+graph.Add(States.Chamber, Chamber);
+```
+
+This keeps runtime behavior string-based while giving authored scripts compile-time checked symbols. Choice IDs and blackboard key names are separate concepts and may remain plain strings.
+
 If you have used a call stack in programming, the idea is the same:
 
 * the bottom of the stack is older, broader context
