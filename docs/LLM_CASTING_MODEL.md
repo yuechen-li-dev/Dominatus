@@ -253,3 +253,8 @@ For high-risk LLM decisions, hosts can opt into a human approval actuation gate:
 
 ## M6b Magi Approval
 `Llm.MagiDecide` now supports optional human approval via actuation (`LlmMagiApprovalCommand`/`LlmMagiApprovalResult`). Approval remains closed-option only; no freeform commit path is introduced.
+
+
+## M7a refusal
+
+A bounded-choice LLM decision system must allow the model to reject the frame.

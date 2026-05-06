@@ -7,8 +7,10 @@ public sealed record LlmDecisionResult
     public string RequestHash { get; }
     public IReadOnlyList<LlmDecisionOptionScore> Scores { get; }
     public string Rationale { get; }
+    public LlmDecisionOutcome Outcome { get; }
+    public LlmDecisionRefusal? Refusal { get; }
 
-    public LlmDecisionResult(string RequestHash, IReadOnlyList<LlmDecisionOptionScore> Scores, string Rationale)
+    public LlmDecisionResult(string RequestHash, IReadOnlyList<LlmDecisionOptionScore> Scores, string Rationale, LlmDecisionOutcome Outcome = LlmDecisionOutcome.Chosen, LlmDecisionRefusal? Refusal = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(RequestHash);
         ArgumentNullException.ThrowIfNull(Scores);
@@ -33,5 +35,7 @@ public sealed record LlmDecisionResult
         this.RequestHash = RequestHash;
         this.Scores = Scores.ToArray();
         this.Rationale = Rationale;
+        this.Outcome = Outcome;
+        this.Refusal = Refusal;
     }
 }

@@ -57,6 +57,9 @@ public static class LlmDecisionRequestHasher
         writer.WriteString("provider", request.Sampling.Provider);
         writer.WriteEndObject();
 
+        writer.WriteBoolean("allowProposedAlternative", request.AllowProposedAlternative);
+        writer.WriteNumber("maxRefusalReasonChars", request.MaxRefusalReasonChars);
+        writer.WriteNumber("maxProposedAlternativeChars", request.MaxProposedAlternativeChars);
         writer.WriteString("stableId", request.StableId);
         writer.WriteEndObject();
         writer.Flush();

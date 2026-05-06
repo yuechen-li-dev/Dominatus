@@ -41,6 +41,34 @@ public static class LlmDecisionResultValidator
             throw new InvalidOperationException($"Decision result ranks must form a unique contiguous range 1..{request.Options.Count}.");
         }
 
+
+        if (result.Outcome == LlmDecisionOutcome.Refused)
+        {
+            if (result.Refusal is null || string.IsNullOrWhiteSpace(result.Refusal.Reason))
+            {
+                throw new InvalidOperationException("Decision refusal must include a non-empty reason.");
+            }
+
+            if (result.Refusal.Reason.Length > request.MaxRefusalReasonChars)
+            {
+                throw new InvalidOperationException($"Decision refusal reason exceeds max length {request.MaxRefusalReasonChars}.");
+            }
+
+            if (!request.AllowProposedAlternative && !string.IsNullOrWhiteSpace(result.Refusal.ProposedAlternative))
+            {
+                throw new InvalidOperationException("Decision refusal proposedAlternative is not allowed by request policy.");
+            }
+
+            if (result.Refusal.ProposedAlternative?.Length > request.MaxProposedAlternativeChars)
+            {
+                throw new InvalidOperationException($"Decision refusal proposedAlternative exceeds max length {request.MaxProposedAlternativeChars}.");
+            }
+        }
+        else if (result.Refusal is not null)
+        {
+            throw new InvalidOperationException("Decision chosen outcome must not include refusal payload.");
+        }
+
         var highestScore = result.Scores.OrderByDescending(s => s.Score).ThenBy(s => s.OptionId, StringComparer.Ordinal).First();
         var rankOne = result.Scores.Single(s => s.Rank == 1);
         if (!string.Equals(highestScore.OptionId, rankOne.OptionId, StringComparison.Ordinal))

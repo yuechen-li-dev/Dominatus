@@ -164,7 +164,10 @@ public sealed class JsonLlmDecisionCassette : ILlmDecisionCassette
             Options: ParseOptions(requestDto.Options, path),
             Sampling: ParseSampling(requestDto.Sampling, path),
             PromptTemplateVersion: requestDto.PromptTemplateVersion ?? throw new InvalidOperationException($"Cassette {path}.request.promptTemplateVersion is required."),
-            OutputContractVersion: requestDto.OutputContractVersion ?? throw new InvalidOperationException($"Cassette {path}.request.outputContractVersion is required."));
+            OutputContractVersion: requestDto.OutputContractVersion ?? throw new InvalidOperationException($"Cassette {path}.request.outputContractVersion is required."),
+            AllowProposedAlternative: false,
+            MaxRefusalReasonChars: LlmDecisionResult.MaxRationaleLength,
+            MaxProposedAlternativeChars: 500);
 
         var result = new LlmDecisionResult(
             RequestHash: resultDto.RequestHash ?? throw new InvalidOperationException($"Cassette {path}.result.requestHash is required."),
