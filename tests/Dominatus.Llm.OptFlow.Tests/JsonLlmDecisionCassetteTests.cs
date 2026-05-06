@@ -32,6 +32,26 @@ public sealed class JsonLlmDecisionCassetteTests
         Assert.Contains("\"stableId\": \"demo.gandhi.alliance.response.v1\"", fileText, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void JsonDecisionCassette_RoundTripsRefusedOutcome()
+    {
+        var path = CreateTempFilePath();
+        var request = CreateRequest();
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+        var expected = new LlmDecisionResult(hash, CreateResult(hash).Scores, "refused", LlmDecisionOutcome.Refused, new LlmDecisionRefusal("no safe options"));
+
+        var cassette = JsonLlmDecisionCassette.LoadOrCreate(path);
+        cassette.Put(hash, request, expected);
+        cassette.Save();
+
+        var loaded = JsonLlmDecisionCassette.LoadOrCreate(path);
+        Assert.True(loaded.TryGet(hash, out var actual));
+        Assert.Equal(LlmDecisionOutcome.Refused, actual.Outcome);
+        Assert.Equal("no safe options", actual.Refusal?.Reason);
+        Assert.Null(actual.Refusal?.ProposedAlternative);
+    }
+
     [Fact]
     public void JsonDecisionCassette_LoadOrCreate_MissingFileStartsEmpty()
     {

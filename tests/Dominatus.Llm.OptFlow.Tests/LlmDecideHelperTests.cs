@@ -416,6 +416,66 @@ public sealed class LlmDecideHelperTests
         Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
     }
 
+
+    [Fact]
+    public void LlmDecide_Refused_StoresRefusalReason_WhenConfigured()
+    {
+        var refusalKey = new BbKey<string>("decision.refusalReason");
+        var client = new FakeLlmDecisionClient(RefusedResult(BuildRequest(), "cannot comply"));
+        var (_, ctx) = CreateWorldAndCtx(client, LlmCassetteMode.Live);
+
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,refusal: new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey));
+        ExecuteStep(step, ctx);
+
+        Assert.Equal("cannot comply", ctx.Bb.GetOrDefault(refusalKey, ""));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+    }
+
+    [Fact]
+    public void LlmDecide_Refused_FailsWhenUnobservable()
+    {
+        var client = new FakeLlmDecisionClient(RefusedResult(BuildRequest(), "cannot comply"));
+        var (_, ctx) = CreateWorldAndCtx(client, LlmCassetteMode.Live);
+
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,storeRationaleAs: null,storeResultJsonAs: null,refusal: new LlmDecisionRefusalPolicy());
+
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(step, ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+    }
+
+    [Fact]
+    public void LlmDecide_Refused_ReentryDoesNotRedispatchDecision()
+    {
+        var refusalKey = new BbKey<string>("decision.refusalReason");
+        var client = new FakeLlmDecisionClient(RefusedResult(BuildRequest(), "cannot comply"));
+        var (_, ctx) = CreateWorldAndCtx(client, LlmCassetteMode.Live);
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,refusal: new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey));
+
+        ExecuteStep(step, ctx);
+        ExecuteStep(step, ctx);
+
+        Assert.Equal(1, client.CallCount);
+        Assert.Equal("cannot comply", ctx.Bb.GetOrDefault(refusalKey, ""));
+    }
+
+    private static LlmDecisionResult RefusedResult(LlmDecisionRequest request, string reason, string? proposedAlternative = null)
+    {
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+        return new LlmDecisionResult(
+            hash,
+            [
+                new LlmDecisionOptionScore("negotiate", 0.3, 1, "least bad"),
+                new LlmDecisionOptionScore("threaten", 0.2, 2, "bad"),
+                new LlmDecisionOptionScore("attack", 0.1, 3, "worst")
+            ],
+            "All options unsafe.",
+            LlmDecisionOutcome.Refused,
+            new LlmDecisionRefusal(reason, proposedAlternative));
+    }
+
     private static AiStep CreateStep(
         string stableId = "guard.response.intent.v1",
         string intent = "decide how the shrine guard responds to Mira",

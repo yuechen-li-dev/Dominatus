@@ -76,7 +76,24 @@ public sealed class LlmDecisionApprovalTests
         Assert.Equal("changed", doc.RootElement.GetProperty("approval").GetProperty("outcome").GetString());
     }
 
-    private static AiStep CreateStep(LlmDecisionApprovalPolicy? approval = null) => Llm.Decide(
+
+    [Fact]
+    public void LlmDecide_Approval_ReceivesRefusedProposedOutcome()
+    {
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "accept refusal"));
+        var (_,ctx)=CreateWorldAndCtx(client,approval);
+
+        ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(AllowProposedAlternative: true)),ctx);
+
+        var cmd = Assert.Single(approval.Commands);
+        Assert.Equal(LlmDecisionOutcome.Refused, cmd.ProposedOutcome);
+        Assert.Equal("unsafe prompt", cmd.ProposedRefusalReason);
+        Assert.Equal("ask for more context", cmd.ProposedAlternative);
+        Assert.Equal("a", cmd.ProposedOptionId);
+    }
+
+    private static AiStep CreateStep(LlmDecisionApprovalPolicy? approval = null, LlmDecisionRefusalPolicy? refusal = null) => Llm.Decide(
         "approval",
         "intent",
         "persona",
@@ -86,7 +103,8 @@ public sealed class LlmDecisionApprovalTests
         RationaleKey,
         ResultJsonKey,
         policy: new LlmDecisionPolicy(1,1,0.1),
-        approval: approval);
+        approval: approval,
+        refusal: refusal);
 
     private static (AiWorld world, AiCtx ctx) CreateWorldAndCtx(ILlmDecisionClient client, FakeApprovalHandler approval)
     {
@@ -119,6 +137,15 @@ public sealed class LlmDecisionApprovalTests
         var req = new LlmDecisionRequest("approval","intent","persona","{\"k\":\"v\"}",[Llm.Option("a","A"),Llm.Option("b","B")],Llm.DefaultSampling,LlmDecisionRequest.DefaultPromptTemplateVersion,LlmDecisionRequest.DefaultOutputContractVersion, false, LlmDecisionResult.MaxRationaleLength, 500);
         var hash = LlmDecisionRequestHasher.ComputeHash(req);
         return new LlmDecisionResult(hash,[new LlmDecisionOptionScore(firstId, firstScore,1,"r1"), new LlmDecisionOptionScore(secondId,secondScore,2,"r2")],"overall");
+    }
+
+
+
+    private static LlmDecisionResult CreateRefusedResult()
+    {
+        var req = new LlmDecisionRequest("approval","intent","persona","{\"k\":\"v\"}",[Llm.Option("a","A"),Llm.Option("b","B")],Llm.DefaultSampling,LlmDecisionRequest.DefaultPromptTemplateVersion,LlmDecisionRequest.DefaultOutputContractVersion, true, LlmDecisionResult.MaxRationaleLength, 500);
+        var hash = LlmDecisionRequestHasher.ComputeHash(req);
+        return new LlmDecisionResult(hash,[new LlmDecisionOptionScore("a", 0.4,1,"least bad"), new LlmDecisionOptionScore("b",0.1,2,"worse")],"model refused", LlmDecisionOutcome.Refused, new LlmDecisionRefusal("unsafe prompt", "ask for more context"));
     }
 
     private sealed class FakeApprovalHandler(LlmDecisionApprovalResult result) : IActuationHandler<LlmDecisionApprovalCommand>

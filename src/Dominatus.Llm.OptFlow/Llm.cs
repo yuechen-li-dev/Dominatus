@@ -881,7 +881,18 @@ public static class Llm
         private bool TryReuseCommittedChoice(AiCtx ctx, long currentTick, out string reason)
         {
             reason = string.Empty;
-            if (!ctx.Bb.GetOrDefault(_completedKey, false) || !ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
+            if (!ctx.Bb.GetOrDefault(_completedKey, false))
+            {
+                return false;
+            }
+
+            if (string.Equals(ctx.Bb.GetOrDefault(_outcomeKey, string.Empty), "refused", StringComparison.Ordinal))
+            {
+                RestoreRefusalOutputs(ctx);
+                return true;
+            }
+
+            if (!ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
             {
                 return false;
             }
@@ -902,6 +913,19 @@ public static class Llm
             }
 
             return false;
+        }
+
+        private void RestoreRefusalOutputs(AiCtx ctx)
+        {
+            if (RefusalPolicy.StoreRefusalReasonAs is BbKey<string> refusalReasonStoreAs && ctx.Bb.TryGet(_refusalReasonKey, out string? reason))
+            {
+                ctx.Bb.Set(refusalReasonStoreAs, reason ?? string.Empty);
+            }
+
+            if (RefusalPolicy.StoreProposedAlternativeAs is BbKey<string> proposedStoreAs && ctx.Bb.TryGet(_proposedAlternativeKey, out string? proposal))
+            {
+                ctx.Bb.Set(proposedStoreAs, proposal ?? string.Empty);
+            }
         }
 
         private void WriteCommitRationaleAndOutputs(AiCtx ctx, string reason, bool updateCachedRationale)
