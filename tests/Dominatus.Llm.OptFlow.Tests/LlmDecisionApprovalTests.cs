@@ -17,7 +17,7 @@ public sealed class LlmDecisionApprovalTests
     public void LlmDecide_WithApproval_Approved_StoresProposedChoice()
     {
         var client = new FakeLlmDecisionClient(CreateResult("a",0.9,"b",0.5));
-        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Approved));
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "approved refusal"));
         var (_,ctx)=CreateWorldAndCtx(client,approval);
 
         ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy()),ctx);

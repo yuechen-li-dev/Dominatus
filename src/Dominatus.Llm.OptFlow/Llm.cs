@@ -629,6 +629,7 @@ public static class Llm
                 approvalResult.Outcome.ToString().ToLowerInvariant(),
                 proposedChoice,
                 chosenId,
+                "chosen",
                 approvalResult.Rationale,
                 approvalResult.ApprovedBy));
         }
@@ -661,6 +662,9 @@ public static class Llm
         private readonly BbKey<double> _chosenScoreKey = new(BuildDecideKey(Request.StableId, "chosenScore"));
         private readonly BbKey<string> _rationaleKey = new(BuildDecideKey(Request.StableId, "rationale"));
         private readonly BbKey<string> _resultJsonKey = new(BuildDecideKey(Request.StableId, "resultJson"));
+        private readonly BbKey<string> _outcomeKey = new(BuildDecideKey(Request.StableId, "outcome"));
+        private readonly BbKey<string> _refusalReasonKey = new(BuildDecideKey(Request.StableId, "refusalReason"));
+        private readonly BbKey<string> _proposedAlternativeKey = new(BuildDecideKey(Request.StableId, "proposedAlternative"));
         private readonly BbKey<string> _requestHashKey = new(BuildDecideKey(Request.StableId, "requestHash"));
         private readonly BbKey<long> _lastScoredTickKey = new(BuildDecideKey(Request.StableId, "lastScoredTick"));
         private readonly BbKey<long> _committedUntilTickKey = new(BuildDecideKey(Request.StableId, "committedUntilTick"));
@@ -730,13 +734,41 @@ public static class Llm
                 resultJson = BuildDecisionSummaryJson(result, decision, Policy, approval.Value.Metadata);
             }
 
-            ctx.Bb.Set(_chosenOptionKey, decision.ChosenOptionId);
-            ctx.Bb.Set(StoreChosenAs, decision.ChosenOptionId);
-            ctx.Bb.Set(_chosenScoreKey, decision.ChosenScore);
-            ctx.Bb.Set(_rationaleKey, decision.CommitRationale);
-            if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
+            var isRefused = result.Outcome == LlmDecisionOutcome.Refused && !decision.OverrideModelRefusalWithChosen;
+            if (!isRefused)
             {
-                ctx.Bb.Set(rationaleStoreAs, decision.CommitRationale);
+                ctx.Bb.Set(_chosenOptionKey, decision.ChosenOptionId);
+                ctx.Bb.Set(StoreChosenAs, decision.ChosenOptionId);
+                ctx.Bb.Set(_chosenScoreKey, decision.ChosenScore);
+                ctx.Bb.Set(_rationaleKey, decision.CommitRationale);
+                if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
+                {
+                    ctx.Bb.Set(rationaleStoreAs, decision.CommitRationale);
+                }
+            }
+            else
+            {
+                if (StoreResultJsonAs is null && RefusalPolicy.StoreRefusalReasonAs is null)
+                {
+                    throw new InvalidOperationException($"Llm.Decide refusal is unobservable for stableId '{Request.StableId}'. Configure storeResultJsonAs or refusal.StoreRefusalReasonAs.");
+                }
+
+                ctx.Bb.Set(_outcomeKey, "refused");
+                var refusal = result.Refusal!;
+                ctx.Bb.Set(_refusalReasonKey, refusal.Reason);
+                if (RefusalPolicy.StoreRefusalReasonAs is BbKey<string> refusalReasonStoreAs)
+                {
+                    ctx.Bb.Set(refusalReasonStoreAs, refusal.Reason);
+                }
+
+                if (!string.IsNullOrWhiteSpace(refusal.ProposedAlternative))
+                {
+                    ctx.Bb.Set(_proposedAlternativeKey, refusal.ProposedAlternative!);
+                    if (RefusalPolicy.StoreProposedAlternativeAs is BbKey<string> proposalStoreAs)
+                    {
+                        ctx.Bb.Set(proposalStoreAs, refusal.ProposedAlternative!);
+                    }
+                }
             }
 
             ctx.Bb.Set(_resultJsonKey, resultJson);
@@ -770,7 +802,10 @@ public static class Llm
                     Request.Persona,
                     Request.CanonicalContextJson,
                     Request.Options,
+                    result.Outcome,
                     proposedDecision.ChosenOptionId,
+                    result.Refusal?.Reason,
+                    result.Refusal?.ProposedAlternative,
                     proposedDecision.CommitRationale,
                     proposedResultJson);
                 var dispatch = ctx.Act.Dispatch(ctx, command);
@@ -802,6 +837,11 @@ public static class Llm
                 throw new InvalidOperationException($"Llm.Decide approval completion failed for stableId '{Request.StableId}'. Missing or invalid approval payload.");
             }
 
+            if (string.IsNullOrWhiteSpace(approvalResult.Rationale))
+            {
+                throw new InvalidOperationException($"Llm.Decide approval requires rationale for stableId '{Request.StableId}'.");
+            }
+
             string chosenId = approvalResult.Outcome switch
             {
                 LlmDecisionApprovalOutcome.Approved => string.IsNullOrWhiteSpace(approvalResult.ChosenOptionId)
@@ -822,11 +862,18 @@ public static class Llm
             var approvedScore = result.Scores.Single(s => string.Equals(s.OptionId, chosenId, StringComparison.Ordinal)).Score;
             var approvedRationale = string.IsNullOrWhiteSpace(approvalResult.Rationale) ? proposedDecision.CommitRationale : approvalResult.Rationale!;
             return (
-                proposedDecision with { ChosenOptionId = chosenId, ChosenScore = approvedScore, CommitRationale = approvedRationale },
+                proposedDecision with
+                {
+                    ChosenOptionId = chosenId,
+                    ChosenScore = approvedScore,
+                    CommitRationale = approvedRationale,
+                    OverrideModelRefusalWithChosen = result.Outcome == LlmDecisionOutcome.Refused && approvalResult.Outcome == LlmDecisionApprovalOutcome.Changed
+                },
                 new ApprovalSummary(
                     approvalResult.Outcome.ToString().ToLowerInvariant(),
                     proposedDecision.ChosenOptionId,
                     chosenId,
+                    result.Outcome.ToString().ToLowerInvariant(),
                     approvalResult.Rationale,
                     approvalResult.ApprovedBy));
         }
@@ -970,16 +1017,28 @@ public static class Llm
             => checked((long)Math.Floor(ctx.World.Clock.Time));
     }
 
-    private static string BuildDecisionSummaryJson(LlmDecisionResult result, CommitDecision decision, LlmDecisionPolicy policy, ApprovalSummary? approval = null)
+        private static string BuildDecisionSummaryJson(LlmDecisionResult result, CommitDecision decision, LlmDecisionPolicy policy, ApprovalSummary? approval = null)
     {
         var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
 
         writer.WriteStartObject();
         writer.WriteString("requestHash", result.RequestHash);
+        writer.WriteString("outcome", result.Outcome == LlmDecisionOutcome.Refused && !decision.OverrideModelRefusalWithChosen ? "refused" : "chosen");
+        if (result.Outcome == LlmDecisionOutcome.Refused && decision.OverrideModelRefusalWithChosen)
+        {
+            writer.WriteString("modelOutcome", "refused");
+        }
 
         writer.WriteString("modelRankOneOptionId", decision.ModelRankOneOptionId);
-        writer.WriteString("chosenOptionId", decision.ChosenOptionId);
+        if (result.Outcome == LlmDecisionOutcome.Refused && !decision.OverrideModelRefusalWithChosen)
+        {
+            writer.WriteNull("chosenOptionId");
+        }
+        else
+        {
+            writer.WriteString("chosenOptionId", decision.ChosenOptionId);
+        }
         writer.WriteBoolean("retainedPreviousChoice", decision.RetainedPreviousChoice);
         if (!string.IsNullOrWhiteSpace(decision.RetentionReason))
         {
@@ -995,6 +1054,17 @@ public static class Llm
 
         writer.WriteString("rationale", decision.CommitRationale);
         writer.WriteString("modelRationale", decision.ModelRationale);
+        if (result.Refusal is not null)
+        {
+            writer.WritePropertyName(decision.OverrideModelRefusalWithChosen ? "modelRefusal" : "refusal");
+            writer.WriteStartObject();
+            writer.WriteString("reason", result.Refusal.Reason);
+            if (!string.IsNullOrWhiteSpace(result.Refusal.ProposedAlternative))
+            {
+                writer.WriteString("proposedAlternative", result.Refusal.ProposedAlternative);
+            }
+            writer.WriteEndObject();
+        }
         if (approval is not null)
         {
             writer.WritePropertyName("approval");
@@ -1002,7 +1072,11 @@ public static class Llm
             writer.WriteBoolean("required", true);
             writer.WriteString("outcome", approval.Value.Outcome);
             writer.WriteString("proposedOptionId", approval.Value.ProposedOptionId);
-            writer.WriteString("approvedOptionId", approval.Value.ApprovedOptionId);
+            writer.WriteString("proposedOutcome", approval.Value.ProposedOutcome);
+            if (string.IsNullOrWhiteSpace(approval.Value.ApprovedOptionId))
+                writer.WriteNull("approvedOptionId");
+            else
+                writer.WriteString("approvedOptionId", approval.Value.ApprovedOptionId);
             if (!string.IsNullOrWhiteSpace(approval.Value.Rationale))
             {
                 writer.WriteString("rationale", approval.Value.Rationale);
@@ -1125,9 +1199,10 @@ public static class Llm
         bool RetainedPreviousChoice,
         string? RetentionReason,
         string CommitRationale,
-        string ModelRationale);
+        string ModelRationale,
+        bool OverrideModelRefusalWithChosen = false);
 
-    private readonly record struct ApprovalSummary(string Outcome, string ProposedOptionId, string ApprovedOptionId, string? Rationale, string? ApprovedBy = null);
+    private readonly record struct ApprovalSummary(string Outcome, string ProposedOptionId, string ApprovedOptionId, string ProposedOutcome, string? Rationale, string? ApprovedBy = null);
 
     private static string BuildStepKey(string stableId, string suffix)
         => $"llm.{SanitizeStableId(stableId)}.{suffix}";
