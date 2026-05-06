@@ -15,7 +15,10 @@ public sealed record LlmDecisionApprovalCommand(
     string Persona,
     string CanonicalContextJson,
     IReadOnlyList<LlmDecisionOption> Options,
+    LlmDecisionOutcome ProposedOutcome,
     string ProposedOptionId,
+    string? ProposedRefusalReason,
+    string? ProposedAlternative,
     string ProposedRationale,
     string ProposedResultJson) : IActuationCommand;
 

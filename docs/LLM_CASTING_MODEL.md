@@ -258,3 +258,9 @@ For high-risk LLM decisions, hosts can opt into a human approval actuation gate:
 ## M7a refusal
 
 A bounded-choice LLM decision system must allow the model to reject the frame.
+
+## Llm.Decide refusal runtime semantics (M7a.1)
+- Refusal is always available and requires a refusal reason.
+- `proposedAlternative` is non-executable advisory text only.
+- Refusal never executes or commits a new authored option.
+- Re-entry restores recorded refusal outputs without redispatching provider.

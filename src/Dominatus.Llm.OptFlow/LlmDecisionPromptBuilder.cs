@@ -33,13 +33,24 @@ internal static class LlmDecisionPromptBuilder
         sb.AppendLine("- Rank every option exactly once; ranks must be 1..N.");
         sb.AppendLine($"- Each option rationale must be short (<= {LlmDecisionOptionScore.MaxRationaleLength} chars).");
         sb.AppendLine($"- Overall rationale must be short (<= {LlmDecisionResult.MaxRationaleLength} chars).");
+        sb.AppendLine("- You must score every authored option.");
+        sb.AppendLine("- If at least one option is acceptable, set outcome = \"chosen\".");
+        sb.AppendLine("- If all options are unacceptable, unsafe, invalid, impossible, or wrongly framed, set outcome = \"refused\".");
+        sb.AppendLine("- Refusal is a valid decision outcome.");
+        sb.AppendLine("- When outcome = \"refused\", refusal.reason is required.");
+        sb.AppendLine("- Do not invent a new executable option.");
+        sb.AppendLine("- proposedAlternative is non-executable text only.");
+        sb.AppendLine("- If proposed alternatives are not allowed, omit refusal.proposedAlternative or set it null.");
         sb.AppendLine("- Return strict JSON only, no markdown, no extra keys.");
         sb.AppendLine("- JSON schema:");
         sb.AppendLine("{");
+        sb.AppendLine("  \"requestHash\": \"...\",");
+        sb.AppendLine("  \"outcome\": \"chosen|refused\",");
         sb.AppendLine("  \"scores\": [");
-        sb.AppendLine("    { \"id\": \"option-id\", \"score\": 0.0, \"rank\": 1, \"rationale\": \"short reason\" }");
+        sb.AppendLine("    { \"optionId\": \"option-id\", \"score\": 0.0, \"rank\": 1, \"rationale\": \"short reason\" }");
         sb.AppendLine("  ],");
-        sb.AppendLine("  \"rationale\": \"short overall reason\"");
+        sb.AppendLine("  \"rationale\": \"short overall reason\",");
+        sb.AppendLine("  \"refusal\": { \"reason\": \"...\", \"proposedAlternative\": \"...\" }");
         sb.AppendLine("}");
 
         return sb.ToString();
