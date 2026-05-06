@@ -15,6 +15,9 @@ public sealed record LlmDecisionRequest : IActuationCommand
     public LlmSamplingOptions Sampling { get; }
     public string PromptTemplateVersion { get; }
     public string OutputContractVersion { get; }
+    public bool AllowProposedAlternative { get; }
+    public int MaxRefusalReasonChars { get; }
+    public int MaxProposedAlternativeChars { get; }
 
     public LlmDecisionRequest(
         string StableId,
@@ -24,7 +27,10 @@ public sealed record LlmDecisionRequest : IActuationCommand
         IReadOnlyList<LlmDecisionOption> Options,
         LlmSamplingOptions Sampling,
         string PromptTemplateVersion,
-        string OutputContractVersion)
+        string OutputContractVersion,
+        bool AllowProposedAlternative = false,
+        int MaxRefusalReasonChars = LlmDecisionResult.MaxRationaleLength,
+        int MaxProposedAlternativeChars = 500)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(StableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(Intent);
@@ -58,5 +64,8 @@ public sealed record LlmDecisionRequest : IActuationCommand
         this.Sampling = Sampling;
         this.PromptTemplateVersion = PromptTemplateVersion;
         this.OutputContractVersion = OutputContractVersion;
+        this.AllowProposedAlternative = AllowProposedAlternative;
+        this.MaxRefusalReasonChars = MaxRefusalReasonChars;
+        this.MaxProposedAlternativeChars = MaxProposedAlternativeChars;
     }
 }

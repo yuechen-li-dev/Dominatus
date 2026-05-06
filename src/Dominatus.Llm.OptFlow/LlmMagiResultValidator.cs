@@ -68,6 +68,6 @@ public static class LlmMagiResultValidator
             Options: request.Options,
             Sampling: participant.Sampling,
             PromptTemplateVersion: LlmDecisionRequest.DefaultPromptTemplateVersion,
-            OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion);
+            OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion, false, LlmDecisionResult.MaxRationaleLength, 500);
     }
 }

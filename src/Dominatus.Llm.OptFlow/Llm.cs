@@ -238,7 +238,8 @@ public static class Llm
         BbKey<string>? storeResultJsonAs = null,
         LlmSamplingOptions? sampling = null,
         LlmDecisionPolicy? policy = null,
-        LlmDecisionApprovalPolicy? approval = null)
+        LlmDecisionApprovalPolicy? approval = null,
+        LlmDecisionRefusalPolicy? refusal = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(intent);
@@ -296,9 +297,12 @@ public static class Llm
             Options: canonicalOptions,
             Sampling: resolvedSampling,
             PromptTemplateVersion: LlmDecisionRequest.DefaultPromptTemplateVersion,
-            OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion);
+            OutputContractVersion: LlmDecisionRequest.DefaultOutputContractVersion,
+            AllowProposedAlternative: (refusal ?? LlmDecisionRefusalPolicy.Default).AllowProposedAlternative,
+            MaxRefusalReasonChars: (refusal ?? LlmDecisionRefusalPolicy.Default).MaxReasonChars,
+            MaxProposedAlternativeChars: (refusal ?? LlmDecisionRefusalPolicy.Default).MaxProposedAlternativeChars);
 
-        return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, policy ?? LlmDecisionPolicy.Default, approval);
+        return new LlmDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, policy ?? LlmDecisionPolicy.Default, approval, refusal ?? LlmDecisionRefusalPolicy.Default);
     }
 
     public static AiStep MagiDecide(
@@ -649,7 +653,8 @@ public static class Llm
         BbKey<string>? StoreRationaleAs,
         BbKey<string>? StoreResultJsonAs,
         LlmDecisionPolicy Policy,
-        LlmDecisionApprovalPolicy? Approval) : AiStep, IWaitEvent
+        LlmDecisionApprovalPolicy? Approval,
+        LlmDecisionRefusalPolicy RefusalPolicy) : AiStep, IWaitEvent
     {
         private readonly BbKey<bool> _completedKey = new(BuildDecideKey(Request.StableId, "completed"));
         private readonly BbKey<string> _chosenOptionKey = new(BuildDecideKey(Request.StableId, "chosenOptionId"));

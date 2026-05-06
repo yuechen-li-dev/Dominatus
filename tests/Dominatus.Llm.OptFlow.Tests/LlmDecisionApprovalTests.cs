@@ -116,7 +116,7 @@ public sealed class LlmDecisionApprovalTests
 
     private static LlmDecisionResult CreateResult(string firstId,double firstScore,string secondId,double secondScore)
     {
-        var req = new LlmDecisionRequest("approval","intent","persona","{\"k\":\"v\"}",[Llm.Option("a","A"),Llm.Option("b","B")],Llm.DefaultSampling,LlmDecisionRequest.DefaultPromptTemplateVersion,LlmDecisionRequest.DefaultOutputContractVersion);
+        var req = new LlmDecisionRequest("approval","intent","persona","{\"k\":\"v\"}",[Llm.Option("a","A"),Llm.Option("b","B")],Llm.DefaultSampling,LlmDecisionRequest.DefaultPromptTemplateVersion,LlmDecisionRequest.DefaultOutputContractVersion, false, LlmDecisionResult.MaxRationaleLength, 500);
         var hash = LlmDecisionRequestHasher.ComputeHash(req);
         return new LlmDecisionResult(hash,[new LlmDecisionOptionScore(firstId, firstScore,1,"r1"), new LlmDecisionOptionScore(secondId,secondScore,2,"r2")],"overall");
     }
