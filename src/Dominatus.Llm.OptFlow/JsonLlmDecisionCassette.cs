@@ -165,14 +165,16 @@ public sealed class JsonLlmDecisionCassette : ILlmDecisionCassette
             Sampling: ParseSampling(requestDto.Sampling, path),
             PromptTemplateVersion: requestDto.PromptTemplateVersion ?? throw new InvalidOperationException($"Cassette {path}.request.promptTemplateVersion is required."),
             OutputContractVersion: requestDto.OutputContractVersion ?? throw new InvalidOperationException($"Cassette {path}.request.outputContractVersion is required."),
-            AllowProposedAlternative: false,
-            MaxRefusalReasonChars: LlmDecisionResult.MaxRationaleLength,
-            MaxProposedAlternativeChars: 500);
+            AllowProposedAlternative: requestDto.AllowProposedAlternative,
+            MaxRefusalReasonChars: requestDto.MaxRefusalReasonChars ?? LlmDecisionResult.MaxRationaleLength,
+            MaxProposedAlternativeChars: requestDto.MaxProposedAlternativeChars ?? 500);
 
         var result = new LlmDecisionResult(
             RequestHash: resultDto.RequestHash ?? throw new InvalidOperationException($"Cassette {path}.result.requestHash is required."),
             Scores: ParseScores(resultDto.Scores, path),
-            Rationale: resultDto.Rationale ?? throw new InvalidOperationException($"Cassette {path}.result.rationale is required."));
+            Rationale: resultDto.Rationale ?? throw new InvalidOperationException($"Cassette {path}.result.rationale is required."),
+            Outcome: resultDto.Outcome is not null && resultDto.Outcome.Equals("refused", StringComparison.OrdinalIgnoreCase) ? LlmDecisionOutcome.Refused : LlmDecisionOutcome.Chosen,
+            Refusal: resultDto.RefusalReason is null ? null : new LlmDecisionRefusal(resultDto.RefusalReason, resultDto.ProposedAlternative));
 
         return ValidateEntry(new CassetteEntry(dto.RequestHash, request, result), path);
     }
@@ -266,6 +268,9 @@ public sealed class JsonLlmDecisionCassette : ILlmDecisionCassette
                 },
                 PromptTemplateVersion = entry.Request.PromptTemplateVersion,
                 OutputContractVersion = entry.Request.OutputContractVersion,
+                AllowProposedAlternative = entry.Request.AllowProposedAlternative,
+                MaxRefusalReasonChars = entry.Request.MaxRefusalReasonChars,
+                MaxProposedAlternativeChars = entry.Request.MaxProposedAlternativeChars,
             },
             Result = new LlmDecisionResultDto
             {
@@ -280,6 +285,9 @@ public sealed class JsonLlmDecisionCassette : ILlmDecisionCassette
                     })
                     .ToList(),
                 Rationale = entry.Result.Rationale,
+                Outcome = entry.Result.Outcome.ToString().ToLowerInvariant(),
+                RefusalReason = entry.Result.Refusal?.Reason,
+                ProposedAlternative = entry.Result.Refusal?.ProposedAlternative,
             }
         };
 
@@ -318,6 +326,9 @@ public sealed class JsonLlmDecisionCassette : ILlmDecisionCassette
         public string? PromptTemplateVersion { get; set; }
 
         public string? OutputContractVersion { get; set; }
+        public bool AllowProposedAlternative { get; set; }
+        public int? MaxRefusalReasonChars { get; set; }
+        public int? MaxProposedAlternativeChars { get; set; }
     }
 
     private sealed class LlmDecisionOptionDto
@@ -347,6 +358,9 @@ public sealed class JsonLlmDecisionCassette : ILlmDecisionCassette
         public List<LlmDecisionOptionScoreDto>? Scores { get; set; }
 
         public string? Rationale { get; set; }
+        public string? Outcome { get; set; }
+        public string? RefusalReason { get; set; }
+        public string? ProposedAlternative { get; set; }
     }
 
     private sealed class LlmDecisionOptionScoreDto

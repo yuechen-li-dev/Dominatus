@@ -207,6 +207,25 @@ public sealed class LlmDecisionInfrastructureTests
         LlmDecisionResultValidator.ValidateAgainstRequest(request, hash, result);
     }
 
+
+    [Fact]
+    public void DecisionResultValidator_RefusedRejectsProposalWhenNotAllowed()
+    {
+        var request = CloneRequest(CreateRequest(), AllowProposedAlternative: false);
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+        var result = new LlmDecisionResult(hash, CreateValidResult(hash).Scores, "refused", LlmDecisionOutcome.Refused, new LlmDecisionRefusal("no safe option", "new option"));
+        Assert.Throws<InvalidOperationException>(() => LlmDecisionResultValidator.ValidateAgainstRequest(request, hash, result));
+    }
+
+    [Fact]
+    public void DecisionResultValidator_RefusedAcceptsProposalWhenAllowed()
+    {
+        var request = CloneRequest(CreateRequest(), AllowProposedAlternative: true);
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+        var result = new LlmDecisionResult(hash, CreateValidResult(hash).Scores, "refused", LlmDecisionOutcome.Refused, new LlmDecisionRefusal("no safe option", "ask permission"));
+        LlmDecisionResultValidator.ValidateAgainstRequest(request, hash, result);
+    }
+
     [Fact]
     public async Task FakeDecisionClient_ReturnsConfiguredResult()
     {
@@ -354,7 +373,10 @@ public sealed class LlmDecisionInfrastructureTests
         IReadOnlyList<LlmDecisionOption>? Options = null,
         LlmSamplingOptions? Sampling = null,
         string? PromptTemplateVersion = null,
-        string? OutputContractVersion = null)
+        string? OutputContractVersion = null,
+        bool? AllowProposedAlternative = null,
+        int? MaxRefusalReasonChars = null,
+        int? MaxProposedAlternativeChars = null)
         => new(
             StableId: StableId ?? source.StableId,
             Intent: Intent ?? source.Intent,
@@ -363,5 +385,8 @@ public sealed class LlmDecisionInfrastructureTests
             Options: Options ?? source.Options,
             Sampling: Sampling ?? source.Sampling,
             PromptTemplateVersion: PromptTemplateVersion ?? source.PromptTemplateVersion,
-            OutputContractVersion: OutputContractVersion ?? source.OutputContractVersion);
+            OutputContractVersion: OutputContractVersion ?? source.OutputContractVersion,
+            AllowProposedAlternative: AllowProposedAlternative ?? source.AllowProposedAlternative,
+            MaxRefusalReasonChars: MaxRefusalReasonChars ?? source.MaxRefusalReasonChars,
+            MaxProposedAlternativeChars: MaxProposedAlternativeChars ?? source.MaxProposedAlternativeChars);
 }

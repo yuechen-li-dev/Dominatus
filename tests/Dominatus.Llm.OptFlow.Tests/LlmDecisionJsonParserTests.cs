@@ -25,6 +25,40 @@ public sealed class LlmDecisionJsonParserTests
         Assert.Equal("Negotiation best fits objective.", result.Rationale);
     }
 
+
+    [Fact]
+    public void DecisionJsonParser_ParsesRefusedOutcome()
+    {
+        var request = CreateRequest();
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+        var json = """
+        {
+          "outcome": "refused",
+          "scores": [
+            {"id":"negotiate","score":0.6,"rank":1,"rationale":"least bad"},
+            {"id":"threaten","score":0.4,"rank":2,"rationale":"bad"},
+            {"id":"attack","score":0.1,"rank":3,"rationale":"worst"}
+          ],
+          "rationale":"all options unsafe",
+          "refusal": {"reason":"unsafe objective"}
+        }
+        """;
+
+        var result = LlmDecisionJsonParser.ParseAndValidate(json, request, hash, "ctx");
+        Assert.Equal(LlmDecisionOutcome.Refused, result.Outcome);
+        Assert.Equal("unsafe objective", result.Refusal?.Reason);
+    }
+
+    [Fact]
+    public void DecisionJsonParser_TreatsLegacyMissingOutcomeAsChosen()
+    {
+        var request = CreateRequest();
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+
+        var result = LlmDecisionJsonParser.ParseAndValidate(ValidDecisionJson(), request, hash, "ctx");
+        Assert.Equal(LlmDecisionOutcome.Chosen, result.Outcome);
+    }
+
     [Fact]
     public void DecisionJsonParser_RejectsMalformedJson()
     {
