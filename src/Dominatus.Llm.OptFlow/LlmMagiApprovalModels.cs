@@ -11,8 +11,11 @@ public sealed record LlmMagiApprovalCommand(
     LlmMagiParticipant AdvocateA,
     LlmMagiParticipant AdvocateB,
     LlmMagiParticipant Judge,
+    LlmDecisionOutcome ProposedOutcome,
     string ProposedOptionId,
     string ProposedRationale,
+    string? ProposedRefusalReason,
+    string? ProposedAlternative,
     string ProposedResultJson) : IActuationCommand;
 
 public sealed record LlmMagiApprovalResult(

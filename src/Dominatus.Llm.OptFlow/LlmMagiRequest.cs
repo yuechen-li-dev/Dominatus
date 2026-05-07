@@ -15,6 +15,9 @@ public sealed record LlmMagiRequest : IActuationCommand
     public LlmMagiParticipant AdvocateA { get; }
     public LlmMagiParticipant AdvocateB { get; }
     public LlmMagiParticipant Judge { get; }
+    public bool AllowProposedAlternative { get; }
+    public int MaxRefusalReasonChars { get; }
+    public int MaxProposedAlternativeChars { get; }
     public string PromptTemplateVersion { get; }
     public string OutputContractVersion { get; }
 
@@ -29,6 +32,24 @@ public sealed record LlmMagiRequest : IActuationCommand
         LlmMagiParticipant Judge,
         string PromptTemplateVersion,
         string OutputContractVersion)
+        : this(StableId, Intent, Persona, CanonicalContextJson, Options, AdvocateA, AdvocateB, Judge, false, 500, 700, PromptTemplateVersion, OutputContractVersion)
+    {
+    }
+
+    public LlmMagiRequest(
+        string StableId,
+        string Intent,
+        string Persona,
+        string CanonicalContextJson,
+        IReadOnlyList<LlmDecisionOption> Options,
+        LlmMagiParticipant AdvocateA,
+        LlmMagiParticipant AdvocateB,
+        LlmMagiParticipant Judge,
+        bool AllowProposedAlternative,
+        int MaxRefusalReasonChars,
+        int MaxProposedAlternativeChars,
+        string PromptTemplateVersion,
+        string OutputContractVersion)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(StableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(Intent);
@@ -38,6 +59,8 @@ public sealed record LlmMagiRequest : IActuationCommand
         ArgumentNullException.ThrowIfNull(AdvocateA);
         ArgumentNullException.ThrowIfNull(AdvocateB);
         ArgumentNullException.ThrowIfNull(Judge);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxRefusalReasonChars, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MaxProposedAlternativeChars, 1);
         ArgumentException.ThrowIfNullOrWhiteSpace(PromptTemplateVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(OutputContractVersion);
 
@@ -74,6 +97,9 @@ public sealed record LlmMagiRequest : IActuationCommand
         this.AdvocateA = AdvocateA;
         this.AdvocateB = AdvocateB;
         this.Judge = Judge;
+        this.AllowProposedAlternative = AllowProposedAlternative;
+        this.MaxRefusalReasonChars = MaxRefusalReasonChars;
+        this.MaxProposedAlternativeChars = MaxProposedAlternativeChars;
         this.PromptTemplateVersion = PromptTemplateVersion;
         this.OutputContractVersion = OutputContractVersion;
     }

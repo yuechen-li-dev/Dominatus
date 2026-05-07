@@ -156,7 +156,7 @@ public sealed class LlmMagiApprovalTests
     public void MagiDecide_WithApproval_ReplayMagiResult_StillDispatchesApprovalForFirstCommit()
     {
         var p = CreateParticipants();
-        var req = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
+        var req = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,false,500,700,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
         var cassette = new InMemoryLlmMagiCassette();
         var hash = LlmMagiRequestHasher.ComputeHash(req);
         var aReq = LlmMagiResultValidator.BuildAdvocateRequest(req, req.AdvocateA);
@@ -197,7 +197,7 @@ public sealed class LlmMagiApprovalTests
     private static (FakeLlmDecisionClient A, FakeLlmDecisionClient B, FakeLlmMagiJudgeClient J, FakeMagiApprovalHandler Approval, AiCtx Ctx) Setup(LlmMagiApprovalResult? approvalResult = null, LlmCassetteMode mode = LlmCassetteMode.Live, InMemoryLlmMagiCassette? cassette = null, object? payload = null, ActuatorHost.HandlerResult? result = null)
     {
         var p = CreateParticipants();
-        var request = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
+        var request = new LlmMagiRequest("magi.approval","intent","persona","{\"k\":\"v\"}",CreateOptions(),p.A,p.B,p.J,false,500,700,LlmMagiRequest.DefaultPromptTemplateVersion,LlmMagiRequest.DefaultOutputContractVersion);
         var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
         var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
         var a = new FakeLlmDecisionClient(new LlmDecisionResult(LlmDecisionRequestHasher.ComputeHash(aReq), [new("join",0.9,1,"r"),new("mediate",0.5,2,"r"),new("refuse",0.2,3,"r")], "a"));
