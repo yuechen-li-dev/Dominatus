@@ -43,6 +43,58 @@ public sealed class JsonLlmMagiCassetteTests
         Assert.Contains("\"promptTemplateVersion\": \"llm.magi.prompt.v1\"", fileText, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void JsonMagiCassette_RoundTripsRefusedOutcome()
+    {
+        var path = CreateTempFilePath();
+        var request = CreateRequestRefusalCompatible(allowProposedAlternative: true, maxReasonChars: 321, maxAlternativeChars: 654);
+        var hash = LlmMagiRequestHasher.ComputeHash(request);
+        var expected = CreateRefusedMagiResult(request, hash, "unsafe objective", "request human arbitration");
+
+        var cassette = JsonLlmMagiCassette.LoadOrCreate(path);
+        cassette.Put(hash, request, expected);
+        cassette.Save();
+
+        var loaded = JsonLlmMagiCassette.LoadOrCreate(path);
+        Assert.True(loaded.TryGet(hash, out var actual));
+
+        Assert.Equal(LlmDecisionOutcome.Refused, actual.Outcome);
+        Assert.NotNull(actual.Refusal);
+        Assert.Equal("unsafe objective", actual.Refusal!.Reason);
+        Assert.Equal("request human arbitration", actual.Refusal.ProposedAlternative);
+        Assert.True(actual.Judgment.Refusal is not null);
+
+        using (var doc = JsonDocument.Parse(File.ReadAllText(path, Encoding.UTF8)))
+        {
+            var requestJson = doc.RootElement.GetProperty("entries")[0].GetProperty("request");
+            Assert.True(requestJson.GetProperty("allowProposedAlternative").GetBoolean());
+            Assert.Equal(321, requestJson.GetProperty("maxRefusalReasonChars").GetInt32());
+            Assert.Equal(654, requestJson.GetProperty("maxProposedAlternativeChars").GetInt32());
+        }
+
+        Assert.Equal(request.AdvocateA.Id, actual.AdvocateA.Id);
+        Assert.Equal(request.AdvocateB.Id, actual.AdvocateB.Id);
+        Assert.Equal(request.Judge.Id, actual.Judge.Id);
+
+    }
+
+    [Fact]
+    public void JsonMagiCassette_LegacyChosenWithoutOutcomeStillLoads()
+    {
+        var request = CreateRequest();
+        var hash = LlmMagiRequestHasher.ComputeHash(request);
+        var result = CreateMagiResult(request, hash);
+        var path = CreateTempFilePath();
+
+        WriteFixture(path, BuildCassetteJson(hash, request, result, includeOutcomeFields: false));
+
+        var cassette = JsonLlmMagiCassette.LoadOrCreate(path);
+        Assert.True(cassette.TryGet(hash, out var loaded));
+        Assert.Equal(LlmDecisionOutcome.Chosen, loaded.Outcome);
+        Assert.Null(loaded.Refusal);
+    }
+
     [Fact]
     public void JsonMagiCassette_SavesEntriesInDeterministicOrder()
     {
@@ -432,22 +484,22 @@ public sealed class JsonLlmMagiCassetteTests
         Assert.Fail("LLM Magi decide step did not complete in time.");
     }
 
-    private static string BuildCassetteJson(string requestHash, LlmMagiRequest request, LlmMagiDecisionResult result)
+    private static string BuildCassetteJson(string requestHash, LlmMagiRequest request, LlmMagiDecisionResult result, bool includeOutcomeFields = true)
         => $$"""
             {
               "schemaVersion": "dom.llm.magi_cassette.v1",
               "entries": [
-                {{BuildEntryJson(requestHash, request, result)}}
+                {{BuildEntryJson(requestHash, request, result, includeOutcomeFields)}}
               ]
             }
             """;
 
-    private static string BuildEntryJson(string requestHash, LlmMagiRequest request, LlmMagiDecisionResult result)
+    private static string BuildEntryJson(string requestHash, LlmMagiRequest request, LlmMagiDecisionResult result, bool includeOutcomeFields = true)
         => $$"""
             {
               "requestHash": {{JsonSerializer.Serialize(requestHash)}},
               "request": {{BuildRequestJson(request)}},
-              "result": {{BuildResultJson(result)}}
+              "result": {{BuildResultJson(result, includeOutcomeFields)}}
             }
             """;
 
@@ -466,22 +518,54 @@ public sealed class JsonLlmMagiCassetteTests
             outputContractVersion = request.OutputContractVersion,
         });
 
-    private static string BuildResultJson(LlmMagiDecisionResult result)
-        => JsonSerializer.Serialize(new
-        {
-            requestHash = result.RequestHash,
-            advocateA = BuildParticipantObject(result.AdvocateA),
-            advocateB = BuildParticipantObject(result.AdvocateB),
-            judge = BuildParticipantObject(result.Judge),
-            advocateAResult = BuildDecisionResultObject(result.AdvocateAResult),
-            advocateBResult = BuildDecisionResultObject(result.AdvocateBResult),
-            judgment = new
+    private static string BuildResultJson(LlmMagiDecisionResult result, bool includeOutcomeFields = true)
+        => includeOutcomeFields
+            ? JsonSerializer.Serialize(new
             {
-                chosenOptionId = result.Judgment.ChosenOptionId,
-                preferredProposalId = result.Judgment.PreferredProposalId,
-                rationale = result.Judgment.Rationale,
-            }
-        });
+                requestHash = result.RequestHash,
+                advocateA = BuildParticipantObject(result.AdvocateA),
+                advocateB = BuildParticipantObject(result.AdvocateB),
+                judge = BuildParticipantObject(result.Judge),
+                advocateAResult = BuildDecisionResultObject(result.AdvocateAResult),
+                advocateBResult = BuildDecisionResultObject(result.AdvocateBResult),
+                judgment = new
+                {
+                    chosenOptionId = result.Judgment.ChosenOptionId,
+                    preferredProposalId = result.Judgment.PreferredProposalId,
+                    rationale = result.Judgment.Rationale,
+                    outcome = result.Judgment.Outcome.ToString().ToLowerInvariant(),
+                    refusal = result.Judgment.Refusal is null
+                        ? null
+                        : new
+                        {
+                            reason = result.Judgment.Refusal.Reason,
+                            proposedAlternative = result.Judgment.Refusal.ProposedAlternative,
+                        },
+                },
+                outcome = result.Outcome.ToString().ToLowerInvariant(),
+                refusal = result.Refusal is null
+                    ? null
+                    : new
+                    {
+                        reason = result.Refusal.Reason,
+                        proposedAlternative = result.Refusal.ProposedAlternative,
+                    }
+            })
+            : JsonSerializer.Serialize(new
+            {
+                requestHash = result.RequestHash,
+                advocateA = BuildParticipantObject(result.AdvocateA),
+                advocateB = BuildParticipantObject(result.AdvocateB),
+                judge = BuildParticipantObject(result.Judge),
+                advocateAResult = BuildDecisionResultObject(result.AdvocateAResult),
+                advocateBResult = BuildDecisionResultObject(result.AdvocateBResult),
+                judgment = new
+                {
+                    chosenOptionId = result.Judgment.ChosenOptionId,
+                    preferredProposalId = result.Judgment.PreferredProposalId,
+                    rationale = result.Judgment.Rationale,
+                }
+            });
 
     private static object BuildDecisionResultObject(LlmDecisionResult result)
         => new
@@ -520,6 +604,27 @@ public sealed class JsonLlmMagiCassetteTests
     private static string CreateTempFilePath()
         => Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "magi.cassette.json");
 
+    private static LlmMagiRequest CreateRequestRefusalCompatible(bool allowProposedAlternative, int maxReasonChars, int maxAlternativeChars, string stableId = "gandhi.war-council.v1")
+        => new(
+            StableId: stableId,
+            Intent: "decide whether Gandhi should join Victoria's war against Alexander",
+            Persona: "Gandhi. Principled, patient, peace-seeking, but not naive.",
+            CanonicalContextJson: "{\"alexanderThreat\":0.84,\"trustVictoria\":0.42}",
+            Options:
+            [
+                Llm.Option("demand_concession", "Join only if Victoria grants concessions."),
+                Llm.Option("join_war", "Join Victoria's war against Alexander."),
+                Llm.Option("mediate", "Pursue mediation before military alignment.")
+            ],
+            AdvocateA: Llm.MagiParticipant("strategist", "openai", "gpt-5.5-thinking", "Argue strategic utility."),
+            AdvocateB: Llm.MagiParticipant("character", "anthropic", "claude-sonnet-4.7", "Argue character fidelity."),
+            Judge: Llm.MagiParticipant("judge", "gemini", "gemini-3-thinking", "Choose the better proposal."),
+            AllowProposedAlternative: allowProposedAlternative,
+            MaxRefusalReasonChars: maxReasonChars,
+            MaxProposedAlternativeChars: maxAlternativeChars,
+            PromptTemplateVersion: LlmMagiRequest.DefaultPromptTemplateVersion,
+            OutputContractVersion: LlmMagiRequest.DefaultOutputContractVersion);
+
     private static LlmMagiRequest CreateRequest(string stableId = "gandhi.war-council.v1")
         => new(
             StableId: stableId,
@@ -557,6 +662,18 @@ public sealed class JsonLlmMagiCassetteTests
             hash,
             CreateDecisionScores(),
             "overall rationale");
+
+    private static LlmMagiDecisionResult CreateRefusedMagiResult(LlmMagiRequest request, string requestHash, string reason, string? proposedAlternative)
+        => new(
+            RequestHash: requestHash,
+            AdvocateA: request.AdvocateA,
+            AdvocateB: request.AdvocateB,
+            Judge: request.Judge,
+            AdvocateAResult: CreateDecisionResult(CreateAdvocateHash(request, request.AdvocateA)),
+            AdvocateBResult: CreateDecisionResult(CreateAdvocateHash(request, request.AdvocateB)),
+            Judgment: new LlmMagiJudgment(null, request.AdvocateA.Id, "recorded refusal", LlmDecisionOutcome.Refused, new LlmDecisionRefusal(reason, proposedAlternative)),
+            Outcome: LlmDecisionOutcome.Refused,
+            Refusal: new LlmDecisionRefusal(reason, proposedAlternative));
 
     private static LlmMagiDecisionResult CreateMagiResult(LlmMagiRequest request, string requestHash)
         => new(

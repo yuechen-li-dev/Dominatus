@@ -75,6 +75,21 @@ public sealed class LlmMagiRefusalRuntimeTests
         Assert.Equal("unsafe objective", ctx.Bb.GetOrDefault(RefusalKey, ""));
     }
 
+
+    [Fact]
+    public void MagiDecide_RefusedReplay_SuppressesMagiProvider()
+    {
+        var (a, b, j, ctx) = Setup(refusal: new("unsafe objective"), policy: new LlmMagiRefusalPolicy(StoreRefusalReasonAs: RefusalKey));
+        Execute(ctx, Step(refusal: new LlmMagiRefusalPolicy(StoreRefusalReasonAs: RefusalKey)));
+
+        Assert.Equal(0, a.CallCount);
+        Assert.Equal(0, b.CallCount);
+        Assert.Equal(0, j.CallCount);
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.Equal("unsafe objective", ctx.Bb.GetOrDefault(RefusalKey, ""));
+        Assert.True(ctx.Bb.TryGet(ResultJsonKey, out _));
+    }
+
     [Fact]
     public void MagiDecide_Refused_StoresResultJsonWithRefusal()
     {
