@@ -672,6 +672,16 @@ public static class Llm
 
         private void RestoreOptionalOutputs(AiCtx ctx)
         {
+            if (RefusalPolicy.StoreRefusalReasonAs is BbKey<string> refusalStoreAs && ctx.Bb.TryGet(_refusalReasonKey, out string? refusalReason))
+            {
+                ctx.Bb.Set(refusalStoreAs, refusalReason ?? string.Empty);
+            }
+
+            if (RefusalPolicy.StoreProposedAlternativeAs is BbKey<string> proposalStoreAs && ctx.Bb.TryGet(_proposedAlternativeKey, out string? proposal))
+            {
+                ctx.Bb.Set(proposalStoreAs, proposal ?? string.Empty);
+            }
+
             if (StoreRationaleAs is BbKey<string> rationaleStoreAs && ctx.Bb.TryGet(_rationaleKey, out string? rationale))
             {
                 ctx.Bb.Set(rationaleStoreAs, rationale ?? string.Empty);
@@ -1176,7 +1186,15 @@ public static class Llm
 
         writer.WriteStartObject();
         writer.WriteString("requestHash", result.RequestHash);
-        writer.WriteString("chosenOptionId", approvedOptionId ?? result.Judgment.ChosenOptionId);
+        writer.WriteString("outcome", result.Outcome == LlmDecisionOutcome.Refused ? "refused" : "chosen");
+        if (result.Outcome == LlmDecisionOutcome.Refused && string.IsNullOrWhiteSpace(approvedOptionId))
+        {
+            writer.WriteNull("chosenOptionId");
+        }
+        else
+        {
+            writer.WriteString("chosenOptionId", approvedOptionId ?? result.Judgment.ChosenOptionId);
+        }
         writer.WriteString("preferredProposalId", result.Judgment.PreferredProposalId);
         writer.WriteString("rationale", committedRationale ?? result.Judgment.Rationale);
 
@@ -1192,10 +1210,29 @@ public static class Llm
 
         writer.WritePropertyName("judgment");
         writer.WriteStartObject();
-        writer.WriteString("chosenOptionId", approvedOptionId ?? result.Judgment.ChosenOptionId);
+        if (result.Outcome == LlmDecisionOutcome.Refused && string.IsNullOrWhiteSpace(approvedOptionId))
+        {
+            writer.WriteNull("chosenOptionId");
+        }
+        else
+        {
+            writer.WriteString("chosenOptionId", approvedOptionId ?? result.Judgment.ChosenOptionId);
+        }
         writer.WriteString("preferredProposalId", result.Judgment.PreferredProposalId);
         writer.WriteString("rationale", committedRationale ?? result.Judgment.Rationale);
         writer.WriteEndObject();
+
+        if (result.Refusal is not null)
+        {
+            writer.WritePropertyName("refusal");
+            writer.WriteStartObject();
+            writer.WriteString("reason", result.Refusal.Reason);
+            if (!string.IsNullOrWhiteSpace(result.Refusal.ProposedAlternative))
+            {
+                writer.WriteString("proposedAlternative", result.Refusal.ProposedAlternative);
+            }
+            writer.WriteEndObject();
+        }
 
         if (approval is not null)
         {
