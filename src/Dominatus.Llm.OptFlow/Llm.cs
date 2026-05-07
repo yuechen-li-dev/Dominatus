@@ -518,7 +518,7 @@ public static class Llm
                 $"Llm.MagiDecide completion failed for stableId '{Request.StableId}'. Missing magi decision payload.");
 
             LlmMagiResultValidator.ValidateDecisionResultAgainstRequest(Request, result.RequestHash, result);
-            var proposedChoice = result.Judgment.ChosenOptionId ?? string.Empty;
+            var proposedChoice = ResolveMagiProposedOptionId(result);
             var proposedRationale = result.Judgment.Rationale;
             var proposedResultJson = BuildMagiSummaryJson(result);
 
@@ -539,9 +539,12 @@ public static class Llm
                 approvalMetadata = approval.Value.Metadata;
             }
 
-            var resultJson = BuildMagiSummaryJson(result, chosenOptionId, committedRationale, approvalMetadata);
+            var approvedOptionIdForJson = result.Outcome == LlmDecisionOutcome.Refused && approvalMetadata?.Outcome != "changed"
+                ? null
+                : chosenOptionId;
+            var resultJson = BuildMagiSummaryJson(result, approvedOptionIdForJson, committedRationale, approvalMetadata);
 
-            var isRefused = result.Outcome == LlmDecisionOutcome.Refused;
+            var isRefused = result.Outcome == LlmDecisionOutcome.Refused && approvalMetadata?.Outcome != "changed";
             if (!isRefused)
             {
                 ctx.Bb.Set(_chosenOptionKey, chosenOptionId);
@@ -646,6 +649,7 @@ public static class Llm
 
             string chosenId = approvalResult.Outcome switch
             {
+                LlmDecisionApprovalOutcome.Approved when result.Outcome == LlmDecisionOutcome.Refused => string.Empty,
                 LlmDecisionApprovalOutcome.Approved => string.IsNullOrWhiteSpace(approvalResult.ChosenOptionId)
                     ? proposedChoice
                     : approvalResult.ChosenOptionId!,
@@ -656,7 +660,7 @@ public static class Llm
                 _ => throw new InvalidOperationException($"Llm.MagiDecide approval returned unknown outcome for stableId '{Request.StableId}'.")
             };
 
-            if (!Request.Options.Any(o => string.Equals(o.Id, chosenId, StringComparison.Ordinal)))
+            if (!string.IsNullOrWhiteSpace(chosenId) && !Request.Options.Any(o => string.Equals(o.Id, chosenId, StringComparison.Ordinal)))
             {
                 throw new InvalidOperationException($"Llm.MagiDecide approval selected unknown option '{chosenId}' for stableId '{Request.StableId}'.");
             }
@@ -665,9 +669,25 @@ public static class Llm
                 approvalResult.Outcome.ToString().ToLowerInvariant(),
                 proposedChoice,
                 chosenId,
-                "chosen",
+                result.Outcome == LlmDecisionOutcome.Refused ? "refused" : "chosen",
                 approvalResult.Rationale,
                 approvalResult.ApprovedBy));
+        }
+
+        private static string ResolveMagiProposedOptionId(LlmMagiDecisionResult result)
+        {
+            if (!string.IsNullOrWhiteSpace(result.Judgment.ChosenOptionId))
+            {
+                return result.Judgment.ChosenOptionId!;
+            }
+
+            var preferred = string.Equals(result.Judgment.PreferredProposalId, result.AdvocateA.Id, StringComparison.Ordinal)
+                ? result.AdvocateAResult
+                : string.Equals(result.Judgment.PreferredProposalId, result.AdvocateB.Id, StringComparison.Ordinal)
+                    ? result.AdvocateBResult
+                    : null;
+
+            return preferred?.Scores.Single(s => s.Rank == 1).OptionId ?? string.Empty;
         }
 
         private void RestoreOptionalOutputs(AiCtx ctx)
@@ -1186,7 +1206,12 @@ public static class Llm
 
         writer.WriteStartObject();
         writer.WriteString("requestHash", result.RequestHash);
-        writer.WriteString("outcome", result.Outcome == LlmDecisionOutcome.Refused ? "refused" : "chosen");
+        var overrideRefusalWithChoice = result.Outcome == LlmDecisionOutcome.Refused && !string.IsNullOrWhiteSpace(approvedOptionId);
+        writer.WriteString("outcome", result.Outcome == LlmDecisionOutcome.Refused && !overrideRefusalWithChoice ? "refused" : "chosen");
+        if (result.Outcome == LlmDecisionOutcome.Refused && overrideRefusalWithChoice)
+        {
+            writer.WriteString("modelOutcome", "refused");
+        }
         if (result.Outcome == LlmDecisionOutcome.Refused && string.IsNullOrWhiteSpace(approvedOptionId))
         {
             writer.WriteNull("chosenOptionId");
@@ -1224,7 +1249,7 @@ public static class Llm
 
         if (result.Refusal is not null)
         {
-            writer.WritePropertyName("refusal");
+            writer.WritePropertyName(overrideRefusalWithChoice ? "modelRefusal" : "refusal");
             writer.WriteStartObject();
             writer.WriteString("reason", result.Refusal.Reason);
             if (!string.IsNullOrWhiteSpace(result.Refusal.ProposedAlternative))
@@ -1241,6 +1266,7 @@ public static class Llm
             writer.WriteBoolean("required", true);
             writer.WriteString("outcome", approval.Value.Outcome);
             writer.WriteString("proposedOptionId", approval.Value.ProposedOptionId);
+            writer.WriteString("proposedOutcome", approval.Value.ProposedOutcome);
             writer.WriteString("approvedOptionId", approval.Value.ApprovedOptionId);
             writer.WriteString("rationale", approval.Value.Rationale);
             if (!string.IsNullOrWhiteSpace(approval.Value.ApprovedBy))
