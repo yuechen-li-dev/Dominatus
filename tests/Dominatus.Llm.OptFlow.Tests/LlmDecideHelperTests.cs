@@ -461,6 +461,86 @@ public sealed class LlmDecideHelperTests
         Assert.Equal("cannot comply", ctx.Bb.GetOrDefault(refusalKey, ""));
     }
 
+    [Fact]
+    public void LlmDecide_RefusedReplay_WithApproval_StillDispatchesApprovalForFirstCommit()
+    {
+        var request = BuildRequest();
+        var hash = LlmDecisionRequestHasher.ComputeHash(request);
+        var cassette = new InMemoryLlmDecisionCassette();
+        cassette.Put(hash, request, RefusedResult(request, "cannot comply"));
+        var client = new FakeLlmDecisionClient(CreateResult(hash));
+        var approval = new LocalApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "accept refusal"));
+        var host = new ActuatorHost();
+        host.Register(new LlmDecisionScoringHandler(client, cassette, LlmCassetteMode.Strict));
+        host.Register<LlmDecisionApprovalCommand>(approval);
+        var world = new AiWorld(host);
+        var graph = new HfsmGraph { Root = "Root" };
+        graph.Add(new HfsmStateDef { Id = "Root", Node = RootNode });
+        var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
+        world.Add(agent);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,approval: new LlmDecisionApprovalPolicy(),refusal: new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: new BbKey<string>("decision.refusalReason")));
+
+        ExecuteStep(step, ctx);
+        Assert.Equal(0, client.CallCount);
+        Assert.Single(approval.Commands);
+        ExecuteStep(step, ctx);
+        Assert.Equal(0, client.CallCount);
+        Assert.Single(approval.Commands);
+    }
+
+    [Fact]
+    public void LlmDecide_Refused_WithTooLongReason_Fails()
+    {
+        var refusalKey = new BbKey<string>("decision.refusalReason");
+        var reason = new string('x', 11);
+        var client = new FakeLlmDecisionClient(RefusedResult(BuildRequest(), reason));
+        var (_, ctx) = CreateWorldAndCtx(client, LlmCassetteMode.Live);
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,refusal: new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey, MaxReasonChars: 10));
+
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(step, ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+        Assert.False(ctx.Bb.TryGet(refusalKey, out _));
+    }
+
+    [Fact]
+    public void LlmDecide_Refused_WithTooLongProposal_Fails()
+    {
+        var proposalKey = new BbKey<string>("decision.proposal");
+        var proposal = new string('p', 11);
+        var client = new FakeLlmDecisionClient(RefusedResult(BuildRequest(), "cannot comply", proposal));
+        var (_, ctx) = CreateWorldAndCtx(client, LlmCassetteMode.Live);
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,refusal: new LlmDecisionRefusalPolicy(StoreProposedAlternativeAs: proposalKey, MaxProposedAlternativeChars: 10, AllowProposedAlternative: true));
+
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(step, ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+        Assert.False(ctx.Bb.TryGet(proposalKey, out _));
+    }
+
+    [Fact]
+    public void LlmDecide_Refused_ResultJsonShape_IsDeterministicAndContainsExpectedFields()
+    {
+        var client = new FakeLlmDecisionClient(RefusedResult(BuildRequest(), "cannot comply"));
+        var (_, ctx) = CreateWorldAndCtx(client, LlmCassetteMode.Live);
+        var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,refusal: new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: new BbKey<string>("decision.refusalReason")));
+        ExecuteStep(step, ctx);
+
+        var json = ctx.Bb.GetOrDefault(ResultJsonKey, "");
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        Assert.Equal("refused", root.GetProperty("outcome").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("chosenOptionId").ValueKind);
+        Assert.Equal("cannot comply", root.GetProperty("refusal").GetProperty("reason").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("requestHash").GetString()));
+        Assert.Equal("negotiate", root.GetProperty("modelRankOneOptionId").GetString());
+        var scores = root.GetProperty("scores").EnumerateArray().Select(s => s.GetProperty("optionId").GetString()).ToArray();
+        Assert.Equal(["attack", "negotiate", "threaten"], scores);
+    }
+
     private static LlmDecisionResult RefusedResult(LlmDecisionRequest request, string reason, string? proposedAlternative = null)
     {
         var hash = LlmDecisionRequestHasher.ComputeHash(request);
@@ -570,5 +650,15 @@ public sealed class LlmDecideHelperTests
     private static IEnumerator<AiStep> RootNode(AiCtx _)
     {
         yield break;
+    }
+
+    private sealed class LocalApprovalHandler(LlmDecisionApprovalResult result) : IActuationHandler<LlmDecisionApprovalCommand>
+    {
+        public List<LlmDecisionApprovalCommand> Commands { get; } = [];
+        public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, LlmDecisionApprovalCommand command)
+        {
+            Commands.Add(command);
+            return ActuatorHost.HandlerResult.CompletedWithPayload(result);
+        }
     }
 }
