@@ -232,7 +232,9 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
             Judge: ParseParticipant(resultDto.Judge, path, "result.judge"),
             AdvocateAResult: advocateAResult,
             AdvocateBResult: advocateBResult,
-            Judgment: ParseJudgment(resultDto.Judgment, path));
+            Judgment: ParseJudgment(resultDto.Judgment, path),
+            Outcome: ParseOutcome(resultDto.Outcome),
+            Refusal: ParseRefusal(resultDto.Refusal));
     }
 
     private static LlmDecisionResult ParseDecisionResult(LlmDecisionResultDto? decisionResultDto, string path, string propertyName)
@@ -264,11 +266,31 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
             throw new InvalidOperationException($"Magi cassette {path}.result.judgment is required.");
         }
 
+        var outcome = ParseOutcome(judgmentDto.Outcome);
+        if (outcome == LlmDecisionOutcome.Chosen && string.IsNullOrWhiteSpace(judgmentDto.ChosenOptionId))
+        {
+            throw new InvalidOperationException($"Magi cassette {path}.result.judgment.chosenOptionId is required.");
+        }
+
         return new LlmMagiJudgment(
-            ChosenOptionId: judgmentDto.ChosenOptionId ?? throw new InvalidOperationException($"Magi cassette {path}.result.judgment.chosenOptionId is required."),
+            ChosenOptionId: judgmentDto.ChosenOptionId,
             PreferredProposalId: judgmentDto.PreferredProposalId ?? throw new InvalidOperationException($"Magi cassette {path}.result.judgment.preferredProposalId is required."),
-            Rationale: judgmentDto.Rationale ?? throw new InvalidOperationException($"Magi cassette {path}.result.judgment.rationale is required."));
+            Rationale: judgmentDto.Rationale ?? throw new InvalidOperationException($"Magi cassette {path}.result.judgment.rationale is required."),
+            Outcome: outcome,
+            Refusal: ParseRefusal(judgmentDto.Refusal));
     }
+
+    private static LlmDecisionOutcome ParseOutcome(string? outcome)
+        => outcome is null
+            ? LlmDecisionOutcome.Chosen
+            : Enum.TryParse<LlmDecisionOutcome>(outcome, ignoreCase: true, out var parsed)
+                ? parsed
+                : throw new InvalidOperationException($"Unsupported magi decision outcome '{outcome}'.");
+
+    private static LlmDecisionRefusal? ParseRefusal(LlmDecisionRefusalDto? refusal)
+        => refusal is null ? null : new LlmDecisionRefusal(
+            refusal.Reason ?? throw new InvalidOperationException("Magi cassette refusal.reason is required when refusal is present."),
+            refusal.ProposedAlternative);
 
     private static CassetteEntry ValidateEntry(CassetteEntry entry, string path)
     {
@@ -387,7 +409,11 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
                 ChosenOptionId = result.Judgment.ChosenOptionId,
                 PreferredProposalId = result.Judgment.PreferredProposalId,
                 Rationale = result.Judgment.Rationale,
-            }
+                Outcome = result.Judgment.Outcome.ToString().ToLowerInvariant(),
+                Refusal = result.Judgment.Refusal is null ? null : new LlmDecisionRefusalDto { Reason = result.Judgment.Refusal.Reason, ProposedAlternative = result.Judgment.Refusal.ProposedAlternative },
+            },
+            Outcome = result.Outcome.ToString().ToLowerInvariant(),
+            Refusal = result.Refusal is null ? null : new LlmDecisionRefusalDto { Reason = result.Refusal.Reason, ProposedAlternative = result.Refusal.ProposedAlternative }
         };
 
     private static LlmDecisionResultDto ToDto(LlmDecisionResult result)
@@ -495,6 +521,10 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
         public LlmDecisionResultDto? AdvocateBResult { get; set; }
 
         public LlmMagiJudgmentDto? Judgment { get; set; }
+
+        public string? Outcome { get; set; }
+
+        public LlmDecisionRefusalDto? Refusal { get; set; }
     }
 
     private sealed class LlmDecisionResultDto
@@ -524,5 +554,16 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
         public string? PreferredProposalId { get; set; }
 
         public string? Rationale { get; set; }
+
+        public string? Outcome { get; set; }
+
+        public LlmDecisionRefusalDto? Refusal { get; set; }
+    }
+
+    private sealed class LlmDecisionRefusalDto
+    {
+        public string? Reason { get; set; }
+
+        public string? ProposedAlternative { get; set; }
     }
 }

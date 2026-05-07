@@ -103,6 +103,25 @@ public sealed class LlmMagiRefusalApprovalTests
         AssertNoStores(ctx);
     }
 
+
+    [Fact]
+    public void MagiDecide_RefusedReplay_WithApproval_StillDispatchesApprovalForFirstCommit()
+    {
+        var (a, b, j, approval, ctx) = Setup(new(LlmDecisionApprovalOutcome.Approved, Rationale: "accept refusal"));
+
+        Execute(Step(), ctx);
+        Assert.Single(approval.Commands);
+        Assert.Equal(0, a.CallCount);
+        Assert.Equal(0, b.CallCount);
+        Assert.Equal(0, j.CallCount);
+
+        Execute(Step(), ctx);
+        Assert.Single(approval.Commands);
+        Assert.Equal(0, a.CallCount);
+        Assert.Equal(0, b.CallCount);
+        Assert.Equal(0, j.CallCount);
+    }
+
     [Fact]
     public void MagiDecide_Approval_ApprovedRefusal_ReentryDoesNotRedispatchMagiOrApproval()
     {
