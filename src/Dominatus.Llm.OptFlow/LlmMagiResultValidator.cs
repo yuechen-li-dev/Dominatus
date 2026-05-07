@@ -9,7 +9,8 @@ public static class LlmMagiResultValidator
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(judgment);
 
-        if (!request.Options.Any(o => string.Equals(o.Id, judgment.ChosenOptionId, StringComparison.Ordinal)))
+        if (judgment.Outcome == LlmDecisionOutcome.Chosen
+            && !request.Options.Any(o => string.Equals(o.Id, judgment.ChosenOptionId, StringComparison.Ordinal)))
         {
             throw new InvalidOperationException($"Magi judgment chose unknown option ID '{judgment.ChosenOptionId}'.");
         }
@@ -50,6 +51,38 @@ public static class LlmMagiResultValidator
         LlmDecisionResultValidator.ValidateAgainstRequest(advocateBRequest, advocateBHash, result.AdvocateBResult);
 
         ValidateJudgmentAgainstRequest(request, result.Judgment);
+
+        if (result.Outcome == LlmDecisionOutcome.Refused)
+        {
+            if (result.Refusal is null || string.IsNullOrWhiteSpace(result.Refusal.Reason))
+            {
+                throw new InvalidOperationException("Magi refusal requires a non-empty reason.");
+            }
+
+            if (result.Refusal.Reason.Length > request.MaxRefusalReasonChars)
+            {
+                throw new InvalidOperationException($"Magi refusal reason length exceeds max {request.MaxRefusalReasonChars}.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.Judgment.ChosenOptionId))
+            {
+                throw new InvalidOperationException("Magi refused outcome cannot include judgment chosen option.");
+            }
+
+            if (!request.AllowProposedAlternative && !string.IsNullOrWhiteSpace(result.Refusal.ProposedAlternative))
+            {
+                throw new InvalidOperationException("Magi refusal proposed alternative is not allowed by request.");
+            }
+
+            if (result.Refusal.ProposedAlternative?.Length > request.MaxProposedAlternativeChars)
+            {
+                throw new InvalidOperationException($"Magi refusal proposed alternative length exceeds max {request.MaxProposedAlternativeChars}.");
+            }
+        }
+        else if (result.Refusal is not null)
+        {
+            throw new InvalidOperationException("Magi chosen outcome cannot include refusal payload.");
+        }
     }
 
     public static LlmDecisionRequest BuildAdvocateRequest(LlmMagiRequest request, LlmMagiParticipant participant)

@@ -317,7 +317,8 @@ public static class Llm
         BbKey<string> storeChosenAs,
         BbKey<string>? storeRationaleAs = null,
         BbKey<string>? storeResultJsonAs = null,
-        LlmMagiApprovalPolicy? approval = null)
+        LlmMagiApprovalPolicy? approval = null,
+        LlmMagiRefusalPolicy? refusal = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(intent);
@@ -387,10 +388,13 @@ public static class Llm
             AdvocateA: advocateA,
             AdvocateB: advocateB,
             Judge: judge,
+            AllowProposedAlternative: (refusal ?? LlmMagiRefusalPolicy.Default).AllowProposedAlternative,
+            MaxRefusalReasonChars: (refusal ?? LlmMagiRefusalPolicy.Default).MaxReasonChars,
+            MaxProposedAlternativeChars: (refusal ?? LlmMagiRefusalPolicy.Default).MaxProposedAlternativeChars,
             PromptTemplateVersion: LlmMagiRequest.DefaultPromptTemplateVersion,
             OutputContractVersion: LlmMagiRequest.DefaultOutputContractVersion);
 
-        return new LlmMagiDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, approval);
+        return new LlmMagiDecisionStep(request, storeChosenAs, storeRationaleAs, storeResultJsonAs, approval, refusal ?? LlmMagiRefusalPolicy.Default);
     }
 
     private sealed record LlmTextStep(LlmTextRequest Request, BbKey<string> StoreAs) : AiStep, IWaitEvent
@@ -454,21 +458,28 @@ public static class Llm
         BbKey<string> StoreChosenAs,
         BbKey<string>? StoreRationaleAs,
         BbKey<string>? StoreResultJsonAs,
-        LlmMagiApprovalPolicy? Approval) : AiStep, IWaitEvent
+        LlmMagiApprovalPolicy? Approval,
+        LlmMagiRefusalPolicy RefusalPolicy) : AiStep, IWaitEvent
     {
         private readonly BbKey<bool> _completedKey = new(BuildMagiKey(Request.StableId, "completed"));
         private readonly BbKey<string> _chosenOptionKey = new(BuildMagiKey(Request.StableId, "chosenOptionId"));
         private readonly BbKey<string> _rationaleKey = new(BuildMagiKey(Request.StableId, "rationale"));
         private readonly BbKey<string> _resultJsonKey = new(BuildMagiKey(Request.StableId, "resultJson"));
+        private readonly BbKey<string> _outcomeKey = new(BuildMagiKey(Request.StableId, "outcome"));
+        private readonly BbKey<string> _refusalReasonKey = new(BuildMagiKey(Request.StableId, "refusalReason"));
+        private readonly BbKey<string> _proposedAlternativeKey = new(BuildMagiKey(Request.StableId, "proposedAlternative"));
         private readonly BbKey<string> _requestHashKey = new(BuildMagiKey(Request.StableId, "requestHash"));
         private readonly BbKey<long> _pendingActuationIdKey = new(BuildMagiKey(Request.StableId, "pendingActuationId"));
         private readonly BbKey<long> _pendingApprovalActuationIdKey = new(BuildMagiKey(Request.StableId, "pendingApprovalActuationId"));
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
-            if (ctx.Bb.GetOrDefault(_completedKey, false) && ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
+            if (ctx.Bb.GetOrDefault(_completedKey, false))
             {
-                ctx.Bb.Set(StoreChosenAs, cachedChosen ?? string.Empty);
+                if (ctx.Bb.TryGet(_chosenOptionKey, out string? cachedChosen))
+                {
+                    ctx.Bb.Set(StoreChosenAs, cachedChosen ?? string.Empty);
+                }
                 RestoreOptionalOutputs(ctx);
                 return true;
             }
@@ -507,7 +518,7 @@ public static class Llm
                 $"Llm.MagiDecide completion failed for stableId '{Request.StableId}'. Missing magi decision payload.");
 
             LlmMagiResultValidator.ValidateDecisionResultAgainstRequest(Request, result.RequestHash, result);
-            var proposedChoice = result.Judgment.ChosenOptionId;
+            var proposedChoice = result.Judgment.ChosenOptionId ?? string.Empty;
             var proposedRationale = result.Judgment.Rationale;
             var proposedResultJson = BuildMagiSummaryJson(result);
 
@@ -530,12 +541,34 @@ public static class Llm
 
             var resultJson = BuildMagiSummaryJson(result, chosenOptionId, committedRationale, approvalMetadata);
 
-            ctx.Bb.Set(_chosenOptionKey, chosenOptionId);
-            ctx.Bb.Set(StoreChosenAs, chosenOptionId);
-            ctx.Bb.Set(_rationaleKey, committedRationale);
-            if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
+            var isRefused = result.Outcome == LlmDecisionOutcome.Refused;
+            if (!isRefused)
             {
-                ctx.Bb.Set(rationaleStoreAs, committedRationale);
+                ctx.Bb.Set(_chosenOptionKey, chosenOptionId);
+                ctx.Bb.Set(StoreChosenAs, chosenOptionId);
+                ctx.Bb.Set(_rationaleKey, committedRationale);
+                if (StoreRationaleAs is BbKey<string> rationaleStoreAs)
+                {
+                    ctx.Bb.Set(rationaleStoreAs, committedRationale);
+                }
+            }
+            else
+            {
+                if (StoreResultJsonAs is null && RefusalPolicy.StoreRefusalReasonAs is null)
+                {
+                    throw new InvalidOperationException($"Llm.MagiDecide refusal is unobservable for stableId '{Request.StableId}'. Configure storeResultJsonAs or refusal.StoreRefusalReasonAs.");
+                }
+                ctx.Bb.Set(_outcomeKey, "refused");
+                var refusal = result.Refusal!;
+                ctx.Bb.Set(_refusalReasonKey, refusal.Reason);
+                if (RefusalPolicy.StoreRefusalReasonAs is BbKey<string> refusalStoreAs)
+                    ctx.Bb.Set(refusalStoreAs, refusal.Reason);
+                if (!string.IsNullOrWhiteSpace(refusal.ProposedAlternative))
+                {
+                    ctx.Bb.Set(_proposedAlternativeKey, refusal.ProposedAlternative);
+                    if (RefusalPolicy.StoreProposedAlternativeAs is BbKey<string> altStoreAs)
+                        ctx.Bb.Set(altStoreAs, refusal.ProposedAlternative);
+                }
             }
 
             ctx.Bb.Set(_resultJsonKey, resultJson);
@@ -571,8 +604,11 @@ public static class Llm
                     Request.AdvocateA,
                     Request.AdvocateB,
                     Request.Judge,
+                    result.Outcome,
                     proposedChoice,
                     proposedRationale,
+                    result.Refusal?.Reason,
+                    result.Refusal?.ProposedAlternative,
                     proposedResultJson);
                 var dispatch = ctx.Act.Dispatch(ctx, command);
                 if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))

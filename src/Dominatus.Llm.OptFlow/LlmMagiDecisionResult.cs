@@ -9,6 +9,8 @@ public sealed record LlmMagiDecisionResult
     public LlmDecisionResult AdvocateAResult { get; }
     public LlmDecisionResult AdvocateBResult { get; }
     public LlmMagiJudgment Judgment { get; }
+    public LlmDecisionOutcome Outcome { get; }
+    public LlmDecisionRefusal? Refusal { get; }
 
     public LlmMagiDecisionResult(
         string RequestHash,
@@ -17,7 +19,9 @@ public sealed record LlmMagiDecisionResult
         LlmMagiParticipant Judge,
         LlmDecisionResult AdvocateAResult,
         LlmDecisionResult AdvocateBResult,
-        LlmMagiJudgment Judgment)
+        LlmMagiJudgment Judgment,
+        LlmDecisionOutcome Outcome = LlmDecisionOutcome.Chosen,
+        LlmDecisionRefusal? Refusal = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(RequestHash);
         ArgumentNullException.ThrowIfNull(AdvocateA);
@@ -34,5 +38,7 @@ public sealed record LlmMagiDecisionResult
         this.AdvocateAResult = AdvocateAResult;
         this.AdvocateBResult = AdvocateBResult;
         this.Judgment = Judgment;
+        this.Outcome = Outcome;
+        this.Refusal = Refusal;
     }
 }

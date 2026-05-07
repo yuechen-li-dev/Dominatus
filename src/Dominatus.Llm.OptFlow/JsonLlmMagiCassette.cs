@@ -185,6 +185,9 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
             AdvocateA: ParseParticipant(requestDto.AdvocateA, path, "advocateA"),
             AdvocateB: ParseParticipant(requestDto.AdvocateB, path, "advocateB"),
             Judge: ParseParticipant(requestDto.Judge, path, "judge"),
+            AllowProposedAlternative: requestDto.AllowProposedAlternative ?? false,
+            MaxRefusalReasonChars: requestDto.MaxRefusalReasonChars ?? 500,
+            MaxProposedAlternativeChars: requestDto.MaxProposedAlternativeChars ?? 700,
             PromptTemplateVersion: requestDto.PromptTemplateVersion ?? throw new InvalidOperationException($"Magi cassette {path}.request.promptTemplateVersion is required."),
             OutputContractVersion: requestDto.OutputContractVersion ?? throw new InvalidOperationException($"Magi cassette {path}.request.outputContractVersion is required."));
     }
@@ -348,6 +351,9 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
             AdvocateA = ToDto(request.AdvocateA),
             AdvocateB = ToDto(request.AdvocateB),
             Judge = ToDto(request.Judge),
+            AllowProposedAlternative = request.AllowProposedAlternative,
+            MaxRefusalReasonChars = request.MaxRefusalReasonChars,
+            MaxProposedAlternativeChars = request.MaxProposedAlternativeChars,
             PromptTemplateVersion = request.PromptTemplateVersion,
             OutputContractVersion = request.OutputContractVersion,
         };
@@ -436,6 +442,9 @@ public sealed class JsonLlmMagiCassette : ILlmMagiCassette
         public LlmMagiParticipantDto? AdvocateB { get; set; }
 
         public LlmMagiParticipantDto? Judge { get; set; }
+        public bool? AllowProposedAlternative { get; set; }
+        public int? MaxRefusalReasonChars { get; set; }
+        public int? MaxProposedAlternativeChars { get; set; }
 
         public string? PromptTemplateVersion { get; set; }
 

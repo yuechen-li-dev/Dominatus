@@ -42,6 +42,9 @@ public static class LlmMagiRequestHasher
         WriteParticipant(writer, "advocateA", request.AdvocateA);
         WriteParticipant(writer, "advocateB", request.AdvocateB);
         WriteParticipant(writer, "judge", request.Judge);
+        writer.WriteBoolean("allowProposedAlternative", request.AllowProposedAlternative);
+        writer.WriteNumber("maxRefusalReasonChars", request.MaxRefusalReasonChars);
+        writer.WriteNumber("maxProposedAlternativeChars", request.MaxProposedAlternativeChars);
 
         writer.WriteString("promptTemplateVersion", request.PromptTemplateVersion);
         writer.WriteString("outputContractVersion", request.OutputContractVersion);

@@ -535,6 +535,9 @@ public sealed class JsonLlmMagiCassetteTests
             AdvocateA: Llm.MagiParticipant("strategist", "openai", "gpt-5.5-thinking", "Argue strategic utility."),
             AdvocateB: Llm.MagiParticipant("character", "anthropic", "claude-sonnet-4.7", "Argue character fidelity."),
             Judge: Llm.MagiParticipant("judge", "gemini", "gemini-3-thinking", "Choose the better proposal."),
+            AllowProposedAlternative: false,
+            MaxRefusalReasonChars: 500,
+            MaxProposedAlternativeChars: 700,
             PromptTemplateVersion: LlmMagiRequest.DefaultPromptTemplateVersion,
             OutputContractVersion: LlmMagiRequest.DefaultOutputContractVersion);
 
