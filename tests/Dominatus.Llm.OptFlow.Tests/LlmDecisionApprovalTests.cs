@@ -93,6 +93,104 @@ public sealed class LlmDecisionApprovalTests
         Assert.Equal("a", cmd.ProposedOptionId);
     }
 
+    [Fact]
+    public void LlmDecide_Approval_ApprovedRefusal_CommitsRefusalNoChosen()
+    {
+        var refusalKey = new BbKey<string>("decision.refusal");
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "human accepted refusal"));
+        var (_, ctx) = CreateWorldAndCtx(client, approval);
+        var step = CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey, AllowProposedAlternative: true));
+
+        ExecuteStep(step, ctx);
+
+        Assert.Equal("unsafe prompt", ctx.Bb.GetOrDefault(refusalKey, ""));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(string.IsNullOrWhiteSpace(ctx.Bb.GetOrDefault(ResultJsonKey, "")));
+    }
+
+    [Fact]
+    public void LlmDecide_Approval_ApprovedRefusal_ResultJsonIncludesModelRefusalAndHumanRationale()
+    {
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Approved, Rationale: "approved by reviewer", ApprovedBy: "reviewer-2"));
+        var (_, ctx) = CreateWorldAndCtx(client, approval);
+        ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(AllowProposedAlternative: true)), ctx);
+
+        using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(ResultJsonKey, ""));
+        var root = doc.RootElement;
+        Assert.Equal("refused", root.GetProperty("outcome").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("chosenOptionId").ValueKind);
+        Assert.Equal("unsafe prompt", root.GetProperty("refusal").GetProperty("reason").GetString());
+        Assert.True(root.GetProperty("approval").GetProperty("required").GetBoolean());
+        Assert.Equal("approved", root.GetProperty("approval").GetProperty("outcome").GetString());
+        Assert.Equal("refused", root.GetProperty("approval").GetProperty("proposedOutcome").GetString());
+        Assert.Equal("approved by reviewer", root.GetProperty("approval").GetProperty("rationale").GetString());
+        Assert.Equal("reviewer-2", root.GetProperty("approval").GetProperty("approvedBy").GetString());
+    }
+
+    [Fact]
+    public void LlmDecide_Approval_ChangedFromRefusal_CommitsHumanClosedOption()
+    {
+        var refusalKey = new BbKey<string>("decision.refusal");
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Changed, "b", "human override"));
+        var (_, ctx) = CreateWorldAndCtx(client, approval);
+        ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey, AllowProposedAlternative: true)), ctx);
+
+        Assert.Equal("b", ctx.Bb.GetOrDefault(ChosenKey, ""));
+        Assert.Equal("human override", ctx.Bb.GetOrDefault(RationaleKey, ""));
+        Assert.False(ctx.Bb.TryGet(refusalKey, out _));
+        using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(ResultJsonKey, ""));
+        Assert.Equal("refused", doc.RootElement.GetProperty("approval").GetProperty("proposedOutcome").GetString());
+        Assert.Equal("changed", doc.RootElement.GetProperty("approval").GetProperty("outcome").GetString());
+    }
+
+    [Fact]
+    public void LlmDecide_Approval_ChangedFromRefusal_RequiresHumanRationale()
+    {
+        var refusalKey = new BbKey<string>("decision.refusal");
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Changed, "b", " "));
+        var (_, ctx) = CreateWorldAndCtx(client, approval);
+
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey, AllowProposedAlternative: true)), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+        Assert.False(ctx.Bb.TryGet(refusalKey, out _));
+    }
+
+    [Fact]
+    public void LlmDecide_Approval_OverrideRefusalIncludesApprovedBy_WhenProvided()
+    {
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Changed, "b", "human override", "user-9"));
+        var (_, ctx) = CreateWorldAndCtx(client, approval);
+        ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(AllowProposedAlternative: true)), ctx);
+
+        using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(ResultJsonKey, ""));
+        Assert.Equal("user-9", doc.RootElement.GetProperty("approval").GetProperty("approvedBy").GetString());
+    }
+
+    [Fact]
+    public void LlmDecide_Approval_RejectedRefusal_StoresNoOutputs()
+    {
+        var refusalKey = new BbKey<string>("decision.refusal");
+        var proposalKey = new BbKey<string>("decision.proposal");
+        var client = new FakeLlmDecisionClient(CreateRefusedResult());
+        var approval = new FakeApprovalHandler(new LlmDecisionApprovalResult(LlmDecisionApprovalOutcome.Rejected, Rationale: "reject refusal"));
+        var (_, ctx) = CreateWorldAndCtx(client, approval);
+
+        Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(new LlmDecisionApprovalPolicy(), new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: refusalKey, StoreProposedAlternativeAs: proposalKey, AllowProposedAlternative: true)), ctx));
+        Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        Assert.False(ctx.Bb.TryGet(RationaleKey, out _));
+        Assert.False(ctx.Bb.TryGet(ResultJsonKey, out _));
+        Assert.False(ctx.Bb.TryGet(refusalKey, out _));
+        Assert.False(ctx.Bb.TryGet(proposalKey, out _));
+    }
+
     private static AiStep CreateStep(LlmDecisionApprovalPolicy? approval = null, LlmDecisionRefusalPolicy? refusal = null) => Llm.Decide(
         "approval",
         "intent",
