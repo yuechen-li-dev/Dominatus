@@ -73,8 +73,7 @@ public static class AriadneThreadOfNight
     {
         yield return Ai.Goto(States.Intro);
 
-        while (true)
-            yield return Ai.Wait(999f);
+        yield return Ai.Steady("Root parked after handoff");
     }
 
     public static IEnumerator<AiStep> Intro(AiCtx ctx)

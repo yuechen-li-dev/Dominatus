@@ -12,6 +12,8 @@ public static class Ai
 
     public static WaitUntil Until(Func<AiCtx, bool> pred) => new(pred);
 
+    public static Steady Steady(string? reason = null) => new(reason);
+
     public static Goto Goto(StateId target, string? reason = null) => new(target, reason);
 
     public static Push Push(StateId target, string? reason = null) => new(target, reason);

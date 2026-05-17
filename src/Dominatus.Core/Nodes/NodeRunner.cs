@@ -28,6 +28,7 @@ public sealed class NodeRunner(AiNode node)
     private float _waitStartTime;
     private WaitSeconds? _waitSeconds;
     private WaitUntil? _waitUntil;
+    private Steady? _steady;
 
     private CancellationTokenSource? _cts;
     private IWaitEvent? _waitEvent;
@@ -63,6 +64,7 @@ public sealed class NodeRunner(AiNode node)
 
         _waitSeconds = null;
         _waitUntil = null;
+        _steady = null;
         _waitEvent = null;
         _waitEventCursor = default;
         _waitEventStartTime = 0;
@@ -87,6 +89,9 @@ public sealed class NodeRunner(AiNode node)
 
         while (true)
         {
+            if (_steady is not null)
+                return NodeTickResult.Running();
+
             // Handle waits
             if (_waitSeconds is not null)
             {
@@ -174,6 +179,10 @@ public sealed class NodeRunner(AiNode node)
 
                 case WaitUntil wu:
                     _waitUntil = wu;
+                    return NodeTickResult.Running();
+
+                case Steady steady:
+                    _steady = steady;
                     return NodeTickResult.Running();
 
                 // Control / completion signals are emitted upward to HFSM

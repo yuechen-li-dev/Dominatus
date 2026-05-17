@@ -8,6 +8,8 @@ public sealed record WaitSeconds(float Seconds) : AiStep;
 
 public sealed record WaitUntil(Func<AiCtx, bool> Predicate) : AiStep;
 
+public sealed record Steady(string? Reason = null) : AiStep;
+
 public sealed record Goto(StateId Target, string? Reason = null) : AiStep;
 
 public sealed record Push(StateId Target, string? Reason = null) : AiStep;

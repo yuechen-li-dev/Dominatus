@@ -163,12 +163,19 @@ public static IEnumerator<AiStep> Root(AiCtx ctx)
     yield return Ai.Goto("Intro");
 
     // KeepRootFrame roots should remain alive after their initial handoff.
-    while (true)
-        yield return Ai.Wait(999f);
+    yield return Ai.Steady("Root parked after handoff");
 }
 ```
 
-That last pattern is especially important when `HfsmOptions.KeepRootFrame = true`: the root should route once into the real behavior and then remain inert rather than repeatedly restarting it.
+That last pattern is especially important when `HfsmOptions.KeepRootFrame = true`: the root should route once into the real behavior and then yield `Ai.Steady(...)` to remain parked without advancing.
+
+### `Ai.Steady(...)` for parked states
+
+Use `Ai.Steady(...)` when a state should remain alive without advancing its iterator.
+
+* Use `Ai.Wait(...)` when you actually want simulation time to pass and then resume the same node.
+* Use `Ai.Event<T>(...)` when waiting for an event to arrive.
+* Do **not** use `while (true) yield return Ai.Wait(999f);` as a parking spell.
 
 ### Under the hood
 
