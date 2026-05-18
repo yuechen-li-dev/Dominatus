@@ -14,6 +14,7 @@
 ## Pack commands
 
 ```bash
+rm -rf artifacts/nuget-release
 mkdir -p artifacts/nuget-release
 
 dotnet pack src/Dominatus.Core/Dominatus.Core.csproj -c Release -o artifacts/nuget-release

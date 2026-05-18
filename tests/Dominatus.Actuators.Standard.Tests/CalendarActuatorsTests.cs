@@ -161,7 +161,7 @@ public sealed class CalendarActuatorsTests
         h.Handle(null!, default, default, new AppendCalendarEventCommand("workspace", "cal.ics", NewEvent(uid: "b@d")));
         var txt = File.ReadAllText(Path.Combine(d.Path, "cal.ics"));
         Assert.Equal(2, txt.Split("BEGIN:VEVENT").Length - 1);
-        Assert.True(txt.TrimEnd().EndsWith("END:VCALENDAR", StringComparison.Ordinal));
+        Assert.EndsWith("END:VCALENDAR", txt.TrimEnd());
     }
 
     [Fact]
