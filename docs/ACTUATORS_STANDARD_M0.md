@@ -112,3 +112,6 @@ yield return Ai.Await(LastWriteId, LastWriteResult);
 - Email/Telegram/MCP integrations.
 - Secret management.
 - Background scheduling/reminder systems.
+
+
+- [M3 Local calendar (.ics)](./ACTUATORS_STANDARD_M3_CALENDAR.md)
