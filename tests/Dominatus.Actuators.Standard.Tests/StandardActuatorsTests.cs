@@ -349,6 +349,15 @@ public sealed class StandardActuatorsTests
         Assert.DoesNotContain("RestSharp", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Flurl", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Microsoft.Extensions.Http", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Google", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Outlook", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CalDAV", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Ical.Net", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("NodaTime", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Quartz", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Hangfire", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Cron", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("OAuth", text, StringComparison.OrdinalIgnoreCase);
     }
 
     private static SandboxedFileResolver NewResolver(string rootPath)
