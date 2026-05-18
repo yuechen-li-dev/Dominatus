@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Server</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Yuechen Li</Authors>
     <Description>ASP.NET Core server integration for Dominatus. Provides read-only inspection endpoints over AiWorld state, agents, blackboards, public snapshots, and active HFSM paths so web UIs can be built on top.</Description>
     <PackageTags>ai;agent;server;aspnetcore;minimal-api;inspection;dominatus</PackageTags>

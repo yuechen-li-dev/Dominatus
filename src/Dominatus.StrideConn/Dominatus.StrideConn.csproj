@@ -7,7 +7,7 @@
     <IsPackable>true</IsPackable>
 
     <PackageId>Dominatus.StrideConn</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0-preview</Version>
     <Authors>Yuechen Li</Authors>
     <Description>Stride connector for Dominatus. Provides a Stride GameSystem bridge, entity registry, and basic transform actuators so Dominatus.Core agents can drive Stride entities.</Description>
     <PackageTags>ai;agent;hfsm;utility;stride;gamedev;simulation</PackageTags>
