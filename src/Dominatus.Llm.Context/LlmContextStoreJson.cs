@@ -19,7 +19,8 @@ public static class LlmContextStoreJson
             Title = store.Title,
             CreatedUtc = store.CreatedUtc,
             UpdatedUtc = store.UpdatedUtc,
-            Chunks = store.Chunks
+            Chunks = store.Chunks,
+            Loadouts = store.Loadouts
         };
 
         return JsonSerializer.Serialize(dto, LlmContextJsonContext.Default.LlmContextStoreDto);
@@ -45,6 +46,10 @@ public static class LlmContextStoreJson
         {
             store.Upsert(chunk);
         }
+        foreach (var loadout in dto.Loadouts ?? [])
+        {
+            store.UpsertLoadout(loadout);
+        }
 
         return store;
     }
@@ -65,6 +70,7 @@ public sealed record LlmContextStoreDto
     public DateTimeOffset CreatedUtc { get; init; }
     public DateTimeOffset UpdatedUtc { get; init; }
     public IReadOnlyList<LlmContextChunk> Chunks { get; init; } = [];
+    public IReadOnlyList<LlmContextLoadout> Loadouts { get; init; } = [];
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]

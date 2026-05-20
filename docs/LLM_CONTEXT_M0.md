@@ -13,3 +13,6 @@ Binary chunked `.context` is future work.
 ```json
 {"format":"dominatus.llm.context.store","version":1,"id":"PROJECT.dominatus","title":"Dominatus Project Context","createdUtc":"2026-01-01T00:00:00+00:00","updatedUtc":"2026-01-01T00:00:00+00:00","chunks":[]}
 ```
+
+
+See also: `docs/LLM_CONTEXT_M1_LOADOUTS.md` for named loadouts (M1).

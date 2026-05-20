@@ -28,6 +28,30 @@ public sealed record LlmContextQuery
     public bool IncludeExpired { get; init; }
 }
 
+public sealed record LlmContextLoadout
+{
+    public required string Id { get; init; }
+    public required string Title { get; init; }
+    public string? Description { get; init; }
+    public IReadOnlyList<string> IncludeKinds { get; init; } = [];
+    public IReadOnlyList<string> RequiredChunkIds { get; init; } = [];
+    public IReadOnlyList<string> IncludeTags { get; init; } = [];
+    public IReadOnlyList<string> ExcludeTags { get; init; } = [];
+    public int MaxChars { get; init; } = 16_000;
+    public bool IncludeExpired { get; init; }
+
+    public LlmContextQuery ToQuery()
+        => new()
+        {
+            IncludeKinds = IncludeKinds.ToArray(),
+            RequiredChunkIds = RequiredChunkIds.ToArray(),
+            IncludeTags = IncludeTags.ToArray(),
+            ExcludeTags = ExcludeTags.ToArray(),
+            MaxChars = MaxChars,
+            IncludeExpired = IncludeExpired
+        };
+}
+
 public sealed record LlmContextPacket(
     string StoreId,
     string QuerySummary,
@@ -39,6 +63,7 @@ public sealed record LlmContextPacket(
 public sealed class LlmContextStore
 {
     private readonly Dictionary<string, LlmContextChunk> _chunks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LlmContextLoadout> _loadouts = new(StringComparer.Ordinal);
 
     public LlmContextStore(string id, string title, DateTimeOffset createdUtc)
     {
@@ -54,6 +79,7 @@ public sealed class LlmContextStore
     public DateTimeOffset CreatedUtc { get; }
     public DateTimeOffset UpdatedUtc { get; private set; }
     public IReadOnlyList<LlmContextChunk> Chunks => _chunks.Values.OrderBy(x => x.Id, StringComparer.Ordinal).ToArray();
+    public IReadOnlyList<LlmContextLoadout> Loadouts => _loadouts.Values.OrderBy(x => x.Id, StringComparer.Ordinal).ToArray();
 
     public void Upsert(LlmContextChunk chunk)
     {
@@ -76,6 +102,28 @@ public sealed class LlmContextStore
 
     public LlmContextChunk? Find(string id)
         => _chunks.TryGetValue(RequireText(id, nameof(id)), out var chunk) ? chunk : null;
+
+    public void UpsertLoadout(LlmContextLoadout loadout)
+    {
+        var validated = ValidateLoadout(loadout);
+        _loadouts[validated.Id] = validated;
+        Version++;
+        UpdatedUtc = DateTimeOffset.UtcNow;
+    }
+
+    public bool RemoveLoadout(string id)
+    {
+        if (_loadouts.Remove(RequireText(id, nameof(id))))
+        {
+            Version++;
+            return true;
+        }
+
+        return false;
+    }
+
+    public LlmContextLoadout? FindLoadout(string id)
+        => _loadouts.TryGetValue(RequireText(id, nameof(id)), out var loadout) ? loadout : null;
 
     public IReadOnlyList<LlmContextChunk> Select(LlmContextQuery query, DateTimeOffset nowUtc)
     {
@@ -156,6 +204,14 @@ public sealed class LlmContextStore
         return new LlmContextPacket(Id, $"kinds={string.Join(',', query.IncludeKinds)};maxChars={query.MaxChars}", sb.ToString(), included, omitted, sb.Length);
     }
 
+    public LlmContextPacket BuildPacket(string loadoutId, DateTimeOffset nowUtc)
+    {
+        var loadout = FindLoadout(loadoutId)
+            ?? throw new InvalidOperationException($"Loadout '{loadoutId}' was not found.");
+        var packet = BuildPacket(loadout.ToQuery(), nowUtc);
+        return packet with { QuerySummary = $"loadout={loadout.Id};title={loadout.Title};maxChars={loadout.MaxChars}" };
+    }
+
     private static string RenderChunk(LlmContextChunk chunk)
     {
         var tags = chunk.Tags.Count == 0 ? "(none)" : string.Join(", ", chunk.Tags);
@@ -166,6 +222,27 @@ public sealed class LlmContextStore
     private static void ValidateQuery(LlmContextQuery query)
     {
         if (query.MaxChars <= 0) throw new ArgumentOutOfRangeException(nameof(query.MaxChars));
+    }
+
+    private static LlmContextLoadout ValidateLoadout(LlmContextLoadout loadout)
+    {
+        ArgumentNullException.ThrowIfNull(loadout);
+        if (loadout.MaxChars <= 0) throw new ArgumentOutOfRangeException(nameof(loadout.MaxChars));
+
+        var includeKinds = ValidateUniqueTextList(loadout.IncludeKinds, nameof(loadout.IncludeKinds));
+        var requiredChunkIds = ValidateUniqueTextList(loadout.RequiredChunkIds, nameof(loadout.RequiredChunkIds));
+        var includeTags = ValidateUniqueTextList(loadout.IncludeTags, nameof(loadout.IncludeTags));
+        var excludeTags = ValidateUniqueTextList(loadout.ExcludeTags, nameof(loadout.ExcludeTags));
+
+        return loadout with
+        {
+            Id = RequireText(loadout.Id, nameof(loadout.Id)),
+            Title = RequireText(loadout.Title, nameof(loadout.Title)),
+            IncludeKinds = includeKinds,
+            RequiredChunkIds = requiredChunkIds,
+            IncludeTags = includeTags,
+            ExcludeTags = excludeTags
+        };
     }
 
     private static LlmContextChunk ValidateChunk(LlmContextChunk chunk)
@@ -195,5 +272,24 @@ public sealed class LlmContextStore
     {
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", param);
         return value;
+    }
+
+    private static IReadOnlyList<string> ValidateUniqueTextList(IReadOnlyList<string> items, string paramName)
+    {
+        ArgumentNullException.ThrowIfNull(items, paramName);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var normalized = new List<string>(items.Count);
+        foreach (var item in items)
+        {
+            var value = RequireText(item, paramName);
+            if (!seen.Add(value))
+            {
+                throw new ArgumentException($"Duplicate entry '{value}'.", paramName);
+            }
+
+            normalized.Add(value);
+        }
+
+        return normalized;
     }
 }
