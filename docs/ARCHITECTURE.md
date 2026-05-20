@@ -947,3 +947,6 @@ world.Tick(dt)
 For engine integration, use connector packages rather than adding engine dependencies to `Dominatus.Core`.
 
 - Stride runtime bridge docs: `docs/STRIDECONN_M0.md`
+
+
+- Semantic Kernel actuator M0: `docs/ACTUATORS_SEMANTICKERNEL_M0.md` (SK as capability/plugin invocation only; Dominatus remains orchestrator).
