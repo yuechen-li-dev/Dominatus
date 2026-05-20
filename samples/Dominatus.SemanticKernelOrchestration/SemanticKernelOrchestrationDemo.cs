@@ -139,7 +139,13 @@ public static class SemanticKernelOrchestrationDemo
                     ],
                     hysteresis: 0f,
                     minCommitSeconds: 0f);
-                yield return Ai.Wait(0.1f);
+
+                // Workflow fallback routing: ensure deterministic progression from ledger state each loop tick.
+                if (HasFinal(ctx.World.Bb)) yield return Ai.Goto("Complete");
+                else if (NeedsResearch(ctx.World.Bb)) yield return Ai.Goto("AssignResearch");
+                else if (NeedsCompute(ctx.World.Bb)) yield return Ai.Goto("AssignCompute");
+                else if (NeedsWrite(ctx.World.Bb)) yield return Ai.Goto("AssignWrite");
+                else yield return Ai.Wait(0.1f);
             }
         }
 
