@@ -88,6 +88,15 @@ public sealed class AiEventBus
         }
     }
 
+
+    public EventCursor TailCursor<T>() where T : notnull
+        => new()
+        {
+            Index = _buckets.TryGetValue(typeof(T), out var bucket)
+                ? bucket.Events.Count
+                : 0
+        };
+
     /// <summary>For debugging only.</summary>
     public int CountForType<T>() where T : notnull
         => _buckets.TryGetValue(typeof(T), out var b) ? b.Events.Count : 0;

@@ -195,7 +195,7 @@ public sealed class NodeRunner(AiNode node)
                 // - AwaitActuation<T>
                 case IWaitEvent we:
                     _waitEvent = we;
-                    _waitEventCursor = default;
+                    _waitEventCursor = _waitEvent.CreateInitialCursor(ctx);
                     _waitEventStartTime = world.Clock.Time;
 
                     // Try immediate consume once so restore+replay works when the event
@@ -258,10 +258,11 @@ public sealed class NodeRunner(AiNode node)
 
                         _waitEvent = new WaitEvent<ActuationCompleted>(
                             Filter: e => e.Id.Equals(id),
-                            OnConsumed: null
+                            OnConsumed: null,
+                            CursorStart: EventCursorStart.IncludeExisting
                         );
 
-                        _waitEventCursor = default;
+                        _waitEventCursor = _waitEvent.CreateInitialCursor(ctx);
                         _waitEventStartTime = world.Clock.Time;
 
                         // Try immediate consume once so replayed completions already sitting in the bus

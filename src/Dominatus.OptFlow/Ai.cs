@@ -44,15 +44,17 @@ public static class Ai
 
     public static WaitEvent<T> Event<T>(
         Func<T, bool>? filter = null,
-        Action<AiAgent, T>? onConsumed = null) where T : notnull
-        => new(filter, onConsumed);
+        Action<AiAgent, T>? onConsumed = null,
+        EventCursorStart cursorStart = EventCursorStart.FutureOnly) where T : notnull
+        => new(filter, onConsumed, CursorStart: cursorStart);
 
     public static WaitEvent<T> Event<T>(
         float timeoutSeconds,
         Func<T, bool>? filter = null,
         Action<AiAgent, T>? onConsumed = null,
-        Action<AiAgent>? onTimeout = null) where T : notnull
-        => new(filter, onConsumed, timeoutSeconds, onTimeout);
+        Action<AiAgent>? onTimeout = null,
+        EventCursorStart cursorStart = EventCursorStart.FutureOnly) where T : notnull
+        => new(filter, onConsumed, timeoutSeconds, onTimeout, cursorStart);
 
     public static Act Act(IActuationCommand cmd, BbKey<ActuationId>? storeIdAs = null)
     => new(cmd, storeIdAs);

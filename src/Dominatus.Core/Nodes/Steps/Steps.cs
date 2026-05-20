@@ -29,9 +29,15 @@ public sealed record WaitEvent<T>(
     Func<T, bool>? Filter = null,
     Action<AiAgent, T>? OnConsumed = null,
     float? TimeoutSeconds = null,
-    Action<AiAgent>? OnTimeout = null
+    Action<AiAgent>? OnTimeout = null,
+    EventCursorStart CursorStart = EventCursorStart.FutureOnly
 ) : AiStep, IWaitEvent where T : notnull
 {
+    EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx)
+        => CursorStart == EventCursorStart.FutureOnly
+            ? ctx.Events.TailCursor<T>()
+            : default;
+
     float? IWaitEvent.TimeoutSeconds => TimeoutSeconds;
 
     void IWaitEvent.OnTimeout(AiCtx ctx)
@@ -57,8 +63,10 @@ public sealed record AwaitActuation(
 public sealed record AwaitActuation<T>(
     BbKey<ActuationId> IdKey,
     BbKey<T>? StorePayloadAs = null
-) : AiStep, IWaitEvent
+ ) : AiStep, IWaitEvent
 {
+    EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx) => default;
+
     public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
     {
         var id = ctx.Agent.Bb.GetOrDefault(IdKey, default);

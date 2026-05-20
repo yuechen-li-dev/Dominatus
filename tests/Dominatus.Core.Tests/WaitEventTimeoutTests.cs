@@ -228,7 +228,8 @@ public class WaitEventTimeoutTests
         yield return new WaitEvent<Ping>(
             TimeoutSeconds: timeoutSeconds,
             OnConsumed: (agent, ping) => agent.Bb.Set(ConsumedValue, ping.Value),
-            OnTimeout: agent => agent.Bb.Set(TimedOut, true));
+            OnTimeout: agent => agent.Bb.Set(TimedOut, true),
+            CursorStart: EventCursorStart.IncludeExisting);
 
         ctx.Bb.Set(AfterWait, true);
         yield return new Succeed();
