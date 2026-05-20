@@ -1,6 +1,7 @@
 using Dominatus.Actuators.SemanticKernel;
 using Dominatus.Core;
 using Dominatus.Core.Blackboard;
+using Dominatus.Core.Decision;
 using Dominatus.Core.Hfsm;
 using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
@@ -35,6 +36,7 @@ public static class SemanticKernelOrchestrationDemo
         public static readonly BbKey<int> ResearchVisionMaxCount = new("ResearchVisionMaxCount");
         public static readonly BbKey<int> ResearchLlamaCalcCount = new("ResearchLlamaCalcCount");
         public static readonly BbKey<int> InstructionSequence = new("InstructionSequence");
+        public static readonly DecisionSlot NextActionSlot = new("SemanticKernelDemo.NextAction");
     }
 
     public static DemoResult Run(TextWriter? output = null, bool trace = false)
@@ -124,13 +126,21 @@ public static class SemanticKernelOrchestrationDemo
 
         static IEnumerator<AiStep> Loop(AiCtx ctx)
         {
-            yield return Ai.Decide([
-                Ai.Option("complete", Utility.Bool((w, _) => HasFinal(w.Bb)), "Complete"),
-                Ai.Option("research", Utility.Bool((w, _) => NeedsResearch(w.Bb)), "AssignResearch"),
-                Ai.Option("compute", Utility.Bool((w, _) => NeedsCompute(w.Bb)), "AssignCompute"),
-                Ai.Option("write", Utility.Bool((w, _) => NeedsWrite(w.Bb)), "AssignWrite"),
-                Ai.Option("stall", Utility.Bool((_, _) => false), "Stalled"),
-            ], minCommitSeconds: 0f);
+            while (true)
+            {
+                yield return Ai.Decide(
+                    Keys.NextActionSlot,
+                    [
+                        Ai.Option("complete", Utility.Bool((w, _) => HasFinal(w.Bb)), "Complete"),
+                        Ai.Option("research", Utility.Bool((w, _) => NeedsResearch(w.Bb)), "AssignResearch"),
+                        Ai.Option("compute", Utility.Bool((w, _) => NeedsCompute(w.Bb)), "AssignCompute"),
+                        Ai.Option("write", Utility.Bool((w, _) => NeedsWrite(w.Bb)), "AssignWrite"),
+                        Ai.Option("stall", Utility.Bool((_, _) => false), "Stalled"),
+                    ],
+                    hysteresis: 0f,
+                    minCommitSeconds: 0f);
+                yield return Ai.Wait(0.1f);
+            }
         }
 
         static IEnumerator<AiStep> Assign(AiCtx ctx, string role, string payload, TextWriter output)
