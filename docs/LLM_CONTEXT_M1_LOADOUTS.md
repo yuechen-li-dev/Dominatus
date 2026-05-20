@@ -52,3 +52,6 @@ M1 is still **offline/context-only**:
 - no live LLM calls
 - no provider integration
 - no binary `.context` container yet
+
+
+See also: `docs/LLM_CONTEXT_M2_CONTAINER.md` for the binary `.context` durable container layer.
