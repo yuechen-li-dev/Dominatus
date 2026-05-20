@@ -49,6 +49,29 @@ public class SemanticKernelOrchestrationDemoTests
     }
 
     [Fact]
+    public void Demo_DoesNotReconsumeHistoricalWorkerInstruction()
+    {
+        var result = SemanticKernelOrchestrationDemo.Run();
+        Assert.Equal(1, result.Events.Count(e => e == "assigned research TinyNet seq=1"));
+        Assert.Equal(1, result.Events.Count(e => e.Contains("assigned research VisionMax", StringComparison.Ordinal)));
+        Assert.Equal(1, result.Events.Count(e => e.Contains("assigned research LlamaCalc", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Demo_AwaitReportConsumesOnlyCurrentInstructionSequence()
+    {
+        var good = new WorkerReport(5, "research", "facts", "VisionMax", "ok");
+        var wrongSeq = new WorkerReport(4, "research", "facts", "VisionMax", "old");
+        var wrongKind = new WorkerReport(5, "research", "comparison", "VisionMax", "bad");
+        var wrongSubject = new WorkerReport(5, "research", "facts", "TinyNet", "bad");
+
+        Assert.True(SemanticKernelOrchestrationDemo.IsReportMatch(good, 5, "facts", "VisionMax"));
+        Assert.False(SemanticKernelOrchestrationDemo.IsReportMatch(wrongSeq, 5, "facts", "VisionMax"));
+        Assert.False(SemanticKernelOrchestrationDemo.IsReportMatch(wrongKind, 5, "facts", "VisionMax"));
+        Assert.False(SemanticKernelOrchestrationDemo.IsReportMatch(wrongSubject, 5, "facts", "VisionMax"));
+    }
+
+    [Fact]
     public void Demo_DoesNotUseSemanticKernelOrchestrationApis()
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));

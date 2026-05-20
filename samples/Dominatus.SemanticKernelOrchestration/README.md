@@ -9,3 +9,5 @@ This sample maps Microsoft-style task/progress ledgers and manager loop to Domin
 - Worker actions => mailbox instructions + SK function actuators
 
 No SK planners/agents/orchestration APIs are used.
+
+Persistent mailbox listeners in this sample use sequence/correlation guards stored in blackboards to avoid re-consuming historical events when Ai.Event<T>() waits are reinstalled.
