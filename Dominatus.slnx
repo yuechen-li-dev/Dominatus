@@ -22,4 +22,6 @@
   <Project Path="tests/Dominatus.Actuators.HomeAssistant.Tests/Dominatus.Actuators.HomeAssistant.Tests.csproj" />
   <Project Path="tests/Dominatus.Actuators.Standard.Tests/Dominatus.Actuators.Standard.Tests.csproj" />
   <Project Path="tests/Dominatus.Actuators.Standard.ProcessTestTool/Dominatus.Actuators.Standard.ProcessTestTool.csproj" />
+  <Project Path="src/Dominatus.Actuators.SemanticKernel/Dominatus.Actuators.SemanticKernel.csproj" />
+  <Project Path="tests/Dominatus.Actuators.SemanticKernel.Tests/Dominatus.Actuators.SemanticKernel.Tests.csproj" />
 </Solution>
