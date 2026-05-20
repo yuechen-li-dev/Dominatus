@@ -38,3 +38,4 @@ Container read rejects invalid magic/version/header, malformed directory json, d
 
 ## Why no compression/encryption/checksum in M2
 M2 focuses on deterministic structure and compatibility. Compression/encryption/checksums are deferred for future format revisions.
+See also: [LLM Context M3 Dogfood](LLM_CONTEXT_M3_DOGFOOD.md).
