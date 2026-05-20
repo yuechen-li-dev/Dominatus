@@ -950,3 +950,5 @@ For engine integration, use connector packages rather than adding engine depende
 
 
 - Semantic Kernel actuator M0: `docs/ACTUATORS_SEMANTICKERNEL_M0.md` (SK as capability/plugin invocation only; Dominatus remains orchestrator).
+
+- See `docs/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md` for Microsoft-style ledger-loop mapping with Dominatus orchestration.
