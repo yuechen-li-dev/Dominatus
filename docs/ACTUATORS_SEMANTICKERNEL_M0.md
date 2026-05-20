@@ -72,3 +72,6 @@ Use `Ai.Act` from `Dominatus.OptFlow` in authoring projects; this package does n
 - No Semantic Kernel agents.
 - No Semantic Kernel orchestration loops.
 - No live model calls in tests.
+
+
+See also: [ACTUATORS_SEMANTICKERNEL_M1.md](ACTUATORS_SEMANTICKERNEL_M1.md) for read-only allowlist metadata snapshot support.
