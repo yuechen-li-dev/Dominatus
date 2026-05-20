@@ -50,3 +50,5 @@ Behavior:
 ## Notes for hosts/docs/UI
 This catalog is intended for host-side inspection, documentation, and UI diagnostics.
 It is informational only and not an authorization mechanism.
+
+- Added M0 Semantic Kernel orchestration sample: `samples/Dominatus.SemanticKernelOrchestration`.

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.Actuators.SemanticKernel\Dominatus.Actuators.SemanticKernel.csproj" />
+      <ProjectReference Include="..\..\src\Dominatus.UtilityLite\Dominatus.UtilityLite.csproj" />
+  </ItemGroup>
+</Project>
