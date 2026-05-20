@@ -184,7 +184,10 @@ public static class SemanticKernelOrchestrationDemo
             var subject = ctx.World.Bb.GetOrDefault(Keys.ExpectedReportSubject, string.Empty);
 
             WorkerReport? accepted = null;
-            yield return Ai.Event<WorkerReport>(filter: r => IsReportMatch(r, seq, kind, subject), onConsumed: (_, report) => accepted = report);
+            yield return Ai.Event<WorkerReport>(
+                filter: r => IsReportMatch(r, seq, kind, subject),
+                onConsumed: (_, report) => accepted = report,
+                cursorStart: EventCursorStart.IncludeExisting);
             if (accepted is null) yield return Ai.Goto("Loop");
 
             output.WriteLine($"[{accepted!.SourceRole}] report: {accepted.Payload}");
@@ -203,7 +206,8 @@ public static class SemanticKernelOrchestrationDemo
                 WorkerInstruction? instruction = null;
                 yield return Ai.Event<WorkerInstruction>(
                     filter: m => m.TargetRole == role && m.Sequence > ctx.Agent.Bb.GetOrDefault(lastSeqKey, 0),
-                    onConsumed: (a, msg) => { instruction = msg; a.Bb.Set(lastSeqKey, msg.Sequence); });
+                    onConsumed: (a, msg) => { instruction = msg; a.Bb.Set(lastSeqKey, msg.Sequence); },
+                    cursorStart: EventCursorStart.IncludeExisting);
 
                 events.Add($"{role} consumed instruction {instruction!.Kind} {instruction.Subject} seq={instruction.Sequence}");
 

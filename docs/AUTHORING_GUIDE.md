@@ -669,6 +669,8 @@ yield return Ai.Event<PlayerAttackedEvent>(
 
 `Ai.Event<T>` is a factory for `WaitEvent<T>`. Both spellings work.
 
+By default, `Ai.Event<T>()` is **future-only**: it starts at the current tail of the event bucket when installed, so retained events published earlier are ignored. Use `EventCursorStart.IncludeExisting` only when you intentionally want replay/history-compatible behavior that can consume prepublished retained events. `Ai.Await(...)`/`AwaitActuation` keep include-existing semantics internally so immediate and replay-injected completion events are still observed. Persistent protocols should still carry sequence/correlation IDs.
+
 ---
 
 ## 6. Commands and Actuation
