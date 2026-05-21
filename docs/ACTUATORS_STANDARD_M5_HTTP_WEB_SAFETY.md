@@ -37,7 +37,8 @@ Tiny examples only:
 
 ## Whitelist behavior
 `AllowedHosts` supports exact host or leading-dot suffix. Entries are normalized to lowercase.
-Whitelist wins over block rules and suspicion blocking.
+Leading-dot suffix entries match the root host and subdomains (for example, `.example.com` matches `example.com` and `ads.example.com`).
+Whitelist is evaluated first and wins over block rules and suspicion scoring.
 
 ## Suspicion scoring
 Deterministic heuristic (clamped 0..1) with default threshold `0.7`:

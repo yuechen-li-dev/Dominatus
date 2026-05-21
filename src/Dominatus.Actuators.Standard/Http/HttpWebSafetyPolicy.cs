@@ -78,7 +78,11 @@ public sealed class HttpWebSafetyActuationPolicy : IActuationPolicy
     private static bool IsHostMatch(string pattern, string host)
     {
         if (pattern.StartsWith(".", StringComparison.Ordinal))
-            return host.EndsWith(pattern, StringComparison.OrdinalIgnoreCase);
+        {
+            var suffix = pattern[1..];
+            return string.Equals(host, suffix, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith(pattern, StringComparison.OrdinalIgnoreCase);
+        }
 
         return string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase);
     }

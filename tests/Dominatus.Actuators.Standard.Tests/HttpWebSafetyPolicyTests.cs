@@ -23,6 +23,10 @@ public sealed class HttpWebSafetyPolicyTests
     }
 
     [Fact]
+    public void HttpWebSafetyPolicy_WhitelistRejectsSchemePathEntries()
+        => WebSafetyPolicyOptions_RejectsInvalidAllowedHosts();
+
+    [Fact]
     public void WebSafetyPolicyOptions_RejectsInvalidRules()
     {
         var ex = Assert.Throws<ArgumentException>(() => new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions
@@ -60,7 +64,7 @@ public sealed class HttpWebSafetyPolicyTests
     [Fact]
     public void HttpWebSafetyPolicy_BlocksKnownAdHost()
     {
-        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("ads", "ads"));
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ad.doubleclick.net/ads"));
         Assert.False(decision.Allowed);
         Assert.Contains("Ad rule", decision.Reason);
     }
@@ -76,7 +80,7 @@ public sealed class HttpWebSafetyPolicyTests
     [Fact]
     public void HttpWebSafetyPolicy_BlocksKnownMalwareRule()
     {
-        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "download/malware-test"));
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://download.example/malware-test"));
         Assert.False(decision.Allowed);
         Assert.Contains("Malware", decision.Reason);
     }
@@ -85,7 +89,45 @@ public sealed class HttpWebSafetyPolicyTests
     public void HttpWebSafetyPolicy_WhitelistAllowsBlockedHost()
     {
         var policy = HttpWebSafetyPolicies.Default(["ad.doubleclick.net"]);
-        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("ads", "ads"));
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ad.doubleclick.net/ads"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_WhitelistExactHostWinsOverBlockRule()
+    {
+        var policy = HttpWebSafetyPolicies.Default(["ad.doubleclick.net"]);
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ad.doubleclick.net/ads"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_WhitelistSuffixHostWinsOverBlockRule()
+    {
+        var policy = HttpWebSafetyPolicies.Default([".doubleclick.net"]);
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ad.doubleclick.net/ads"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_WhitelistSuffixMatchesRootHost()
+    {
+        var policy = HttpWebSafetyPolicies.Default([".doubleclick.net"]);
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://doubleclick.net/ads"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_WhitelistBypassesSuspicionScoring()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions
+        {
+            AllowedHosts = ["ads.analytics.example.com"],
+            BlockSuspiciousByDefault = true,
+            SuspicionThreshold = 0.1f
+        });
+
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ads.analytics.example.com/pixel/collect?utm_x=1"));
         Assert.True(decision.Allowed);
     }
 
@@ -160,9 +202,9 @@ public sealed class HttpWebSafetyPolicyTests
             called = true;
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("ok") };
         });
-        host.AddPolicy(HttpWebSafetyPolicies.Default(["ad.doubleclick.net"]));
+        host.AddPolicy(HttpWebSafetyPolicies.Default(["api"]));
 
-        var dispatch = host.Dispatch(NewCtx(host), new HttpGetTextCommand("ads", "ads"));
+        var dispatch = host.Dispatch(NewCtx(host), new HttpGetTextCommand("api", "ads"));
         Assert.True(dispatch.Ok);
         Assert.True(called);
     }
@@ -172,11 +214,7 @@ public sealed class HttpWebSafetyPolicyTests
         var host = new ActuatorHost();
         host.RegisterStandardHttpActuators(new HttpActuatorOptions
         {
-            Endpoints =
-            [
-                new AllowedHttpEndpoint("api", new Uri("https://example.com/api/")),
-                new AllowedHttpEndpoint("ads", new Uri("https://ad.doubleclick.net/"))
-            ]
+            Endpoints = [new AllowedHttpEndpoint("api", new Uri("https://example.com/api/"))]
         }, new DelegateHttpMessageHandler((request, _) => Task.FromResult(send(request))));
         return host;
     }
