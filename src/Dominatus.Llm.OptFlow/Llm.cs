@@ -193,6 +193,47 @@ public static class Llm
         return new LlmTextStep(request, storeAs);
     }
 
+    public static AiStep Call(
+        string stableId,
+        string intent,
+        string persona,
+        Action<LlmContextBuilder> context,
+        BbKey<string> storeTextAs,
+        BbKey<string>? storeResultJsonAs = null,
+        LlmSamplingOptions? sampling = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(persona);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (string.IsNullOrWhiteSpace(storeTextAs.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeTextAs));
+        }
+
+        if (storeResultJsonAs is BbKey<string> resultJsonKey && string.IsNullOrWhiteSpace(resultJsonKey.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeResultJsonAs));
+        }
+
+        var contextBuilder = new LlmContextBuilder();
+        context(contextBuilder);
+        string canonicalContextJson = contextBuilder.BuildCanonicalJson();
+        var resolvedSampling = sampling ?? DefaultSampling;
+
+        var request = new LlmPromptCommand(
+            stableId,
+            intent,
+            persona,
+            canonicalContextJson,
+            resolvedSampling,
+            LlmPromptCommand.DefaultPromptTemplateVersion,
+            LlmPromptCommand.DefaultOutputContractVersion);
+
+        return new LlmPromptStep(request, storeTextAs, storeResultJsonAs);
+    }
+
     public static LlmDecisionOption Option(string id, string description)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -451,6 +492,83 @@ public static class Llm
             return true;
         }
 
+    }
+
+    private sealed record LlmPromptStep(
+        LlmPromptCommand Request,
+        BbKey<string> StoreTextAs,
+        BbKey<string>? StoreResultJsonAs) : AiStep, IWaitEvent
+    {
+        private readonly BbKey<bool> _completedKey = new(BuildStepKey(Request.StableId, "call.completed"));
+        private readonly BbKey<string> _textKey = new(BuildStepKey(Request.StableId, "call.text"));
+        private readonly BbKey<string> _resultJsonKey = new(BuildStepKey(Request.StableId, "call.resultJson"));
+        private readonly BbKey<string> _requestHashKey = new(BuildStepKey(Request.StableId, "call.requestHash"));
+        private readonly BbKey<long> _pendingActuationIdKey = new(BuildStepKey(Request.StableId, "call.pendingActuationId"));
+
+        public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
+        {
+            if (ctx.Bb.GetOrDefault(_completedKey, false))
+            {
+                if (ctx.Bb.TryGet(_textKey, out string? text))
+                {
+                    ctx.Bb.Set(StoreTextAs, text ?? string.Empty);
+                }
+
+                if (StoreResultJsonAs is BbKey<string> completedResultStoreAs && ctx.Bb.TryGet(_resultJsonKey, out string? completedResultJson))
+                {
+                    ctx.Bb.Set(completedResultStoreAs, completedResultJson ?? string.Empty);
+                }
+
+                return true;
+            }
+
+            var pendingIdValue = ctx.Bb.GetOrDefault(_pendingActuationIdKey, 0L);
+            if (pendingIdValue == 0)
+            {
+                var dispatch = ctx.Act.Dispatch(ctx, Request.ToTextRequest());
+                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))
+                {
+                    throw new InvalidOperationException($"Llm.Call dispatch failed for stableId '{Request.StableId}'. {dispatch.Error ?? "Actuation rejected."}");
+                }
+
+                ctx.Bb.Set(_pendingActuationIdKey, dispatch.Id.Value);
+                ctx.Bb.Set(_requestHashKey, LlmRequestHasher.ComputeHash(Request.ToTextRequest()));
+                pendingIdValue = dispatch.Id.Value;
+            }
+
+            var pendingId = new ActuationId(pendingIdValue);
+            if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted<string> e) => e.Id.Equals(pendingId), out var completed))
+            {
+                return false;
+            }
+
+            if (!completed.Ok)
+            {
+                throw new InvalidOperationException($"Llm.Call completion failed for stableId '{Request.StableId}'. {completed.Error ?? "Unknown error."}");
+            }
+
+            var textValue = completed.Payload ?? string.Empty;
+            var requestHash = ctx.Bb.GetOrDefault(_requestHashKey, LlmRequestHasher.ComputeHash(Request.ToTextRequest()));
+            var resultJson = JsonSerializer.Serialize(new
+            {
+                requestHash,
+                stableId = Request.StableId,
+                intent = Request.Intent,
+                text = textValue,
+                finishReason = (string?)null
+            });
+
+            ctx.Bb.Set(_textKey, textValue);
+            ctx.Bb.Set(StoreTextAs, textValue);
+            ctx.Bb.Set(_resultJsonKey, resultJson);
+            if (StoreResultJsonAs is BbKey<string> resultStoreAs)
+            {
+                ctx.Bb.Set(resultStoreAs, resultJson);
+            }
+            ctx.Bb.Set(_completedKey, true);
+            ctx.Bb.Set(_pendingActuationIdKey, 0L);
+            return true;
+        }
     }
 
     private sealed record LlmMagiDecisionStep(
