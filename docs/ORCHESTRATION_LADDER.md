@@ -140,3 +140,5 @@ Semantic Kernel actuator MCP bridge details: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md
 
 
 Semantic Kernel M3 capability profiles: use risk tiers (Read/Write/ExternalEffect/Destructive/Unknown) as workflow input, then require explicit approval gates before write/effect/destructive invocation.
+
+Capability profiles classify capabilities only; runtime actuation gating should be applied through `IActuationPolicy` in `ActuatorHost`, with `AllowedFunctions` as the non-bypassable hard allowlist boundary.

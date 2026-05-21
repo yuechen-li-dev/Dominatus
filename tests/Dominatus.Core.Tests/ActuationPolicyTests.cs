@@ -234,6 +234,44 @@ public sealed class ActuationPolicyTests
         Assert.Equal(coreDecision.Allowed, optFlowDecision.Allowed);
     }
 
+
+    [Fact]
+    public void OptFlowActuationPolicies_ForCommand_DelegatesToCorePolicy()
+    {
+        var optFlowPolicy = new OptFlowActuationPolicies.ForCommand<BlockedCommand>(Consideration.Constant(0.1f), threshold: 0.5f);
+        var corePolicy = CoreActuationPolicies.ForCommand<BlockedCommand>(Consideration.Constant(0.1f), threshold: 0.5f);
+
+        var ctx = CreateCtx();
+        var command = new BlockedCommand();
+        var optFlowDecision = optFlowPolicy.Evaluate(ctx, command);
+        var coreDecision = corePolicy.Evaluate(ctx, command);
+
+        Assert.Equal(coreDecision.Allowed, optFlowDecision.Allowed);
+        Assert.Equal(coreDecision.Reason, optFlowDecision.Reason);
+    }
+
+    [Fact]
+    public void OptFlowActuationPolicies_Score_DeniesBelowThreshold()
+    {
+        var policy = new OptFlowActuationPolicies.Score((_, _) => 0.2f, threshold: 0.5f);
+        var decision = policy.Evaluate(CreateCtx(), new BlockedCommand());
+
+        Assert.False(decision.Allowed);
+    }
+
+    [Fact]
+    public void OptFlowActuationPolicies_AllOf_DeniesWhenAnyPolicyDenies()
+    {
+        var policy = new OptFlowActuationPolicies.AllOf(
+            new OptFlowActuationPolicies.AllowAll(),
+            new OptFlowActuationPolicies.DenyAll("blocked"));
+
+        var decision = policy.Evaluate(CreateCtx(), new BlockedCommand());
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("blocked", decision.Reason);
+    }
+
     private sealed class TestPolicy(Func<AiCtx, IActuationCommand, ActuationPolicyDecision> evaluator) : IActuationPolicy
     {
         public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command) => evaluator(ctx, command);
