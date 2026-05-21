@@ -76,4 +76,6 @@ public sealed record LlmContextStoreDto
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(LlmContextStoreDto))]
 [JsonSerializable(typeof(ContainerDirectoryDto))]
+[JsonSerializable(typeof(LlmContextPacketManifest))]
+[JsonSerializable(typeof(LlmContextPacketChunkDiagnostic))]
 internal partial class LlmContextJsonContext : JsonSerializerContext;

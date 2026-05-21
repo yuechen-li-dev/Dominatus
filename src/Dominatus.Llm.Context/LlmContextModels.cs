@@ -58,7 +58,67 @@ public sealed record LlmContextPacket(
     string Text,
     IReadOnlyList<string> IncludedChunkIds,
     IReadOnlyList<string> OmittedChunkIds,
-    int CharacterCount);
+    int CharacterCount)
+{
+    public IReadOnlyList<LlmContextPacketChunkDiagnostic> Diagnostics { get; init; } = [];
+    public int MaxChars { get; init; }
+    public int RemainingChars { get; init; }
+    public bool WasBudgetConstrained { get; init; }
+
+    public LlmContextPacketManifest ToManifest()
+        => new()
+        {
+            StoreId = StoreId,
+            QuerySummary = QuerySummary,
+            MaxChars = MaxChars,
+            CharacterCount = CharacterCount,
+            RemainingChars = RemainingChars,
+            WasBudgetConstrained = WasBudgetConstrained,
+            IncludedChunkIds = IncludedChunkIds.ToArray(),
+            OmittedChunkIds = OmittedChunkIds.ToArray(),
+            Diagnostics = Diagnostics.ToArray(),
+            LoadoutId = TryGetLoadoutId(QuerySummary)
+        };
+
+    private static string? TryGetLoadoutId(string querySummary)
+    {
+        const string prefix = "loadout=";
+        if (!querySummary.StartsWith(prefix, StringComparison.Ordinal)) return null;
+        var idx = querySummary.IndexOf(';');
+        return idx < 0 ? querySummary[prefix.Length..] : querySummary[prefix.Length..idx];
+    }
+}
+
+public enum LlmContextPacketChunkStatus { Included, Omitted }
+public enum LlmContextPacketOmissionReason { None, Expired, KindFilter, IncludeTagFilter, ExcludeTagFilter, BudgetExceeded, RequiredOverflow, Duplicate, Unknown }
+
+public sealed record LlmContextPacketChunkDiagnostic
+{
+    public required string ChunkId { get; init; }
+    public required string Kind { get; init; }
+    public required string Title { get; init; }
+    public LlmContextPacketChunkStatus Status { get; init; }
+    public LlmContextPacketOmissionReason OmissionReason { get; init; } = LlmContextPacketOmissionReason.None;
+    public bool IsRequired { get; init; }
+    public int Priority { get; init; }
+    public int CharacterCount { get; init; }
+    public DateTimeOffset? ExpiresAtUtc { get; init; }
+    public IReadOnlyList<string> Tags { get; init; } = [];
+}
+
+public sealed record LlmContextPacketManifest
+{
+    public required string StoreId { get; init; }
+    public string? LoadoutId { get; init; }
+    public required string QuerySummary { get; init; }
+    public int MaxChars { get; init; }
+    public int CharacterCount { get; init; }
+    public int RemainingChars { get; init; }
+    public bool WasBudgetConstrained { get; init; }
+    public IReadOnlyList<string> IncludedChunkIds { get; init; } = [];
+    public IReadOnlyList<string> OmittedChunkIds { get; init; } = [];
+    public IReadOnlyList<LlmContextPacketChunkDiagnostic> Diagnostics { get; init; } = [];
+}
 
 public sealed class LlmContextStore
 {
@@ -172,9 +232,10 @@ public sealed class LlmContextStore
 
     public LlmContextPacket BuildPacket(LlmContextQuery query, DateTimeOffset nowUtc)
     {
-        var selected = Select(query, nowUtc);
+        ValidateQuery(query);
         var included = new List<string>();
         var omitted = new List<string>();
+        var diagnostics = new List<LlmContextPacketChunkDiagnostic>();
         var sb = new StringBuilder();
         sb.AppendLine("# Dominatus LLM Context Packet");
         sb.AppendLine($"Store: {Title} ({Id})");
@@ -183,25 +244,52 @@ public sealed class LlmContextStore
         sb.AppendLine();
 
         var requiredSet = new HashSet<string>(query.RequiredChunkIds, StringComparer.Ordinal);
-        foreach (var chunk in selected)
+        var includeKinds = query.IncludeKinds.Count == 0 ? null : new HashSet<string>(query.IncludeKinds, StringComparer.Ordinal);
+        var includeTags = query.IncludeTags.Count == 0 ? null : new HashSet<string>(query.IncludeTags, StringComparer.Ordinal);
+        var excludeTags = query.ExcludeTags.Count == 0 ? null : new HashSet<string>(query.ExcludeTags, StringComparer.Ordinal);
+        var requiredMap = query.RequiredChunkIds.Select((id, i) => (id, i)).ToDictionary(x => x.id, x => x.i, StringComparer.Ordinal);
+
+        foreach (var chunk in _chunks.Values.OrderBy(c => requiredMap.TryGetValue(c.Id, out var idx) ? idx : int.MaxValue).ThenByDescending(c => c.Priority).ThenByDescending(c => c.UpdatedUtc).ThenBy(c => c.Id, StringComparer.Ordinal))
         {
+            var isRequired = requiredSet.Contains(chunk.Id);
             var block = RenderChunk(chunk);
+            LlmContextPacketOmissionReason reason = LlmContextPacketOmissionReason.None;
+            if (!query.IncludeExpired && chunk.ExpiresAtUtc is not null && chunk.ExpiresAtUtc <= nowUtc) reason = LlmContextPacketOmissionReason.Expired;
+            else if (excludeTags is not null && chunk.Tags.Any(excludeTags.Contains)) reason = LlmContextPacketOmissionReason.ExcludeTagFilter;
+            else if (!isRequired && includeKinds is not null && !includeKinds.Contains(chunk.Kind)) reason = LlmContextPacketOmissionReason.KindFilter;
+            else if (!isRequired && includeTags is not null && !chunk.Tags.Any(includeTags.Contains)) reason = LlmContextPacketOmissionReason.IncludeTagFilter;
+
+            if (reason != LlmContextPacketOmissionReason.None)
+            {
+                omitted.Add(chunk.Id);
+                diagnostics.Add(NewDiagnostic(chunk, LlmContextPacketChunkStatus.Omitted, reason, isRequired, block.Length));
+                continue;
+            }
+
             if (sb.Length + block.Length > query.MaxChars)
             {
-                if (requiredSet.Contains(chunk.Id))
+                if (isRequired)
                 {
                     throw new InvalidOperationException($"Required chunk '{chunk.Id}' exceeds MaxChars budget.");
                 }
 
                 omitted.Add(chunk.Id);
+                diagnostics.Add(NewDiagnostic(chunk, LlmContextPacketChunkStatus.Omitted, LlmContextPacketOmissionReason.BudgetExceeded, isRequired, block.Length));
                 continue;
             }
 
             sb.Append(block);
             included.Add(chunk.Id);
+            diagnostics.Add(NewDiagnostic(chunk, LlmContextPacketChunkStatus.Included, LlmContextPacketOmissionReason.None, isRequired, block.Length));
         }
 
-        return new LlmContextPacket(Id, $"kinds={string.Join(',', query.IncludeKinds)};maxChars={query.MaxChars}", sb.ToString(), included, omitted, sb.Length);
+        return new LlmContextPacket(Id, $"kinds={string.Join(',', query.IncludeKinds)};maxChars={query.MaxChars}", sb.ToString(), included, omitted, sb.Length)
+        {
+            Diagnostics = diagnostics,
+            MaxChars = query.MaxChars,
+            RemainingChars = Math.Max(0, query.MaxChars - sb.Length),
+            WasBudgetConstrained = omitted.Count > 0 && diagnostics.Any(d => d.OmissionReason == LlmContextPacketOmissionReason.BudgetExceeded)
+        };
     }
 
     public LlmContextPacket BuildPacket(string loadoutId, DateTimeOffset nowUtc)
@@ -218,6 +306,21 @@ public sealed class LlmContextStore
         var src = string.IsNullOrWhiteSpace(chunk.Source) ? "(none)" : chunk.Source;
         return $"## {chunk.Kind}: {chunk.Title}\nId: {chunk.Id}\nVersion: {chunk.Version}\nUpdatedUtc: {chunk.UpdatedUtc:O}\nTags: {tags}\nSource: {src}\n\n{chunk.Content}\n\n";
     }
+
+    private static LlmContextPacketChunkDiagnostic NewDiagnostic(LlmContextChunk chunk, LlmContextPacketChunkStatus status, LlmContextPacketOmissionReason reason, bool isRequired, int characterCount)
+        => new()
+        {
+            ChunkId = chunk.Id,
+            Kind = chunk.Kind,
+            Title = chunk.Title,
+            Status = status,
+            OmissionReason = reason,
+            IsRequired = isRequired,
+            Priority = chunk.Priority,
+            CharacterCount = characterCount,
+            ExpiresAtUtc = chunk.ExpiresAtUtc,
+            Tags = chunk.Tags.ToArray()
+        };
 
     private static void ValidateQuery(LlmContextQuery query)
     {
