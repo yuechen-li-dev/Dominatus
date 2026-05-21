@@ -34,3 +34,8 @@ No live provider streams, no reconnect endpoints, no UI, no tool-calling, no SK/
 
 ## Future (M9c)
 Server reconnect/transport endpoints remain future work.
+
+
+## Server integration
+
+M9b stream outputs can be consumed by `DominatusLlmStreamRegistry`; see `docs/DOMINATUS_SERVER_M1_STREAMS.md`.

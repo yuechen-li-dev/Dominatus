@@ -17,6 +17,9 @@ public static class DominatusServerEndpointRouteBuilderExtensions
         var runtime = endpoints.ServiceProvider.GetService<DominatusServerRuntime>()
             ?? throw new InvalidOperationException("DominatusServerRuntime is not registered. Call AddDominatusServer(...) first.");
 
+        var streamRegistry = endpoints.ServiceProvider.GetService<DominatusLlmStreamRegistry>()
+            ?? throw new InvalidOperationException("DominatusLlmStreamRegistry is not registered. Call AddDominatusServer(...) first.");
+
         var group = endpoints.MapGroup(prefix);
 
         group.MapGet("/health", static () => Results.Ok(new DominatusHealthDto("ok")));
@@ -58,6 +61,33 @@ public static class DominatusServerEndpointRouteBuilderExtensions
                 ? Results.Ok(DominatusServerDtoMapper.ToAgentSnapshotDto(snapshot))
                 : Results.NotFound();
         }));
+
+
+        group.MapGet("/streams", () => Results.Ok(streamRegistry.ListStreams()));
+
+        group.MapGet("/streams/{streamId}", (string streamId) =>
+        {
+            if (string.IsNullOrWhiteSpace(streamId))
+                return Results.BadRequest("streamId must be non-empty.");
+
+            var detail = streamRegistry.GetStream(streamId);
+            return detail is null ? Results.NotFound() : Results.Ok(detail);
+        });
+
+        group.MapGet("/streams/{streamId}/chunks", (string streamId, int? after) =>
+        {
+            if (string.IsNullOrWhiteSpace(streamId))
+                return Results.BadRequest("streamId must be non-empty.");
+
+            var afterValue = after ?? -1;
+            if (afterValue < -1)
+                return Results.BadRequest("after must be greater than or equal to -1.");
+
+            if (streamRegistry.GetStream(streamId) is null)
+                return Results.NotFound();
+
+            return Results.Ok(streamRegistry.GetChunks(streamId, afterValue));
+        });
 
         group.MapGet("/snapshots", () => Results.Ok(runtime.Read(world =>
             world.Agents

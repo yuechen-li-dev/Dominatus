@@ -957,3 +957,8 @@ For engine integration, use connector packages rather than adding engine depende
 For explicit LLM context-store doctrine and packet generation, see `docs/LLM_CONTEXT_M0.md`.
 
 For orchestration sizing guidance (direct code vs dispatch vs HFSM/LLM/human approval), see `docs/ORCHESTRATION_LADDER.md`.
+
+
+## Dominatus.Server stream inspection (M1)
+
+`Dominatus.Server` now includes an optional durable LLM stream read model (`DominatusLlmStreamRegistry`) and read-only reconnect endpoints (`/dominatus/streams...`). See `docs/DOMINATUS_SERVER_M1_STREAMS.md`.

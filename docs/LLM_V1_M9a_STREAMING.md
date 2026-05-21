@@ -36,3 +36,8 @@ Provider streams are ephemeral transport mechanics. Dominatus state must remain 
 
 
 - See M9b helper: `docs/LLM_V1_M9b_STREAM_HELPER.md`.
+
+
+## Server integration
+
+Durable stream inspection/reconnect over HTTP is documented in `docs/DOMINATUS_SERVER_M1_STREAMS.md`.

@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\Dominatus.Llm.OptFlow\Dominatus.Llm.OptFlow.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
