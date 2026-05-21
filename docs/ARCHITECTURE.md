@@ -962,3 +962,6 @@ For orchestration sizing guidance (direct code vs dispatch vs HFSM/LLM/human app
 ## Dominatus.Server stream inspection (M1)
 
 `Dominatus.Server` now includes an optional durable LLM stream read model (`DominatusLlmStreamRegistry`) and read-only reconnect endpoints (`/dominatus/streams...`). See `docs/DOMINATUS_SERVER_M1_STREAMS.md`.
+
+
+- Dominatus.Server M2 adds a read-only SSE endpoint (`/dominatus/streams/{streamId}/events`) as a live tail over `DominatusLlmStreamRegistry`; see `docs/DOMINATUS_SERVER_M2_STREAM_SSE.md`.

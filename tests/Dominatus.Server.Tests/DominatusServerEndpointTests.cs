@@ -195,6 +195,56 @@ public class DominatusServerEndpointTests
     }
 
     [Fact]
+    public async Task GET_StreamEvents_Unknown_Returns404()
+    {
+        await using var app = await CreateAppAsync();
+        var response = await app.Client.GetAsync("/dominatus/streams/missing/events");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GET_StreamEvents_InvalidAfter_Returns400()
+    {
+        await using var app = await CreateAppAsync();
+        var response = await app.Client.GetAsync("/dominatus/streams/s1/events?after=-2");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GET_StreamEvents_ReturnsExistingChunksAsSse()
+    {
+        await using var app = await CreateAppAsync();
+        var response = await app.Client.GetAsync("/dominatus/streams/s1/events");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("event: chunk", body);
+        Assert.Contains("id: 0", body);
+        Assert.Contains("\"streamId\":\"s1\"", body);
+        Assert.Contains("\"index\":1", body);
+    }
+
+    [Fact]
+    public async Task GET_StreamEvents_After_ReturnsOnlyMissingChunks()
+    {
+        await using var app = await CreateAppAsync();
+        var body = await app.Client.GetStringAsync("/dominatus/streams/s1/events?after=0");
+        Assert.DoesNotContain("id: 0", body);
+        Assert.Contains("id: 1", body);
+    }
+
+    [Fact]
+    public async Task GET_StreamEvents_EndsWithStatusForTerminalStream()
+    {
+        await using var app = await CreateAppAsync();
+        var body = await app.Client.GetStringAsync("/dominatus/streams/s1/events");
+        Assert.Contains("event: status", body);
+        Assert.Contains("\"status\":\"Completed\"", body);
+        Assert.Contains("\"nextChunkIndex\":2", body);
+    }
+
+    [Fact]
     public async Task MapDominatusServer_UsesCustomPrefix()
     {
         await using var app = await CreateAppAsync("/inspect");
