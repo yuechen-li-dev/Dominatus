@@ -146,3 +146,7 @@ Capability profiles classify capabilities only; runtime actuation gating should 
 - HTTP external-effect safety for Standard actuators now has an M5 web safety policy layer (explicit policy registration via `ActuatorHost.AddPolicy`).
 
 - Web fetch chain: destination policy (HTTP WebSafety) then content sanitization (WebContentSafety) before LLM reasoning.
+
+
+## M4 pointer
+The orchestration ladder now includes Graph-through-SK approval boundaries via `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.
