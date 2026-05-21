@@ -1,4 +1,5 @@
 using CoreActuationPolicies = Dominatus.Core.Runtime.ActuationPolicies;
+using Dominatus.Core.Decision;
 using Dominatus.Core.Runtime;
 
 namespace Dominatus.OptFlow;
@@ -38,5 +39,38 @@ public static class ActuationPolicies
 
         public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
             => _fn(ctx, command);
+    }
+
+    public sealed class When(Consideration consideration, float threshold = 0.5f, string? reason = null) : IActuationPolicy
+    {
+        private readonly IActuationPolicy _inner = CoreActuationPolicies.When(consideration, threshold, reason);
+
+        public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
+            => _inner.Evaluate(ctx, command);
+    }
+
+    public sealed class ForCommand<TCommand>(Consideration consideration, float threshold = 0.5f, string? reason = null) : IActuationPolicy
+        where TCommand : IActuationCommand
+    {
+        private readonly IActuationPolicy _inner = CoreActuationPolicies.ForCommand<TCommand>(consideration, threshold, reason);
+
+        public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
+            => _inner.Evaluate(ctx, command);
+    }
+
+    public sealed class Score(Func<AiCtx, IActuationCommand, float> scorer, float threshold = 0.5f, string? reason = null) : IActuationPolicy
+    {
+        private readonly IActuationPolicy _inner = CoreActuationPolicies.Score(scorer, threshold, reason);
+
+        public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
+            => _inner.Evaluate(ctx, command);
+    }
+
+    public sealed class AllOf(params IActuationPolicy[] policies) : IActuationPolicy
+    {
+        private readonly IActuationPolicy _inner = CoreActuationPolicies.AllOf(policies);
+
+        public ActuationPolicyDecision Evaluate(AiCtx ctx, IActuationCommand command)
+            => _inner.Evaluate(ctx, command);
     }
 }

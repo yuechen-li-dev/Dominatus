@@ -88,3 +88,35 @@ M3 does not add:
 - server endpoint changes
 - approval runtime logic inside SK actuator
 - automatic allowlisting from discovery
+
+
+## Capability profiles + ActuationPolicy
+
+Capability profiles classify risk and intent. They do not replace Core runtime policy.
+
+Recommended layering:
+
+- `SemanticKernelCapabilityProfile`: classification taxonomy for reviewed functions.
+- `AllowedFunctions`: hard allowlist surface for which SK functions are callable.
+- `IActuationPolicy`: runtime gate in `ActuatorHost` based on state and utility.
+- `Ai.Decide`: chooses candidate actions.
+- Human approval workflow: required before write/effect/destructive actions.
+
+```csharp
+var readAllowlist = graphProfile.ToAllowedFunctions(SemanticKernelCapabilityProfilePredicates.IsReadOnly);
+
+var options = new SemanticKernelActuatorOptions
+{
+    AllowedFunctions = readAllowlist
+};
+
+host.Register<SemanticKernelFunctionCommand>(new SemanticKernelActuationHandler(invoker, options));
+
+host.AddPolicy(
+    Dominatus.Core.Runtime.ActuationPolicies.ForCommand<SemanticKernelFunctionCommand>(
+        consideration: Consideration.FromBool((world, agent) => !world.Bb.GetOrDefault("GraphDisabled", false)),
+        threshold: 1f,
+        reason: "Graph access is currently disabled."));
+```
+
+`AllowedFunctions` remains non-bypassable: even if policy allows, non-allowlisted functions are denied in the handler resolver.
