@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Actuators.Standard</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Yuechen Li</Authors>
     <Description>Standard actuator pack for Dominatus. Provides sandboxed file text operations and wall-clock time commands behind typed Dominatus actuation handlers.</Description>
     <PackageTags>ai;agent;actuator;automation;files;time;dominatus</PackageTags>
