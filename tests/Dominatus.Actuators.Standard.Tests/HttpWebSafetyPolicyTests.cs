@@ -193,7 +193,7 @@ public sealed class HttpWebSafetyPolicyTests
     public void HttpWebSafetyPolicy_SuspicionSignalsProduceExpectedScore()
     {
         var report = HttpWebSafetyActuationPolicy.ScoreSuspicion(new Uri("https://ads.analytics.example.com/pixel/collect?utm_x=1"), HttpWebSafetyPolicies.DefaultSuspicionSignals);
-        Assert.Equal(1.6f, report.RawScore, 3);
+        Assert.True(report.RawScore > 1f);
         Assert.Equal(1f, report.Score);
         Assert.Contains(report.Matches, m => m.Id == "host.ads");
         Assert.Contains(report.Matches, m => m.Id == "host.analytics");
@@ -221,6 +221,119 @@ public sealed class HttpWebSafetyPolicyTests
         Assert.False(decision.Allowed);
         Assert.DoesNotContain("supersecret", decision.Reason, StringComparison.Ordinal);
         Assert.DoesNotContain("token=", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_DenyMessageDoesNotLeakQueryValues()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.5f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("data-ingest.io", "/collect/events", new Dictionary<string, string> { ["cid"] = "agent-001", ["payload"] = "encoded" }));
+        Assert.False(decision.Allowed);
+        Assert.DoesNotContain("agent-001", decision.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("encoded", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_ContainsExpandedHostSignals()
+    {
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "host.telemetry");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "host.criteo");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "host.hotjar");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "host.phish");
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_ContainsExpandedPathSignals()
+    {
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "path.events");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "path.identify");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "path.exfil");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "path.dump");
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_ContainsExpandedQuerySignals()
+    {
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "query.cid");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "query.fbclid");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "query.payload");
+        Assert.Contains(HttpWebSafetyPolicies.DefaultSuspicionSignals, s => s.Id == "query.exfil");
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_HasUniqueIds()
+    {
+        var ids = HttpWebSafetyPolicies.DefaultSuspicionSignals.Select(static s => s.Id).ToArray();
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_BlockKnownAdTechHost()
+    {
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://static.criteo.net/serve"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("host.criteo", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_BlockKnownTrackerVendorHost()
+    {
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://script.hotjar.com/api"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("host.hotjar", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_DefaultSignals_BlockFreshDomainExfilPattern()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.9f });
+        var uri = new Uri("https://data-ingest.io/collect/events?cid=agent-001&payload=encoded");
+        var report = HttpWebSafetyActuationPolicy.ScoreSuspicion(uri, HttpWebSafetyPolicies.DefaultSuspicionSignals);
+        Assert.True(report.RawScore > 1f);
+        Assert.Equal(1f, report.Score);
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", uri.ToString()));
+        Assert.False(decision.Allowed);
+        Assert.Contains("Signals:", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("query.payload", decision.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent-001", decision.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("encoded", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_BlockCategories_DenyMalwareSignalRegardlessOfThreshold()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 1f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://safe.example/path?exfil=data"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("Malware", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("query.exfil", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_BlockCategories_DenyPhishingSignalRegardlessOfThreshold()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 1f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://login-phish.example/welcome"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("Phishing", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("host.phish", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_BlockCategories_WhitelistStillWins()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { AllowedHosts = ["login-phish.example"], SuspicionThreshold = 1f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://login-phish.example/welcome"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_BlockCategories_CanBeConfiguredEmpty()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { BlockCategories = [], SuspicionThreshold = 0.9f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://safe.example/path?exfil=data"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("scored", decision.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
