@@ -155,6 +155,93 @@ public class ContextDogfoodDemoTests
         Assert.DoesNotContain("MCP", csproj, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Dogfood_RustPrimer_CreatesExpectedArtifacts()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer;
+        Assert.True(File.Exists(result.JsonPath));
+        Assert.True(File.Exists(result.BinaryContextPath));
+        Assert.True(File.Exists(result.ManifestPath));
+        Assert.All(new[] { "rust-author", "rust-reviewer", "rust-auditor" }, id =>
+        {
+            Assert.True(File.Exists(result.PacketPaths[id]));
+            Assert.True(File.Exists(result.PacketManifestPaths[id]));
+        });
+        Assert.True(File.Exists(result.ReviewPromptPath));
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_JsonAndBinaryLoadEquivalentStore()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer;
+        var fromJson = LlmContextStoreJson.Load(result.JsonPath);
+        var fromBinary = LlmContextContainer.Load(result.BinaryContextPath);
+        Assert.Equal(fromJson.Id, fromBinary.Id);
+        Assert.Equal(fromJson.Title, fromBinary.Title);
+        Assert.Equal(fromJson.Chunks.Count, fromBinary.Chunks.Count);
+        Assert.Equal(fromJson.Loadouts.Count, fromBinary.Loadouts.Count);
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_LoadoutsProduceDifferentPackets()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer;
+        var author = File.ReadAllText(result.PacketPaths["rust-author"]);
+        var reviewer = File.ReadAllText(result.PacketPaths["rust-reviewer"]);
+        var auditor = File.ReadAllText(result.PacketPaths["rust-auditor"]);
+        Assert.NotEqual(author, reviewer);
+        Assert.NotEqual(reviewer, auditor);
+        Assert.Contains("restricted", reviewer, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unsafe", auditor, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_AuthorPacketContainsCoreRules()
+    {
+        var packet = File.ReadAllText(ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer.PacketPaths["rust-author"]);
+        Assert.Contains("owned data", packet, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("short borrow", packet, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cheap clone", packet, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_ReviewerPacketContainsReviewChecklist()
+    {
+        var packet = File.ReadAllText(ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer.PacketPaths["rust-reviewer"]);
+        Assert.Contains("review checklist", packet, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reject", packet, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_AuditorPacketContainsRestrictedFootguns()
+    {
+        var packet = File.ReadAllText(ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer.PacketPaths["rust-auditor"]);
+        Assert.Contains("unsafe", packet, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Rc<RefCell", packet, StringComparison.Ordinal);
+        Assert.Contains("Arc<Mutex", packet, StringComparison.Ordinal);
+        Assert.Contains("async", packet, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_PacketsContainGoodAndBadExamples()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer;
+        var merged = string.Join("\n", result.PacketPaths.Values.Select(File.ReadAllText));
+        Assert.Contains("Good:", merged, StringComparison.Ordinal);
+        Assert.Contains("Bad:", merged, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dogfood_RustPrimer_ReviewPromptContainsPrimerQuestions()
+    {
+        var prompt = File.ReadAllText(ContextDogfoodDemo.Run(NewOutputDir()).RustPrimer.ReviewPromptPath);
+        Assert.Contains("implement Rust", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("subset violations", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unsafe/interior-mutability/async footguns", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("examples", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PRIMER.context vs project-specific PROJECT.context", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
 
     private static string FindRepoRoot()
     {
