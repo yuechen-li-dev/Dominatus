@@ -116,3 +116,7 @@ This policy composes with existing Core `IActuationPolicy` behavior and can be c
 ## Non-goals
 No browser/proxy integration, DNS lookups, remote threat intelligence, or runtime network policy fetching.
 This is agent web safety guardrailing, not consumer adblock completeness or a uBlock replacement.
+
+
+## M6 pointer
+M6 adds post-fetch block sanitization via `WebContentSafety` as a second layer after destination policy.

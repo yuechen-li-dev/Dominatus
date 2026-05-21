@@ -144,3 +144,5 @@ Semantic Kernel M3 capability profiles: use risk tiers (Read/Write/ExternalEffec
 Capability profiles classify capabilities only; runtime actuation gating should be applied through `IActuationPolicy` in `ActuatorHost`, with `AllowedFunctions` as the non-bypassable hard allowlist boundary.
 
 - HTTP external-effect safety for Standard actuators now has an M5 web safety policy layer (explicit policy registration via `ActuatorHost.AddPolicy`).
+
+- Web fetch chain: destination policy (HTTP WebSafety) then content sanitization (WebContentSafety) before LLM reasoning.
