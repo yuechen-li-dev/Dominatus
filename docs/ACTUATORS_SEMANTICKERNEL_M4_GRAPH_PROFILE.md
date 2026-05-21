@@ -71,3 +71,5 @@ var effectAllowlist = profile.ToAllowedFunctions(e =>
 - Live SK Graph plugin sample wiring.
 - Additional profiles (Teams/OneDrive/Planner/ToDo).
 - Stronger approval workflow sample with persisted rationale and audit chain.
+
+- Added sample link: `docs/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md` for fake Graph-through-SK assistant architecture.
