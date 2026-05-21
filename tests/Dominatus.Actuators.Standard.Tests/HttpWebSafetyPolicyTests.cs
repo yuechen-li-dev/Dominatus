@@ -96,6 +96,14 @@ public sealed class HttpWebSafetyPolicyTests
     }
 
     [Fact]
+    public void HttpWebSafetyPolicy_BlocksKnownTrackerHostPathRule()
+    {
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://facebook.com/tr?id=123"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("hostpath:facebook.com/tr", decision.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void HttpWebSafetyPolicy_BlocksKnownMalwareRule()
     {
         var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://download.example/malware-test"));
@@ -185,6 +193,7 @@ public sealed class HttpWebSafetyPolicyTests
     public void HttpWebSafetyPolicy_SuspicionSignalsProduceExpectedScore()
     {
         var report = HttpWebSafetyActuationPolicy.ScoreSuspicion(new Uri("https://ads.analytics.example.com/pixel/collect?utm_x=1"), HttpWebSafetyPolicies.DefaultSuspicionSignals);
+        Assert.Equal(1.6f, report.RawScore, 3);
         Assert.Equal(1f, report.Score);
         Assert.Contains(report.Matches, m => m.Id == "host.ads");
         Assert.Contains(report.Matches, m => m.Id == "host.analytics");
@@ -221,6 +230,75 @@ public sealed class HttpWebSafetyPolicyTests
         Assert.False(high.Evaluate(NewCtx(), new HttpGetTextCommand("example.com", "/")).Allowed);
         var low = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.5f, SuspicionSignals = [new("host.example", WebSafetyCategory.Suspicious, WebSafetySignalTarget.HostContains, "example", 0.2f)] });
         Assert.True(low.Evaluate(NewCtx(), new HttpGetTextCommand("example.com", "/")).Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_BlocksRawIpDestinationAboveThreshold()
+    {
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://127.0.0.1/test"));
+        Assert.False(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_RawIpSignalAppearsInDenyMessage()
+    {
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://127.0.0.1/test"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("host.raw_ip", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_WhitelistCanAllowRawIpDestination()
+    {
+        var policy = HttpWebSafetyPolicies.Default(["127.0.0.1"]);
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://127.0.0.1/test"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_PathScopedWhitelist_AllowsMatchingPath()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { AllowedDestinations = ["api.partner.com/v2/data"] });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://api.partner.com/v2/data/items"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_PathScopedWhitelist_DoesNotAllowDifferentPath()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { AllowedDestinations = ["api.partner.com/v2/data"], SuspicionThreshold = 0.1f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://api.partner.com/v1/other/pixel"));
+        Assert.False(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_PathScopedWhitelist_DoesNotAllowDifferentHost()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { AllowedDestinations = ["api.partner.com/v2/data"], SuspicionThreshold = 0.1f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://other.partner.com/v2/data/pixel"));
+        Assert.False(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_PathScopedWhitelist_CanBypassSuspicionForMatchingPathOnly()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { AllowedDestinations = ["ads.example.com/pixel"], SuspicionThreshold = 0.1f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ads.example.com/pixel/collect?utm_x=1"));
+        Assert.True(decision.Allowed);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_PathScopedWhitelist_RejectsQueryEntries()
+    {
+        Assert.Throws<ArgumentException>(() => new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { AllowedDestinations = ["api.partner.com/v2/data?x=1"] }));
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_ScoreReportIncludesRawScoreBeforeClamp()
+    {
+        var report = HttpWebSafetyActuationPolicy.ScoreSuspicion(new Uri("https://ads.analytics.example.com/pixel/collect?utm_x=1"), HttpWebSafetyPolicies.DefaultSuspicionSignals);
+        Assert.True(report.RawScore > 1f);
+        Assert.Equal(1f, report.Score);
     }
 
     [Fact]

@@ -6,6 +6,7 @@
 ## Safe-by-default doctrine
 - Known ad/tracker/malware/suspicious destinations are denied.
 - Explicit `AllowedHosts` entries override deny rules.
+- Explicit `AllowedDestinations` entries support host-only or host+path-prefix allowlisting.
 - Unknown ordinary destinations are allowed unless explicit rule/suspicion denies.
 
 ## Scope and limitations
@@ -27,14 +28,17 @@ No DNS checks, remote feeds, subscriptions, crawlers, or external blocklists are
 - Exact host: `ads.example.com`
 - Host suffix (leading dot): `.doubleclick.net`
 - Path/query substring: `path:/collect`
-- Host+path substring fallback: `path:facebook.com/tr`
+- Host+path prefix: `hostpath:facebook.com/tr`
+
+`path:` is path/query-only.  
+`hostpath:` requires both host match (exact or leading-dot suffix semantics) and path prefix match.
 
 ## Default baseline rules
 Tiny examples only:
 - `.doubleclick.net` (Ad)
 - `.googlesyndication.com` (Ad)
 - `.google-analytics.com` (Tracker)
-- `path:facebook.com/tr` (Tracker)
+- `hostpath:facebook.com/tr` (Tracker)
 - `path:/collect` (Tracker)
 - `path:/ads` (Ad)
 - `path:/malware-test` (Malware)
@@ -44,12 +48,22 @@ Tiny examples only:
 Leading-dot suffix entries match the root host and subdomains (for example, `.example.com` matches `example.com` and `ads.example.com`).
 Whitelist is evaluated first and wins over block rules and suspicion scoring.
 
+`AllowedDestinations` supports host-only and host+path-prefix entries:
+- `api.partner.com` (host-only)
+- `.partner.com` (host suffix)
+- `api.partner.com/v2/data` (host + `/v2/data` prefix only)
+- `.partner.com/v2/data` (suffix host + `/v2/data` prefix only)
+
+Validation rejects scheme/query and requires path prefixes to start with `/`.
+
 ## Suspicion scoring
-Weighted deterministic signals (configured order, score clamped to `0..1`) with default threshold `0.7`.
+Weighted deterministic signals (configured order) with raw sum and clamped score (`0..1`) at default threshold `0.7`.
 Each matching signal contributes weight and is captured in `WebSafetyScoreReport.Matches`.
+`WebSafetyScoreReport.RawScore` captures the unclamped sum for audit/tuning.
 
 Default signal baseline:
 - `host.ads` host contains `ads` (+0.35)
+- `host.raw_ip` host is raw IPv4/IPv6 (+0.80)
 - `host.tracker` host contains `tracker` (+0.35)
 - `host.analytics` host contains `analytics` (+0.35)
 - `path.collect` path/query contains `/collect` (+0.25)
@@ -60,6 +74,9 @@ Default signal baseline:
 If `score >= SuspicionThreshold` and `BlockSuspiciousByDefault = true`, request is denied.
 Whitelist is evaluated before scoring. Explicit block rules are evaluated before scoring.
 Suspicion deny reasons include matched signal IDs and destination host/path (not full query values).
+
+## M5.3 hardening note
+M5.3 fixed an ambiguous host+path rule bug and added raw-IP/path-scoped allowlist hardening.
 
 ## Registration
 Recommended explicit registration on host policy chain:
