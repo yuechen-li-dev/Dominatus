@@ -8,11 +8,15 @@
 - Dominatus.UtilityLite — 0.2.1
 - Dominatus.Actuators.Standard — 0.2.1
 - Dominatus.Actuators.HomeAssistant — 0.2.1
-- Dominatus.Server — 0.2.1
+- Dominatus.Server — 0.2.1-preview
 - Dominatus.Llm.OptFlow — 0.2.1-preview
 - Dominatus.Llm.Context — 0.1.0-preview
 - Dominatus.Actuators.SemanticKernel — 0.1.0-preview
 - Dominatus.StrideConn — 0.2.0-preview (intentionally deferred from bump; unchanged Stride preview)
+
+## Preview coherence note
+
+- `Dominatus.Server` is preview in this wave because its stream endpoints depend on preview `Dominatus.Llm.OptFlow`.
 
 ## Target frameworks
 

@@ -16,6 +16,6 @@
     <PackageReference Include="Dominatus.Actuators.Standard" Version="0.2.1" />
     <PackageReference Include="Dominatus.Actuators.HomeAssistant" Version="0.2.1" />
     <PackageReference Include="Dominatus.Actuators.SemanticKernel" Version="0.1.0-preview" />
-    <PackageReference Include="Dominatus.Server" Version="0.2.1" />
+    <PackageReference Include="Dominatus.Server" Version="0.2.1-preview" />
   </ItemGroup>
 </Project>
