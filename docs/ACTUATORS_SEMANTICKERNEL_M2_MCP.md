@@ -64,3 +64,6 @@ The sample function may be MCP-backed through Semantic Kernel, but Dominatus onl
 
 ## Future native MCP actuator threshold
 A native Dominatus MCP actuator could be justified later only if host requirements need first-class control over protocol/session/runtime semantics that cannot be cleanly represented through Semantic Kernel function surfaces.
+
+
+See also: `ACTUATORS_SEMANTICKERNEL_M3_CAPABILITY_PROFILES.md` for host-facing risk classification; M2 no-auto-allow doctrine remains unchanged.

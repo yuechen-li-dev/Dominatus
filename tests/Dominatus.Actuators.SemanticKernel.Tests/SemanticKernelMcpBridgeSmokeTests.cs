@@ -75,7 +75,7 @@ public sealed class SemanticKernelMcpBridgeSmokeTests
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
         var text = File.ReadAllText(Path.Combine(root, "src", "Dominatus.Actuators.SemanticKernel", "Dominatus.Actuators.SemanticKernel.csproj"));
-        var forbidden = new[] { "ModelContextProtocol", "Mcp", "MCP", "Anthropic.Mcp", "Microsoft.Mcp" };
+        var forbidden = new[] { "ModelContextProtocol", "Mcp", "MCP", "Anthropic.Mcp", "Microsoft.Mcp", "Microsoft.Graph", "Graph", "OpenApi", "A2A" };
         Assert.All(forbidden, f => Assert.DoesNotContain(f, text, StringComparison.OrdinalIgnoreCase));
     }
 

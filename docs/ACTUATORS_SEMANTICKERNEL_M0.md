@@ -77,3 +77,6 @@ Use `Ai.Act` from `Dominatus.OptFlow` in authoring projects; this package does n
 See also: [ACTUATORS_SEMANTICKERNEL_M1.md](ACTUATORS_SEMANTICKERNEL_M1.md) for read-only allowlist metadata snapshot support.
 
 See also: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md](ACTUATORS_SEMANTICKERNEL_M2_MCP.md) for MCP-through-Semantic-Kernel guidance and smoke doctrine.
+
+
+See also: `ACTUATORS_SEMANTICKERNEL_M3_CAPABILITY_PROFILES.md` for risk-tiered capability profile classification layered on top of explicit allowlists.

@@ -137,3 +137,6 @@ Do not use `Llm.MagiDecide` unless the review is high-stakes and requires multi-
 - Orchestration update: authored `Llm.Stream` helper available in M9b.
 
 Semantic Kernel actuator MCP bridge details: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md](ACTUATORS_SEMANTICKERNEL_M2_MCP.md).
+
+
+Semantic Kernel M3 capability profiles: use risk tiers (Read/Write/ExternalEffect/Destructive/Unknown) as workflow input, then require explicit approval gates before write/effect/destructive invocation.
