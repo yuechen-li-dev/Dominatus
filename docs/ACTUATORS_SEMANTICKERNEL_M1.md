@@ -52,3 +52,5 @@ This catalog is intended for host-side inspection, documentation, and UI diagnos
 It is informational only and not an authorization mechanism.
 
 - Added M0 Semantic Kernel orchestration sample: `samples/Dominatus.SemanticKernelOrchestration`.
+
+See orchestration-boundary doctrine in `docs/ORCHESTRATION_LADDER.md` (Semantic Kernel/MCP as capability surfaces, Dominatus as orchestration kernel).
