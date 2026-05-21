@@ -33,3 +33,6 @@ Provider streams are ephemeral transport mechanics. Dominatus state must remain 
 - M9b: `Llm.Stream(...)` authoring helper.
 - M9c: server reconnect endpoints.
 - M9d: live provider streaming implementations.
+
+
+- See M9b helper: `docs/LLM_V1_M9b_STREAM_HELPER.md`.

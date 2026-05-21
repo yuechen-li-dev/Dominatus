@@ -6,6 +6,7 @@ public sealed record LlmStreamCommand : IActuationCommand
 {
     public string StreamId { get; init; }
     public LlmTextRequest Request { get; init; }
+    public LlmPromptContextPacketMetadata? ContextPacket { get; init; }
 
     public LlmStreamCommand(string streamId, LlmTextRequest request)
     {

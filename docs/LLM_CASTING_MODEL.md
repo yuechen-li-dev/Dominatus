@@ -276,3 +276,6 @@ A bounded-choice LLM decision system must allow the model to reject the frame.
 For ladder guidance on when to choose `Llm.Call`, `Llm.Decide`, `Llm.MagiDecide`, or non-LLM orchestration primitives, see `docs/ORCHESTRATION_LADDER.md`.
 
 - M9a note: streaming follows the same casting model split—provider async deltas are transient, Dominatus snapshots/chunks are durable state.
+
+
+- M9b adds authored stream helper (`Llm.Stream`) over M9a durable streaming.

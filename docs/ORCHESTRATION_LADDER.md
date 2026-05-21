@@ -132,3 +132,6 @@ Do not use `Llm.MagiDecide` unless the review is high-stakes and requires multi-
 - M5 adds `PRIMER.context` (reusable authoring constraints/examples) alongside SOUL/PROJECT/SESSION/AGENT; see `docs/LLM_CONTEXT_M5_PRIMER_CONTEXT.md` and rust primer dogfood packets.
 
 - Ladder update: M9a introduces durable LLM stream recording in OptFlow (fake provider only), keeping orchestration node authoring on `IEnumerator<AiStep>`.
+
+
+- Orchestration update: authored `Llm.Stream` helper available in M9b.
