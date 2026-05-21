@@ -106,3 +106,8 @@ M0 does not provide authentication/authorization. Production hosts should add au
 - Live state streaming (e.g., SignalR).
 - Controlled write endpoints.
 - Built-in auth/authz integration guidance.
+
+
+## Forward link
+
+For durable LLM stream read/reconnect endpoints added after M0, see `docs/DOMINATUS_SERVER_M1_STREAMS.md`.

@@ -6,6 +6,7 @@ using Dominatus.Core.Hfsm;
 using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
+using Dominatus.Llm.OptFlow;
 using Dominatus.Server;
 using Dominatus.Server.Dtos;
 using Microsoft.AspNetCore.Builder;
@@ -123,6 +124,76 @@ public class DominatusServerEndpointTests
         Assert.False(dto.IsAlive);
     }
 
+
+    [Fact]
+    public async Task GET_Streams_ReturnsSummaries()
+    {
+        await using var app = await CreateAppAsync();
+
+        var dto = await app.Client.GetFromJsonAsync<List<LlmStreamSummaryDto>>("/dominatus/streams");
+
+        Assert.NotNull(dto);
+        Assert.Single(dto);
+        Assert.Equal("s1", dto[0].StreamId);
+        Assert.Equal(2, dto[0].ChunkCount);
+        Assert.Equal("Completed", dto[0].Status);
+    }
+
+    [Fact]
+    public async Task GET_StreamDetail_ReturnsTextAndChunks()
+    {
+        await using var app = await CreateAppAsync();
+
+        var dto = await app.Client.GetFromJsonAsync<LlmStreamDetailDto>("/dominatus/streams/s1");
+
+        Assert.NotNull(dto);
+        Assert.Equal("Hello", dto.TextSoFar);
+        Assert.Equal(2, dto.Chunks.Count);
+    }
+
+    [Fact]
+    public async Task GET_StreamDetail_Unknown_Returns404()
+    {
+        await using var app = await CreateAppAsync();
+
+        var response = await app.Client.GetAsync("/dominatus/streams/missing");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GET_StreamChunks_ReturnsAllChunks()
+    {
+        await using var app = await CreateAppAsync();
+
+        var dto = await app.Client.GetFromJsonAsync<List<LlmStreamChunkDto>>("/dominatus/streams/s1/chunks");
+
+        Assert.NotNull(dto);
+        Assert.Equal(2, dto.Count);
+    }
+
+    [Fact]
+    public async Task GET_StreamChunks_After_ReturnsChunksAfterIndex()
+    {
+        await using var app = await CreateAppAsync();
+
+        var dto = await app.Client.GetFromJsonAsync<List<LlmStreamChunkDto>>("/dominatus/streams/s1/chunks?after=0");
+
+        Assert.NotNull(dto);
+        Assert.Single(dto);
+        Assert.Equal(1, dto[0].Index);
+    }
+
+    [Fact]
+    public async Task GET_StreamChunks_InvalidAfter_Returns400()
+    {
+        await using var app = await CreateAppAsync();
+
+        var response = await app.Client.GetAsync("/dominatus/streams/s1/chunks?after=-2");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task MapDominatusServer_UsesCustomPrefix()
     {
@@ -148,7 +219,12 @@ public class DominatusServerEndpointTests
 
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Services.AddDominatusServer(new DominatusServerRuntime(world));
+        var registry = new DominatusLlmStreamRegistry();
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 0, "Hel", false, null));
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 1, "lo", true, "stop"));
+        registry.RecordSnapshot(new LlmStreamSnapshot("s1", "hash", LlmStreamStatus.Completed, 2, "Hello", "stop"));
+
+        builder.Services.AddDominatusServer(new DominatusServerRuntime(world), registry);
 
         var app = builder.Build();
         app.MapDominatusServer(prefix);
