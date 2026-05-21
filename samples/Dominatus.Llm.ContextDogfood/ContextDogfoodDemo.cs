@@ -125,6 +125,7 @@ public static class ContextDogfoodDemo
         sb.AppendLine("10. Was the loadout budget too tight?");
         sb.AppendLine("11. Were omissions due to filters or budget?");
         sb.AppendLine("12. Should any chunks be split, merged, or reprioritized?");
+        sb.AppendLine("13. Does the packet provenance clearly explain which loadout/query produced this packet?");
         return sb.ToString();
     }
 }

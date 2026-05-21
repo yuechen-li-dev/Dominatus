@@ -78,4 +78,6 @@ public sealed record LlmContextStoreDto
 [JsonSerializable(typeof(ContainerDirectoryDto))]
 [JsonSerializable(typeof(LlmContextPacketManifest))]
 [JsonSerializable(typeof(LlmContextPacketChunkDiagnostic))]
+[JsonSerializable(typeof(LlmContextPacketProvenance))]
+[JsonSerializable(typeof(LlmContextPacketSourceKind))]
 internal partial class LlmContextJsonContext : JsonSerializerContext;

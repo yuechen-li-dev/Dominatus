@@ -80,6 +80,7 @@ public class LlmContextPacketManifestTests
         Assert.Equal(packet.StoreId, manifest.StoreId);
         Assert.Equal(packet.CharacterCount, manifest.CharacterCount);
         Assert.Equal(packet.Diagnostics.Count, manifest.Diagnostics.Count);
+        Assert.Equal(packet.Provenance, manifest.Provenance);
     }
 
     [Fact]
@@ -89,6 +90,50 @@ public class LlmContextPacketManifestTests
         var roundtrip = LlmContextPacketManifestJson.Deserialize(LlmContextPacketManifestJson.Serialize(manifest));
         Assert.Equal(manifest.StoreId, roundtrip.StoreId);
         Assert.Equal(manifest.IncludedChunkIds, roundtrip.IncludedChunkIds);
+        Assert.Equal(manifest.Provenance.SourceKind, roundtrip.Provenance.SourceKind);
+        Assert.Equal(manifest.Provenance.LoadoutId, roundtrip.Provenance.LoadoutId);
+        Assert.Equal(manifest.Provenance.LoadoutTitle, roundtrip.Provenance.LoadoutTitle);
+        Assert.Equal(manifest.Provenance.LoadoutDescription, roundtrip.Provenance.LoadoutDescription);
+        Assert.Equal(manifest.Provenance.IncludeKinds, roundtrip.Provenance.IncludeKinds);
+        Assert.Equal(manifest.Provenance.RequiredChunkIds, roundtrip.Provenance.RequiredChunkIds);
+        Assert.Equal(manifest.Provenance.IncludeTags, roundtrip.Provenance.IncludeTags);
+        Assert.Equal(manifest.Provenance.ExcludeTags, roundtrip.Provenance.ExcludeTags);
+        Assert.Equal(manifest.Provenance.MaxChars, roundtrip.Provenance.MaxChars);
+        Assert.Equal(manifest.Provenance.IncludeExpired, roundtrip.Provenance.IncludeExpired);
+    }
+
+    [Fact]
+    public void BuildPacket_FromQuery_HasQueryProvenance()
+    {
+        var query = new LlmContextQuery { IncludeKinds = ["doctrine"], IncludeTags = ["a"], ExcludeTags = ["b"], RequiredChunkIds = ["r"], MaxChars = 4321, IncludeExpired = true };
+        var packet = NewStore().BuildPacket(query, Now);
+        Assert.Equal(LlmContextPacketSourceKind.Query, packet.Provenance.SourceKind);
+        Assert.Null(packet.Provenance.LoadoutId);
+        Assert.Equal(query.IncludeKinds, packet.Provenance.IncludeKinds);
+        Assert.Equal(query.MaxChars, packet.Provenance.MaxChars);
+    }
+
+    [Fact]
+    public void BuildPacket_FromLoadout_HasLoadoutProvenance()
+    {
+        var store = NewStore();
+        store.UpsertLoadout(new LlmContextLoadout { Id = "reviewer", Title = "Reviewer", Description = "Review tasks", IncludeKinds = ["audit"], IncludeTags = ["llm"], ExcludeTags = ["deprecated"], RequiredChunkIds = ["must"], MaxChars = 1234, IncludeExpired = true });
+        var packet = store.BuildPacket("reviewer", Now);
+        Assert.Equal(LlmContextPacketSourceKind.Loadout, packet.Provenance.SourceKind);
+        Assert.Equal("reviewer", packet.Provenance.LoadoutId);
+        Assert.Equal("Reviewer", packet.Provenance.LoadoutTitle);
+        Assert.Equal("Review tasks", packet.Provenance.LoadoutDescription);
+        Assert.Equal(["audit"], packet.Provenance.IncludeKinds);
+        Assert.Equal(["must"], packet.Provenance.RequiredChunkIds);
+    }
+
+    [Fact]
+    public void ExistingQuerySummary_RemainsAvailableForHumanDisplay()
+    {
+        var store = NewStore();
+        store.UpsertLoadout(new LlmContextLoadout { Id = "author", Title = "Author" });
+        var packet = store.BuildPacket("author", Now);
+        Assert.Contains("loadout=author", packet.QuerySummary, StringComparison.Ordinal);
     }
 
     private static LlmContextStore NewStore() => new("PROJECT.dominatus", "Dominatus Project Context", Now);

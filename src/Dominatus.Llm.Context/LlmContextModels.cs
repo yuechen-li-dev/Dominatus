@@ -52,6 +52,26 @@ public sealed record LlmContextLoadout
         };
 }
 
+public enum LlmContextPacketSourceKind
+{
+    Query,
+    Loadout
+}
+
+public sealed record LlmContextPacketProvenance
+{
+    public LlmContextPacketSourceKind SourceKind { get; init; } = LlmContextPacketSourceKind.Query;
+    public string? LoadoutId { get; init; }
+    public string? LoadoutTitle { get; init; }
+    public string? LoadoutDescription { get; init; }
+    public IReadOnlyList<string> IncludeKinds { get; init; } = [];
+    public IReadOnlyList<string> RequiredChunkIds { get; init; } = [];
+    public IReadOnlyList<string> IncludeTags { get; init; } = [];
+    public IReadOnlyList<string> ExcludeTags { get; init; } = [];
+    public int MaxChars { get; init; }
+    public bool IncludeExpired { get; init; }
+}
+
 public sealed record LlmContextPacket(
     string StoreId,
     string QuerySummary,
@@ -64,6 +84,7 @@ public sealed record LlmContextPacket(
     public int MaxChars { get; init; }
     public int RemainingChars { get; init; }
     public bool WasBudgetConstrained { get; init; }
+    public LlmContextPacketProvenance Provenance { get; init; } = new();
 
     public LlmContextPacketManifest ToManifest()
         => new()
@@ -77,16 +98,9 @@ public sealed record LlmContextPacket(
             IncludedChunkIds = IncludedChunkIds.ToArray(),
             OmittedChunkIds = OmittedChunkIds.ToArray(),
             Diagnostics = Diagnostics.ToArray(),
-            LoadoutId = TryGetLoadoutId(QuerySummary)
+            LoadoutId = Provenance.LoadoutId,
+            Provenance = Provenance with { }
         };
-
-    private static string? TryGetLoadoutId(string querySummary)
-    {
-        const string prefix = "loadout=";
-        if (!querySummary.StartsWith(prefix, StringComparison.Ordinal)) return null;
-        var idx = querySummary.IndexOf(';');
-        return idx < 0 ? querySummary[prefix.Length..] : querySummary[prefix.Length..idx];
-    }
 }
 
 public enum LlmContextPacketChunkStatus { Included, Omitted }
@@ -118,6 +132,7 @@ public sealed record LlmContextPacketManifest
     public IReadOnlyList<string> IncludedChunkIds { get; init; } = [];
     public IReadOnlyList<string> OmittedChunkIds { get; init; } = [];
     public IReadOnlyList<LlmContextPacketChunkDiagnostic> Diagnostics { get; init; } = [];
+    public LlmContextPacketProvenance Provenance { get; init; } = new();
 }
 
 public sealed class LlmContextStore
@@ -288,7 +303,8 @@ public sealed class LlmContextStore
             Diagnostics = diagnostics,
             MaxChars = query.MaxChars,
             RemainingChars = Math.Max(0, query.MaxChars - sb.Length),
-            WasBudgetConstrained = omitted.Count > 0 && diagnostics.Any(d => d.OmissionReason == LlmContextPacketOmissionReason.BudgetExceeded)
+            WasBudgetConstrained = omitted.Count > 0 && diagnostics.Any(d => d.OmissionReason == LlmContextPacketOmissionReason.BudgetExceeded),
+            Provenance = QueryProvenance(query)
         };
     }
 
@@ -296,9 +312,35 @@ public sealed class LlmContextStore
     {
         var loadout = FindLoadout(loadoutId)
             ?? throw new InvalidOperationException($"Loadout '{loadoutId}' was not found.");
-        var packet = BuildPacket(loadout.ToQuery(), nowUtc);
-        return packet with { QuerySummary = $"loadout={loadout.Id};title={loadout.Title};maxChars={loadout.MaxChars}" };
+        var query = loadout.ToQuery();
+        var packet = BuildPacket(query, nowUtc);
+        return packet with
+        {
+            QuerySummary = $"loadout={loadout.Id};title={loadout.Title};maxChars={loadout.MaxChars}",
+            Provenance = LoadoutProvenance(loadout, query)
+        };
     }
+
+    private static LlmContextPacketProvenance QueryProvenance(LlmContextQuery query)
+        => new()
+        {
+            SourceKind = LlmContextPacketSourceKind.Query,
+            IncludeKinds = query.IncludeKinds.ToArray(),
+            RequiredChunkIds = query.RequiredChunkIds.ToArray(),
+            IncludeTags = query.IncludeTags.ToArray(),
+            ExcludeTags = query.ExcludeTags.ToArray(),
+            MaxChars = query.MaxChars,
+            IncludeExpired = query.IncludeExpired
+        };
+
+    private static LlmContextPacketProvenance LoadoutProvenance(LlmContextLoadout loadout, LlmContextQuery query)
+        => QueryProvenance(query) with
+        {
+            SourceKind = LlmContextPacketSourceKind.Loadout,
+            LoadoutId = loadout.Id,
+            LoadoutTitle = loadout.Title,
+            LoadoutDescription = loadout.Description
+        };
 
     private static string RenderChunk(LlmContextChunk chunk)
     {
