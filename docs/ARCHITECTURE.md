@@ -955,3 +955,5 @@ For engine integration, use connector packages rather than adding engine depende
 
 
 For explicit LLM context-store doctrine and packet generation, see `docs/LLM_CONTEXT_M0.md`.
+
+For orchestration sizing guidance (direct code vs dispatch vs HFSM/LLM/human approval), see `docs/ORCHESTRATION_LADDER.md`.

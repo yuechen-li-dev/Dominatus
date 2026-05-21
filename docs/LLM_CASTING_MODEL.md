@@ -272,3 +272,5 @@ A bounded-choice LLM decision system must allow the model to reject the frame.
 - Use `Llm.MagiDecide` for high-stakes multi-perspective judgment.
 
 - Context packets now feed directly into `Llm.Call` in M8b; keep `Call` for transform-only usage, and use `Decide`/`MagiDecide` for decisions.
+
+For ladder guidance on when to choose `Llm.Call`, `Llm.Decide`, `Llm.MagiDecide`, or non-LLM orchestration primitives, see `docs/ORCHESTRATION_LADDER.md`.

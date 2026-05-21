@@ -70,3 +70,5 @@ When `storeResultJsonAs` is provided, the runtime stores JSON including:
 - No human approval/editing workflow for free-text calls.
 
 - See M8b packet-call integration: [LLM_V1_M8b_CONTEXT_PACKET_CALL.md](LLM_V1_M8b_CONTEXT_PACKET_CALL.md)
+
+For the full orchestration ladder and decision checklist, see `docs/ORCHESTRATION_LADDER.md`.

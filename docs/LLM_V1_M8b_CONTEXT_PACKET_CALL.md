@@ -44,3 +44,5 @@ Packet text is not duplicated into result JSON.
 - `Llm.Call`: semantic prompt/context → text transform.
 - `Llm.Decide`: bounded option selection.
 - `Llm.MagiDecide`: multi-perspective high-stakes judgment.
+
+For when to use packet + `Llm.Call` versus `Llm.Decide`/`Llm.MagiDecide`/HFSM, see `docs/ORCHESTRATION_LADDER.md`.
