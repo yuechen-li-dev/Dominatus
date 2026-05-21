@@ -52,3 +52,7 @@ For orchestration-level API selection doctrine across direct code, dispatch, HFS
 ## M4.3 hardening note
 
 See `docs/LLM_CONTEXT_M4_3_DOGFOOD_HARDENING.md` for release-prep loadout hardening, pressure-test budget diagnostics, and manifest enum readability updates.
+
+## M5 update: PRIMER.context
+
+M5 adds first-class `PRIMER.context` as reusable authoring law. Rust primer dogfood artifacts now generate under `artifacts/llm-context-dogfood/primers/rust`. See `docs/LLM_CONTEXT_M5_PRIMER_CONTEXT.md`.

@@ -47,3 +47,7 @@ No API/provider wave was added in M4.3:
 - no Semantic Kernel/MCP integration
 - no Core dependency changes
 - no server endpoints or context-writing actuators
+
+## M5 pointer
+
+Hardening now coexists with M5 primer packets: `PRIMER.context` Rust loadouts (`rust-author`, `rust-reviewer`, `rust-auditor`) are generated in dogfood for constraint-oriented authoring/review.

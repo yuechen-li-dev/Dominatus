@@ -128,3 +128,5 @@ Do not use `Llm.MagiDecide` unless the review is high-stakes and requires multi-
 - Do not overuse Dominatus for simple field updates.
 - Do not overuse LLMs where deterministic policy is enough.
 - Use Semantic Kernel/MCP as capability ecosystems, not orchestration kernels.
+
+- M5 adds `PRIMER.context` (reusable authoring constraints/examples) alongside SOUL/PROJECT/SESSION/AGENT; see `docs/LLM_CONTEXT_M5_PRIMER_CONTEXT.md` and rust primer dogfood packets.
