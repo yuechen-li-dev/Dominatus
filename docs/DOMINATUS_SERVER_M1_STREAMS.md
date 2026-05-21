@@ -47,3 +47,8 @@ Validation:
 M1 is read-only HTTP inspection only.
 
 Not included: SSE, SignalR, WebSockets, provider stream passthrough, write/cancel endpoints, auth, frontend.
+
+
+## M2 update
+
+SSE live stream endpoint added in M2: `/dominatus/streams/{streamId}/events` with `?after=N` reconnect semantics over the same durable registry. See `docs/DOMINATUS_SERVER_M2_STREAM_SSE.md`.

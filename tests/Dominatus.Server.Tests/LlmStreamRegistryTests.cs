@@ -75,4 +75,101 @@ public class LlmStreamRegistryTests
         Assert.Null(registry.GetStream("missing"));
         Assert.Empty(registry.GetChunks("missing"));
     }
+
+    [Fact]
+    public async Task StreamRegistry_WatchChunks_YieldsExistingChunksAfterIndex()
+    {
+        var registry = new DominatusLlmStreamRegistry();
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 0, "Hel", false, null));
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 1, "lo", true, "stop"));
+
+        var chunks = await CollectAsync(registry.WatchChunksAsync("s1", after: 0));
+
+        Assert.Single(chunks);
+        Assert.Equal(1, chunks[0].Index);
+    }
+
+    [Fact]
+    public async Task StreamRegistry_WatchChunks_YieldsNewChunkRecordedAfterSubscribe()
+    {
+        var registry = new DominatusLlmStreamRegistry();
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 0, "Hel", false, null));
+
+        var watchTask = WaitFirstAsync(registry.WatchChunksAsync("s1", after: 0));
+        await Task.Delay(20);
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 1, "lo", false, null));
+
+        var chunk = await watchTask;
+        Assert.Equal(1, chunk.Index);
+    }
+
+    [Fact]
+    public async Task StreamRegistry_WatchChunks_CompletesWhenFinalChunkRecorded()
+    {
+        var registry = new DominatusLlmStreamRegistry();
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 0, "Hel", false, null));
+
+        var watchTask = CollectAsync(registry.WatchChunksAsync("s1", after: -1));
+        await Task.Delay(20);
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 1, "lo", true, "stop"));
+
+        var chunks = await watchTask;
+        Assert.Equal(2, chunks.Count);
+        Assert.True(chunks[^1].IsFinal);
+    }
+
+    [Fact]
+    public async Task StreamRegistry_WatchChunks_CompletesWhenTerminalSnapshotRecorded()
+    {
+        var registry = new DominatusLlmStreamRegistry();
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 0, "Hel", false, null));
+
+        var watchTask = CollectAsync(registry.WatchChunksAsync("s1", after: -1));
+        await Task.Delay(20);
+        registry.RecordSnapshot(new LlmStreamSnapshot("s1", "h", LlmStreamStatus.Completed, 1, "Hel", "stop"));
+
+        var chunks = await watchTask;
+        Assert.Single(chunks);
+    }
+
+    [Fact]
+    public async Task StreamRegistry_WatchChunks_UnknownStreamThrows()
+    {
+        var registry = new DominatusLlmStreamRegistry();
+        await Assert.ThrowsAsync<KeyNotFoundException>(async () =>
+        {
+            await foreach (var _ in registry.WatchChunksAsync("missing"))
+            {
+            }
+        });
+    }
+
+    [Fact]
+    public async Task StreamRegistry_WatchChunks_CancellationStopsWatcher()
+    {
+        var registry = new DominatusLlmStreamRegistry();
+        registry.RecordChunk(new LlmStreamChunkAvailable("s1", 0, "Hel", false, null));
+        using var cts = new CancellationTokenSource();
+
+        var enumerator = registry.WatchChunksAsync("s1", after: 0, cts.Token).GetAsyncEnumerator(cts.Token);
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await enumerator.MoveNextAsync());
+    }
+
+    private static async Task<List<Dominatus.Server.Dtos.LlmStreamChunkDto>> CollectAsync(IAsyncEnumerable<Dominatus.Server.Dtos.LlmStreamChunkDto> source)
+    {
+        var result = new List<Dominatus.Server.Dtos.LlmStreamChunkDto>();
+        await foreach (var item in source)
+            result.Add(item);
+        return result;
+    }
+
+    private static async Task<Dominatus.Server.Dtos.LlmStreamChunkDto> WaitFirstAsync(IAsyncEnumerable<Dominatus.Server.Dtos.LlmStreamChunkDto> source)
+    {
+        await foreach (var item in source)
+            return item;
+
+        throw new InvalidOperationException("Sequence was empty.");
+    }
 }

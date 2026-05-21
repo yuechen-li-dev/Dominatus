@@ -5,11 +5,18 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Dominatus.Server;
 
 public static class DominatusServerEndpointRouteBuilderExtensions
 {
+    private static readonly JsonSerializerOptions SseJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never
+    };
     public static IEndpointRouteBuilder MapDominatusServer(this IEndpointRouteBuilder endpoints, string prefix = "/dominatus")
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -89,6 +96,46 @@ public static class DominatusServerEndpointRouteBuilderExtensions
             return Results.Ok(streamRegistry.GetChunks(streamId, afterValue));
         });
 
+        group.MapGet("/streams/{streamId}/events", async (string streamId, int? after, HttpContext httpContext) =>
+        {
+            if (string.IsNullOrWhiteSpace(streamId))
+                return Results.BadRequest("streamId must be non-empty.");
+
+            var afterValue = after ?? -1;
+            if (afterValue < -1)
+                return Results.BadRequest("after must be greater than or equal to -1.");
+
+            if (streamRegistry.GetStream(streamId) is null)
+                return Results.NotFound();
+
+            var response = httpContext.Response;
+            response.ContentType = "text/event-stream";
+            response.Headers.CacheControl = "no-cache";
+
+            await foreach (var chunk in streamRegistry.WatchChunksAsync(streamId, afterValue, httpContext.RequestAborted))
+            {
+                await WriteSseEventAsync(response, "chunk", chunk.Index.ToString(CultureInfo.InvariantCulture), chunk, httpContext.RequestAborted);
+                await response.Body.FlushAsync(httpContext.RequestAborted);
+            }
+
+            var detail = streamRegistry.GetStream(streamId);
+            if (detail is not null && IsTerminal(detail.Status))
+            {
+                var statusPayload = new
+                {
+                    streamId = detail.StreamId,
+                    status = detail.Status,
+                    nextChunkIndex = detail.NextChunkIndex,
+                    finishReason = detail.FinishReason,
+                    error = detail.Error
+                };
+                await WriteSseEventAsync(response, "status", id: null, statusPayload, httpContext.RequestAborted);
+                await response.Body.FlushAsync(httpContext.RequestAborted);
+            }
+
+            return Results.Empty;
+        });
+
         group.MapGet("/snapshots", () => Results.Ok(runtime.Read(world =>
             world.Agents
                 .Select(agent => world.TryGetPublic(agent.Id, out var snapshot)
@@ -125,5 +172,19 @@ public static class DominatusServerEndpointRouteBuilderExtensions
 
         agent = null!;
         return false;
+    }
+
+    private static bool IsTerminal(string status)
+        => string.Equals(status, "Completed", StringComparison.Ordinal)
+            || string.Equals(status, "Failed", StringComparison.Ordinal)
+            || string.Equals(status, "Cancelled", StringComparison.Ordinal);
+
+    private static async Task WriteSseEventAsync(HttpResponse response, string eventName, string? id, object payload, CancellationToken cancellationToken)
+    {
+        await response.WriteAsync($"event: {eventName}\n", cancellationToken);
+        if (id is not null)
+            await response.WriteAsync($"id: {id}\n", cancellationToken);
+
+        await response.WriteAsync($"data: {JsonSerializer.Serialize(payload, SseJsonOptions)}\n\n", cancellationToken);
     }
 }
