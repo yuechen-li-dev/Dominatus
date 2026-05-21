@@ -261,6 +261,94 @@ public static class Llm
         return new LlmPromptStep(request, storeTextAs, storeResultJsonAs);
     }
 
+    public static AiStep Stream(
+        string stableId,
+        string intent,
+        string persona,
+        string streamId,
+        LlmContextPacket packet,
+        BbKey<string> storeTextAs,
+        BbKey<string>? storeSnapshotJsonAs = null,
+        BbKey<string>? storeStreamIdAs = null,
+        BbKey<string>? storeStatusAs = null,
+        LlmSamplingOptions? sampling = null)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        return Stream(
+            stableId,
+            intent,
+            persona,
+            streamId,
+            context: c => c.AddPacket(packet),
+            storeTextAs,
+            storeSnapshotJsonAs,
+            storeStreamIdAs,
+            storeStatusAs,
+            sampling,
+            packetMetadata: BuildPacketMetadata(packet));
+    }
+
+    public static AiStep Stream(
+        string stableId,
+        string intent,
+        string persona,
+        string streamId,
+        Action<LlmContextBuilder> context,
+        BbKey<string> storeTextAs,
+        BbKey<string>? storeSnapshotJsonAs = null,
+        BbKey<string>? storeStreamIdAs = null,
+        BbKey<string>? storeStatusAs = null,
+        LlmSamplingOptions? sampling = null,
+        LlmPromptContextPacketMetadata? packetMetadata = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(intent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(persona);
+        ArgumentException.ThrowIfNullOrWhiteSpace(streamId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (string.IsNullOrWhiteSpace(storeTextAs.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeTextAs));
+        }
+
+        if (storeSnapshotJsonAs is BbKey<string> snapshotJsonKey && string.IsNullOrWhiteSpace(snapshotJsonKey.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeSnapshotJsonAs));
+        }
+
+        if (storeStreamIdAs is BbKey<string> streamIdKey && string.IsNullOrWhiteSpace(streamIdKey.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeStreamIdAs));
+        }
+
+        if (storeStatusAs is BbKey<string> statusKey && string.IsNullOrWhiteSpace(statusKey.Name))
+        {
+            throw new ArgumentException("Blackboard key must be non-empty.", nameof(storeStatusAs));
+        }
+
+        var contextBuilder = new LlmContextBuilder();
+        context(contextBuilder);
+        string canonicalContextJson = contextBuilder.BuildCanonicalJson();
+        var resolvedSampling = sampling ?? DefaultSampling;
+        var request = new LlmTextRequest(
+            stableId,
+            intent,
+            persona,
+            canonicalContextJson,
+            resolvedSampling,
+            LlmTextRequest.DefaultPromptTemplateVersion,
+            LlmTextRequest.DefaultOutputContractVersion);
+
+        var command = new LlmStreamCommand(streamId, request)
+        {
+            ContextPacket = packetMetadata
+        };
+
+        return new LlmStreamStep(command, storeTextAs, storeSnapshotJsonAs, storeStreamIdAs, storeStatusAs);
+    }
+
     public static LlmDecisionOption Option(string id, string description)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -608,6 +696,112 @@ public static class Llm
             ctx.Bb.Set(_completedKey, true);
             ctx.Bb.Set(_pendingActuationIdKey, 0L);
             return true;
+        }
+    }
+
+    private sealed record LlmStreamStep(
+        LlmStreamCommand Command,
+        BbKey<string> StoreTextAs,
+        BbKey<string>? StoreSnapshotJsonAs,
+        BbKey<string>? StoreStreamIdAs,
+        BbKey<string>? StoreStatusAs) : AiStep, IWaitEvent
+    {
+        private readonly BbKey<bool> _completedKey = new(BuildStepKey(Command.Request.StableId, "stream.completed"));
+        private readonly BbKey<string> _textKey = new(BuildStepKey(Command.Request.StableId, "stream.text"));
+        private readonly BbKey<string> _snapshotJsonKey = new(BuildStepKey(Command.Request.StableId, "stream.snapshotJson"));
+        private readonly BbKey<string> _streamIdKey = new(BuildStepKey(Command.Request.StableId, "stream.streamId"));
+        private readonly BbKey<string> _statusKey = new(BuildStepKey(Command.Request.StableId, "stream.status"));
+        private readonly BbKey<long> _pendingActuationIdKey = new(BuildStepKey(Command.Request.StableId, "stream.pendingActuationId"));
+
+        public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
+        {
+            if (ctx.Bb.GetOrDefault(_completedKey, false))
+            {
+                RestoreOutputs(ctx);
+                return true;
+            }
+
+            var pendingIdValue = ctx.Bb.GetOrDefault(_pendingActuationIdKey, 0L);
+            if (pendingIdValue == 0)
+            {
+                var dispatch = ctx.Act.Dispatch(ctx, Command);
+                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))
+                {
+                    throw new InvalidOperationException($"Llm.Stream dispatch failed for stableId '{Command.Request.StableId}'. {dispatch.Error ?? "Actuation rejected."}");
+                }
+
+                ctx.Bb.Set(_pendingActuationIdKey, dispatch.Id.Value);
+                pendingIdValue = dispatch.Id.Value;
+            }
+
+            var pendingId = new ActuationId(pendingIdValue);
+            if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted<LlmStreamSnapshot> e) => e.Id.Equals(pendingId), out var completed))
+            {
+                return false;
+            }
+
+            if (!completed.Ok || completed.Payload is null)
+            {
+                throw new InvalidOperationException($"Llm.Stream completion failed for stableId '{Command.Request.StableId}'. {completed.Error ?? "Missing stream snapshot."}");
+            }
+
+            var snapshot = completed.Payload;
+            var snapshotJson = JsonSerializer.Serialize(new
+            {
+                streamId = snapshot.StreamId,
+                requestHash = snapshot.RequestHash,
+                status = snapshot.Status.ToString(),
+                nextChunkIndex = snapshot.NextChunkIndex,
+                textSoFar = snapshot.TextSoFar,
+                finishReason = snapshot.FinishReason,
+                error = snapshot.Error,
+                contextPacket = Command.ContextPacket is null
+                    ? null
+                    : new
+                    {
+                        storeId = Command.ContextPacket.StoreId,
+                        sourceKind = Command.ContextPacket.SourceKind,
+                        loadoutId = Command.ContextPacket.LoadoutId,
+                        characterCount = Command.ContextPacket.CharacterCount,
+                        maxChars = Command.ContextPacket.MaxChars,
+                        wasBudgetConstrained = Command.ContextPacket.WasBudgetConstrained,
+                        includedChunkIds = Command.ContextPacket.IncludedChunkIds,
+                        omittedChunkIds = Command.ContextPacket.OmittedChunkIds
+                    }
+            });
+
+            ctx.Bb.Set(_textKey, snapshot.TextSoFar);
+            ctx.Bb.Set(_snapshotJsonKey, snapshotJson);
+            ctx.Bb.Set(_streamIdKey, snapshot.StreamId);
+            ctx.Bb.Set(_statusKey, snapshot.Status.ToString());
+            ctx.Bb.Set(_completedKey, true);
+            ctx.Bb.Set(_pendingActuationIdKey, 0L);
+
+            RestoreOutputs(ctx);
+            return true;
+        }
+
+        private void RestoreOutputs(AiCtx ctx)
+        {
+            if (ctx.Bb.TryGet(_textKey, out string? text))
+            {
+                ctx.Bb.Set(StoreTextAs, text ?? string.Empty);
+            }
+
+            if (StoreSnapshotJsonAs is BbKey<string> snapshotStoreKey && ctx.Bb.TryGet(_snapshotJsonKey, out string? snapshotJson))
+            {
+                ctx.Bb.Set(snapshotStoreKey, snapshotJson ?? string.Empty);
+            }
+
+            if (StoreStreamIdAs is BbKey<string> streamIdStoreKey && ctx.Bb.TryGet(_streamIdKey, out string? streamId))
+            {
+                ctx.Bb.Set(streamIdStoreKey, streamId ?? string.Empty);
+            }
+
+            if (StoreStatusAs is BbKey<string> statusStoreKey && ctx.Bb.TryGet(_statusKey, out string? status))
+            {
+                ctx.Bb.Set(statusStoreKey, status ?? string.Empty);
+            }
         }
     }
 
