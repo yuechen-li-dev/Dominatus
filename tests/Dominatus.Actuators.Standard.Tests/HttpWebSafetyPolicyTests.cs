@@ -42,6 +42,24 @@ public sealed class HttpWebSafetyPolicyTests
     }
 
     [Fact]
+    public void WebSafetySignal_RejectsInvalidFields()
+    {
+        Assert.Throws<ArgumentException>(() => new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionSignals = [new("", WebSafetyCategory.Suspicious, WebSafetySignalTarget.HostContains, "ads", 0.1f)] }));
+        Assert.Throws<ArgumentException>(() => new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionSignals = [new("id", WebSafetyCategory.Suspicious, WebSafetySignalTarget.HostContains, "", 0.1f)] }));
+        Assert.Throws<ArgumentException>(() => new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionSignals = [new("id", WebSafetyCategory.Suspicious, WebSafetySignalTarget.HostContains, "ads", 0f)] }));
+    }
+
+    [Fact]
+    public void WebSafetyPolicyOptions_RejectsDuplicateSignals()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions
+        {
+            SuspicionSignals = [new("host.ads", WebSafetyCategory.Ad, WebSafetySignalTarget.HostContains, "ads", 0.2f), new("HOST.ADS", WebSafetyCategory.Ad, WebSafetySignalTarget.HostContains, "ads", 0.3f)]
+        }));
+        Assert.Contains("Duplicate suspicion signal", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void WebSafetyPolicyOptions_NormalizesHosts()
     {
         var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions
@@ -132,6 +150,17 @@ public sealed class HttpWebSafetyPolicyTests
     }
 
     [Fact]
+    public void HttpWebSafetyPolicy_WhitelistBypassesSuspicionSignals() => HttpWebSafetyPolicy_WhitelistBypassesSuspicionScoring();
+
+    [Fact]
+    public void HttpWebSafetyPolicy_BlockRulesBypassSuspicionSignals()
+    {
+        var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ad.doubleclick.net/ads?utm_source=x"));
+        Assert.False(decision.Allowed);
+        Assert.DoesNotContain("Signals:", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void HttpWebSafetyPolicy_BlockMessageDoesNotLeakQuerySecrets()
     {
         var decision = HttpWebSafetyPolicies.Default().Evaluate(NewCtx(), new HttpGetTextCommand("api", "https://ad.doubleclick.net/ads", new Dictionary<string, string> { ["token"] = "supersecret" }));
@@ -150,6 +179,48 @@ public sealed class HttpWebSafetyPolicyTests
         var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("analytics.example.com", "/pixel/collect"));
         Assert.False(decision.Allowed);
         Assert.Contains("scored", decision.Reason);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_SuspicionSignalsProduceExpectedScore()
+    {
+        var report = HttpWebSafetyActuationPolicy.ScoreSuspicion(new Uri("https://ads.analytics.example.com/pixel/collect?utm_x=1"), HttpWebSafetyPolicies.DefaultSuspicionSignals);
+        Assert.Equal(1f, report.Score);
+        Assert.Contains(report.Matches, m => m.Id == "host.ads");
+        Assert.Contains(report.Matches, m => m.Id == "host.analytics");
+        Assert.Contains(report.Matches, m => m.Id == "path.collect");
+        Assert.Contains(report.Matches, m => m.Id == "path.pixel");
+        Assert.Contains(report.Matches, m => m.Id == "query.utm");
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_SuspicionDenyMessageIncludesSignalIds()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.7f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("ads.example.com", "/pixel/collect"));
+        Assert.False(decision.Allowed);
+        Assert.Contains("Signals:", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("host.ads", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("path.collect", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_SuspicionDenyMessageDoesNotLeakQuery()
+    {
+        var policy = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.5f });
+        var decision = policy.Evaluate(NewCtx(), new HttpGetTextCommand("ads.example.com", "/collect", new Dictionary<string, string> { ["token"] = "supersecret" }));
+        Assert.False(decision.Allowed);
+        Assert.DoesNotContain("supersecret", decision.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("token=", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HttpWebSafetyPolicy_CustomSuspicionSignalsCanRaiseOrLowerRisk()
+    {
+        var high = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.5f, SuspicionSignals = [new("host.example", WebSafetyCategory.Suspicious, WebSafetySignalTarget.HostContains, "example", 0.8f)] });
+        Assert.False(high.Evaluate(NewCtx(), new HttpGetTextCommand("example.com", "/")).Allowed);
+        var low = new HttpWebSafetyActuationPolicy(new WebSafetyPolicyOptions { SuspicionThreshold = 0.5f, SuspicionSignals = [new("host.example", WebSafetyCategory.Suspicious, WebSafetySignalTarget.HostContains, "example", 0.2f)] });
+        Assert.True(low.Evaluate(NewCtx(), new HttpGetTextCommand("example.com", "/")).Allowed);
     }
 
     [Fact]

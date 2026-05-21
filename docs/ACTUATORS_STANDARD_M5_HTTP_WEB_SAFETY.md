@@ -16,6 +16,10 @@ No DNS checks, remote feeds, subscriptions, crawlers, or external blocklists are
 - `WebSafetyCategory`
 - `WebSafetyRule`
 - `WebSafetyPolicyOptions`
+- `WebSafetySignalTarget`
+- `WebSafetySignal`
+- `WebSafetySignalMatch`
+- `WebSafetyScoreReport`
 - `HttpWebSafetyActuationPolicy : IActuationPolicy`
 - `HttpWebSafetyPolicies.Defaults(...)` and `HttpWebSafetyPolicies.Default(...)`
 
@@ -41,16 +45,21 @@ Leading-dot suffix entries match the root host and subdomains (for example, `.ex
 Whitelist is evaluated first and wins over block rules and suspicion scoring.
 
 ## Suspicion scoring
-Deterministic heuristic (clamped 0..1) with default threshold `0.7`:
-- host contains `ads` +0.35
-- host contains `tracker` +0.35
-- host contains `analytics` +0.35
-- path/query contains `/collect` +0.25
-- path/query contains `/beacon` +0.25
-- path/query contains `utm_` +0.25
-- path/query contains `pixel` +0.40
+Weighted deterministic signals (configured order, score clamped to `0..1`) with default threshold `0.7`.
+Each matching signal contributes weight and is captured in `WebSafetyScoreReport.Matches`.
+
+Default signal baseline:
+- `host.ads` host contains `ads` (+0.35)
+- `host.tracker` host contains `tracker` (+0.35)
+- `host.analytics` host contains `analytics` (+0.35)
+- `path.collect` path/query contains `/collect` (+0.25)
+- `path.beacon` path/query contains `/beacon` (+0.25)
+- `query.utm` path/query contains `utm_` (+0.25)
+- `path.pixel` path/query contains `pixel` (+0.40)
 
 If `score >= SuspicionThreshold` and `BlockSuspiciousByDefault = true`, request is denied.
+Whitelist is evaluated before scoring. Explicit block rules are evaluated before scoring.
+Suspicion deny reasons include matched signal IDs and destination host/path (not full query values).
 
 ## Registration
 Recommended explicit registration on host policy chain:
@@ -68,3 +77,4 @@ This policy composes with existing Core `IActuationPolicy` behavior and can be c
 
 ## Non-goals
 No browser/proxy integration, DNS lookups, remote threat intelligence, or runtime network policy fetching.
+This is agent web safety guardrailing, not consumer adblock completeness.
