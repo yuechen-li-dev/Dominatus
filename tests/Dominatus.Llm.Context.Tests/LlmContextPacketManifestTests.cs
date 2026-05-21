@@ -136,6 +136,32 @@ public class LlmContextPacketManifestTests
         Assert.Contains("loadout=author", packet.QuerySummary, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void PacketManifestJson_IncludesReadableEnumNames()
+    {
+        var store = NewStore();
+        store.Upsert(Chunk("fit", content: "short"));
+        store.Upsert(Chunk("overflow", content: new string('z', 500)));
+        var manifest = store.BuildPacket(new LlmContextQuery { MaxChars = 220 }, Now).ToManifest();
+        var json = LlmContextPacketManifestJson.Serialize(manifest);
+
+        Assert.Contains("\"statusName\":\"Omitted\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"omissionReasonName\":\"BudgetExceeded\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PacketManifestJson_KeepsNumericEnumValues()
+    {
+        var store = NewStore();
+        store.Upsert(Chunk("fit", content: "short"));
+        store.Upsert(Chunk("overflow", content: new string('z', 500)));
+        var manifest = store.BuildPacket(new LlmContextQuery { MaxChars = 220 }, Now).ToManifest();
+        var json = LlmContextPacketManifestJson.Serialize(manifest);
+
+        Assert.Contains("\"status\":1", json, StringComparison.Ordinal);
+        Assert.Contains("\"omissionReason\":5", json, StringComparison.Ordinal);
+    }
     private static LlmContextStore NewStore() => new("PROJECT.dominatus", "Dominatus Project Context", Now);
     private static LlmContextChunk Chunk(string id, string kind = "doctrine", string title = "t", string content = "c", int priority = 0, DateTimeOffset? exp = null, string[]? tags = null)
         => new() { Id = id, Kind = kind, Title = title, Content = content, Priority = priority, Version = 1, CreatedUtc = Now, UpdatedUtc = Now, ExpiresAtUtc = exp, Tags = tags ?? ["a"] };

@@ -13,7 +13,7 @@ public class ContextDogfoodDemoTests
 
         Assert.True(File.Exists(result.JsonPath));
         Assert.True(File.Exists(result.BinaryContextPath));
-        Assert.All(new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep" }, id => Assert.True(File.Exists(result.PacketPaths[id])));
+        Assert.All(new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep", "pressure-test" }, id => Assert.True(File.Exists(result.PacketPaths[id])));
         Assert.True(File.Exists(Path.Combine(outputDir, "packets", "LLM_REVIEW_PROMPT.md")));
     }
 
@@ -22,7 +22,7 @@ public class ContextDogfoodDemoTests
     public void Dogfood_Run_CreatesPacketManifestArtifacts()
     {
         var result = ContextDogfoodDemo.Run(NewOutputDir());
-        Assert.All(new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep" }, id => Assert.True(File.Exists(result.PacketManifestPaths[id])));
+        Assert.All(new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep", "pressure-test" }, id => Assert.True(File.Exists(result.PacketManifestPaths[id])));
     }
 
     [Fact]
@@ -102,6 +102,46 @@ public class ContextDogfoodDemoTests
         Assert.Contains(".manifest.json", prompt);
         Assert.Contains("Which omitted chunks would you have wanted?", prompt);
         Assert.Contains("packet provenance", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dogfood_LoadoutsIncludeGateCriticalChunks()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var releasePrep = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["release-prep"]));
+        Assert.Contains("dominatus.constraint.no-live-providers", releasePrep.IncludedChunkIds);
+        Assert.Contains("dominatus.decision.refusal", releasePrep.IncludedChunkIds);
+    }
+
+    [Fact]
+    public void Dogfood_AuthorAndAuditorLoadoutsIncludeDoctrineGuardrails()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var author = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["codex-author"]));
+        var auditor = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["claude-auditor"]));
+
+        Assert.Contains(author.IncludedChunkIds, id => id is "dominatus.doctrine.orchestration" or "dominatus.doctrine.context");
+        Assert.Contains(auditor.IncludedChunkIds, id => id is "dominatus.doctrine.llm-role" or "dominatus.doctrine.orchestration");
+    }
+
+    [Fact]
+    public void Dogfood_PressureTestProducesBudgetOmissions()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var pressure = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["pressure-test"]));
+
+        Assert.True(pressure.WasBudgetConstrained);
+        Assert.Contains(pressure.Diagnostics, d => d.OmissionReason == LlmContextPacketOmissionReason.BudgetExceeded);
+        Assert.Contains("dominatus.doctrine.orchestration", pressure.IncludedChunkIds);
+    }
+
+    [Fact]
+    public void Dogfood_ManifestsExposeReadableEnumNames()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var json = File.ReadAllText(result.PacketManifestPaths["pressure-test"]);
+        Assert.Contains("\"statusName\":", json, StringComparison.Ordinal);
+        Assert.Contains("\"omissionReasonName\":", json, StringComparison.Ordinal);
     }
 
     [Fact]

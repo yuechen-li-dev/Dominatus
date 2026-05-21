@@ -35,7 +35,7 @@ public static class ContextDogfoodDemo
         var packetMap = new Dictionary<string, LlmContextPacket>(StringComparer.Ordinal);
         var packetPathMap = new Dictionary<string, string>(StringComparer.Ordinal);
         var packetManifestPathMap = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var loadoutId in new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep" })
+        foreach (var loadoutId in new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep", "pressure-test" })
         {
             var packet = store.BuildPacket(loadoutId, now);
             var packetPath = Path.Combine(packetsDir, $"{loadoutId}.md");
@@ -82,27 +82,28 @@ public static class ContextDogfoodDemo
         void Add(string id, string kind, int priority, string title, string content, params string[] tags)
             => store.Upsert(new LlmContextChunk { Id = id, Kind = kind, Priority = priority, Title = title, Content = content, Tags = tags, CreatedUtc = now, UpdatedUtc = now, Version = 1 });
 
-        Add("dominatus.doctrine.orchestration", "doctrine", 100, "Orchestration ownership", "Dominatus owns orchestration; external ecosystems provide capabilities.", "architecture");
-        Add("dominatus.doctrine.llm-role", "doctrine", 95, "LLM role boundaries", "LLMs are author/reviewer/source/sink or high-judgment components, not default live orchestrators.", "llm");
-        Add("dominatus.doctrine.context", "doctrine", 95, "Context persistence", "LLM context should be generated from explicit persisted chunks, not raw chat transcript.", "llm", "memory");
+        Add("dominatus.doctrine.orchestration", "doctrine", 100, "Orchestration ownership", "Dominatus owns orchestration; external ecosystems provide capabilities while keeping orchestration logic and refusal policy in Dominatus.", "architecture", "doctrine");
+        Add("dominatus.doctrine.llm-role", "doctrine", 95, "LLM role boundaries", "LLMs are author/reviewer/source/sink or high-judgment components, not default live orchestrators and should stay behind explicit policies.", "llm", "doctrine");
+        Add("dominatus.doctrine.context", "doctrine", 95, "Context persistence", "LLM context should be generated from explicit persisted chunks, not raw chat transcript, so packet manifests remain inspectable and reproducible.", "llm", "memory", "doctrine");
         Add("dominatus.warning.event-cursor", "warning", 90, "Event cursor caution", "Persistent event protocols should use sequence/correlation IDs; Ai.Event<T> defaults future-only.", "events");
         Add("dominatus.warning.semantic-kernel", "warning", 85, "Semantic Kernel scope", "Semantic Kernel is a capability/plugin surface; do not use SK planners/agents/orchestration in Dominatus samples.", "sk");
-        Add("dominatus.state.release-0.2", "project-state", 80, "Release baseline", "Core/OptFlow/Standard/HomeAssistant/Server released/prepped at 0.2.0; LLM/Stride preview.", "release");
-        Add("dominatus.state.semantic-kernel-sample", "sample-state", 80, "SK sample state", "SemanticKernelOrchestration sample maps ledger loop to WorldBb/mailbox/Ai.Decide/SK actuators.", "sample");
-        Add("dominatus.state.llm-context", "project-state", 85, "Llm.Context status", "Llm.Context M0/M1/M2 implemented JSON store, loadouts, binary .context container.", "llm");
+        Add("dominatus.state.release-0.2", "project-state", 80, "Release baseline", "Published/prepped 0.2.0 baseline: Core/OptFlow/Standard/HomeAssistant/Server. Next package wave (Llm.Context hardening and follow-on LLM work) still needs fresh release-prep gating before publish.", "release", "milestone", "release-gate");
+        Add("dominatus.state.semantic-kernel-sample", "sample-state", 80, "SK sample state", "SemanticKernelOrchestration sample maps ledger loop to WorldBb/mailbox/Ai.Decide/SK actuators; Core fixed the event-cursor issue with future-only default waits, while sample sequence/correlation discipline remains the protocol model.", "sample", "implementation");
+        Add("dominatus.state.llm-context", "project-state", 85, "Llm.Context status", "Implemented milestones: M0 store model, M1 loadouts, M2 container, M3 dogfood, M4.1 packet+manifest diagnostics, and M8b context-packet integration call surface. Current next action from review is M4.3 hardening then release prep. Known rough edges were release-prep gate coverage, budget-pressure evidence, and manifest enum readability.", "llm", "milestone", "implementation");
         Add("dominatus.state.testing", "project-state", 72, "Test matrix", "Context package tests run on net8.0 and net10.0 and are expected to stay provider-free.", "tests");
-        Add("dominatus.constraint.no-live-providers", "constraint", 86, "No live providers", "Dogfood and tests must not call live providers, require API keys, or rely on network runtime behavior.", "constraints");
+        Add("dominatus.constraint.no-live-providers", "constraint", 86, "No live providers", "Dogfood and tests must not call live providers, require API keys, or rely on network runtime behavior.", "constraints", "release-gate", "risk");
         Add("dominatus.decision.context-store-not-transcript", "decision", 90, "Store over transcript", "Treat transcript as artifact, not database. Use explicit chunks and generated packets.", "decisions");
-        Add("dominatus.decision.refusal", "decision", 88, "Refusal outcome", "Llm.Decide and MagiDecide support mandatory refusal outcome with rationale; proposed alternatives are non-executable.", "decisions");
-        Add("dominatus.audit.packet-observability", "audit", 78, "Packet observability", "Each role loadout should emit inspectable markdown artifacts and explicit included/omitted chunks.", "audit");
+        Add("dominatus.decision.refusal", "decision", 88, "Refusal outcome", "Llm.Decide and MagiDecide support mandatory refusal outcome with rationale; proposed alternatives are non-executable.", "decisions", "release-gate", "risk");
+        Add("dominatus.audit.packet-observability", "audit", 78, "Packet observability", "Each role loadout should emit inspectable markdown artifacts and explicit included/omitted chunks.", "audit", "implementation");
         Add("dominatus.open-loop.context-optflow-integration", "open-loop", 70, "OptFlow integration", "Future work: integrate generated context packets into Llm.Decide/MagiDecide context builders.", "future");
         Add("dominatus.open-loop.context-update-approval", "open-loop", 65, "Update approval", "Future work: context update commands/approval workflow so LLMs can propose memory updates without unilateral durable writes.", "future");
-        Add("dominatus.release-state.preview-channel", "release-state", 76, "Preview release channel", "LLM context package remains preview and should ship with dogfood docs before provider integration.", "release");
+        Add("dominatus.release-state.preview-channel", "release-state", 76, "Preview release channel", "LLM context package remains preview and should ship with dogfood docs before provider integration.", "release", "release-gate");
 
-        store.UpsertLoadout(new LlmContextLoadout { Id = "codex-author", Title = "Codex Author", Description = "Implementation author context", IncludeKinds = ["project-state", "sample-state", "constraint", "warning", "open-loop", "decision"], MaxChars = 6000 });
+        store.UpsertLoadout(new LlmContextLoadout { Id = "codex-author", Title = "Codex Author", Description = "Implementation author context", IncludeKinds = ["project-state", "sample-state", "constraint", "warning", "open-loop", "decision"], RequiredChunkIds = ["dominatus.doctrine.orchestration", "dominatus.doctrine.context"], MaxChars = 6000 });
         store.UpsertLoadout(new LlmContextLoadout { Id = "chatgpt-reviewer", Title = "ChatGPT Reviewer", Description = "Review and design context", IncludeKinds = ["doctrine", "decision", "warning", "project-state", "open-loop"], MaxChars = 8000 });
-        store.UpsertLoadout(new LlmContextLoadout { Id = "claude-auditor", Title = "Claude Auditor", Description = "Audit and edge-case context", IncludeKinds = ["warning", "decision", "audit", "project-state", "open-loop"], MaxChars = 7000 });
-        store.UpsertLoadout(new LlmContextLoadout { Id = "release-prep", Title = "Release Prep", Description = "Release preflight context", IncludeKinds = ["release-state", "project-state", "warning", "open-loop"], MaxChars = 5000 });
+        store.UpsertLoadout(new LlmContextLoadout { Id = "claude-auditor", Title = "Claude Auditor", Description = "Audit and edge-case context", IncludeKinds = ["warning", "decision", "audit", "project-state", "open-loop"], RequiredChunkIds = ["dominatus.doctrine.llm-role", "dominatus.doctrine.orchestration"], MaxChars = 7000 });
+        store.UpsertLoadout(new LlmContextLoadout { Id = "release-prep", Title = "Release Prep", Description = "Release preflight context", IncludeKinds = ["release-state", "project-state", "warning", "open-loop"], RequiredChunkIds = ["dominatus.constraint.no-live-providers", "dominatus.decision.refusal"], MaxChars = 5000 });
+        store.UpsertLoadout(new LlmContextLoadout { Id = "pressure-test", Title = "Pressure Test", Description = "Intentionally tight loadout used to verify budget omission diagnostics.", IncludeKinds = ["doctrine", "warning", "decision", "project-state", "open-loop", "constraint", "audit", "release-state", "sample-state"], RequiredChunkIds = ["dominatus.doctrine.orchestration"], MaxChars = 1500 });
 
         return store;
     }
@@ -126,6 +127,9 @@ public static class ContextDogfoodDemo
         sb.AppendLine("11. Were omissions due to filters or budget?");
         sb.AppendLine("12. Should any chunks be split, merged, or reprioritized?");
         sb.AppendLine("13. Does the packet provenance clearly explain which loadout/query produced this packet?");
+        sb.AppendLine("14. Did pressure-test show useful budget omission behavior?");
+        sb.AppendLine("15. Were enum names readable without looking up numeric values?");
+        sb.AppendLine("16. Are release-prep gate chunks now present?");
         return sb.ToString();
     }
 }
