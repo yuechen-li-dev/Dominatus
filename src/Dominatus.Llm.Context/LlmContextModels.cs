@@ -112,7 +112,9 @@ public sealed record LlmContextPacketChunkDiagnostic
     public required string Kind { get; init; }
     public required string Title { get; init; }
     public LlmContextPacketChunkStatus Status { get; init; }
+    public string StatusName { get; init; } = nameof(LlmContextPacketChunkStatus.Included);
     public LlmContextPacketOmissionReason OmissionReason { get; init; } = LlmContextPacketOmissionReason.None;
+    public string OmissionReasonName { get; init; } = nameof(LlmContextPacketOmissionReason.None);
     public bool IsRequired { get; init; }
     public int Priority { get; init; }
     public int CharacterCount { get; init; }
@@ -357,6 +359,8 @@ public sealed class LlmContextStore
             Title = chunk.Title,
             Status = status,
             OmissionReason = reason,
+            StatusName = status.ToString(),
+            OmissionReasonName = reason.ToString(),
             IsRequired = isRequired,
             Priority = chunk.Priority,
             CharacterCount = characterCount,

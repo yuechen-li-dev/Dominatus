@@ -19,3 +19,8 @@ M4.1 adds `LlmContextPacketProvenance` and `LlmContextPacketSourceKind` to make 
 Non-goals remain unchanged: no provider integrations, no live LLM calls, no SK/MCP/OptFlow integration.
 
 - Packet outputs can now be consumed directly by Llm.Call. See [LLM_V1_M8b_CONTEXT_PACKET_CALL.md](LLM_V1_M8b_CONTEXT_PACKET_CALL.md).
+
+
+## M4.3 hardening note
+
+See `docs/LLM_CONTEXT_M4_3_DOGFOOD_HARDENING.md` for release-prep loadout hardening, pressure-test budget diagnostics, and manifest enum readability updates.
