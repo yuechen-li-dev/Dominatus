@@ -1,7 +1,7 @@
 # SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT
 
 ## Purpose
-This sample demonstrates a safe fake Outlook mail/calendar assistant where Dominatus makes decisions and Semantic Kernel is only the capability surface.
+This sample demonstrates a safe fake Outlook mail/calendar assistant where Dominatus makes decisions, `Llm.Call` drafts human-facing text, and Semantic Kernel is only the capability surface.
 
 ## Architecture
 Microsoft Graph/Outlook capabilities are modeled as fake Semantic Kernel functions:
@@ -27,15 +27,34 @@ The sample uses `Ai.Decide` on slot `GraphAssistant.NextAction` with determinist
 - CreateCalendarEvent
 - Idle
 
-## Expected behavior
-- Mode A: reads mail/calendar, creates draft, does not send/create external effect.
-- Mode B: reads mail/calendar, sends approved urgent reply (deterministic first approved action), then can create event.
+Default weighting keeps urgent reply handling first:
+- no approval => `DraftReply`
+- approval granted => `SendApprovedReply`
 
-## Why safer than direct tool access
-Dominatus policy and orchestration gates unsafe actions before invocation, so plugin exposure alone cannot send mail/create events without approval.
+## M1 LLM draft generation (fake/no-live)
+M1 adds `Dominatus.Llm.OptFlow` and executes a real `Llm.Call` step with:
+- stableId: `graph-assistant.draft-urgent-reply`
+- intent: draft concise urgent deployment-status reply
+- persona: concise professional Outlook assistant
+- context: urgent subject/sender/body + calendar summary + approval mode
+- outputs stored in blackboard keys:
+  - `GraphAssistant.DraftText`
+  - `GraphAssistant.DraftJson`
+
+The sample uses `FakeLlmClient` + in-memory cassette mode, so no provider/network/model calls occur.
+
+## Expected behavior
+- Mode A (`Run(false)`): reads mail/calendar, uses `Llm.Call` to generate draft text, creates draft with generated text, does not send mail, does not create event.
+- Mode B (`Run(true)`): reads mail/calendar, uses `Llm.Call`, sends generated urgent reply text through approved send action.
+
+## Why this demonstrates the safe assistant stack
+The end-to-end flow is explicit and testable:
+Graph profile ➜ allowlist ➜ `Ai.Decide` ➜ `Llm.Call` draft text ➜ approval gate ➜ SK function execution.
+
+This demonstrates automation safety for Outlook-like tasks without exposing unsafe send/create behavior by default.
 
 ## Future live adapter notes
-A future adapter can replace fake invoker with real Graph-backed functions while preserving allowlist/profile/policy orchestration contracts.
+A future adapter can replace fake invokers with real Graph and real LLM handlers while preserving allowlist/profile/policy/orchestration contracts.
 
 ## Non-goals
-No OAuth, login, live Graph, real email/calendar effects, planners/agents/MCP/server/UI.
+No OAuth, login, live Graph, real email/calendar effects, live LLM providers, planners/agents/MCP/server/UI.
