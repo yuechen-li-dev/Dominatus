@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Dominatus.Llm.Context;
 
 namespace Dominatus.Llm.OptFlow;
 
@@ -32,6 +33,20 @@ public sealed class LlmContextBuilder
     }
 
     public LlmContextBuilder Add(string key, Guid value) => AddCore(key, new ContextValue(ContextValueKind.Guid, value));
+
+    public LlmContextBuilder AddPacket(
+        LlmContextPacket packet,
+        string? title = null,
+        bool includeManifestSummary = true)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        var rendered = includeManifestSummary
+            ? RenderPacketWithManifestSummary(packet, title)
+            : packet.Text;
+
+        return AddCore("__contextPacket", new ContextValue(ContextValueKind.String, rendered));
+    }
 
     public string BuildCanonicalJson()
     {
@@ -76,6 +91,33 @@ public sealed class LlmContextBuilder
         Long,
         Double,
         Guid,
+    }
+
+    private static string RenderPacketWithManifestSummary(LlmContextPacket packet, string? title)
+    {
+        var headerTitle = string.IsNullOrWhiteSpace(title)
+            ? packet.Provenance.LoadoutId ?? packet.StoreId
+            : title;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Context Packet: {headerTitle}");
+        sb.AppendLine();
+        sb.AppendLine($"Source: {packet.Provenance.SourceKind.ToString().ToLowerInvariant()}");
+        if (!string.IsNullOrWhiteSpace(packet.Provenance.LoadoutId))
+        {
+            sb.AppendLine($"Loadout: {packet.Provenance.LoadoutId}");
+        }
+
+        sb.AppendLine($"Store: {packet.StoreId}");
+        sb.AppendLine($"CharacterCount: {packet.CharacterCount}");
+        sb.AppendLine($"MaxChars: {packet.MaxChars}");
+        sb.AppendLine($"RemainingChars: {packet.RemainingChars}");
+        sb.AppendLine($"BudgetConstrained: {packet.WasBudgetConstrained.ToString().ToLowerInvariant()}");
+        sb.AppendLine($"IncludedChunks: {string.Join(", ", packet.IncludedChunkIds)}");
+        sb.AppendLine($"OmittedChunks: {packet.OmittedChunkIds.Count}");
+        sb.AppendLine();
+        sb.Append(packet.Text);
+        return sb.ToString();
     }
 
     private readonly record struct ContextValue(ContextValueKind Kind, object Value)

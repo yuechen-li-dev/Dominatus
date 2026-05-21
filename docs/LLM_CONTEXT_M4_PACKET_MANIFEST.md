@@ -17,3 +17,5 @@ M4.1 adds `LlmContextPacketProvenance` and `LlmContextPacketSourceKind` to make 
 - `QuerySummary` remains for human-readable context, but tooling should use `Provenance` rather than parsing `QuerySummary`.
 
 Non-goals remain unchanged: no provider integrations, no live LLM calls, no SK/MCP/OptFlow integration.
+
+- Packet outputs can now be consumed directly by Llm.Call. See [LLM_V1_M8b_CONTEXT_PACKET_CALL.md](LLM_V1_M8b_CONTEXT_PACKET_CALL.md).

@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\Dominatus.Llm.Context\Dominatus.Llm.Context.csproj" />
   </ItemGroup>
 
   <ItemGroup>
