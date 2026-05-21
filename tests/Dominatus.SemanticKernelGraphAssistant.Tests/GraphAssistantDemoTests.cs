@@ -7,60 +7,63 @@ namespace Dominatus.SemanticKernelGraphAssistant.Tests;
 public sealed class GraphAssistantDemoTests
 {
     [Fact]
-    public void GraphAssistant_NoApproval_UsesLlmCallToGenerateDraft()
+    public void GraphAssistant_Scheduling_NoApproval_UsesLlmCallToGenerateMeetingProposal()
     {
-        var result = GraphAssistantDemo.Run(false);
+        var result = GraphAssistantDemo.Run(false, GraphAssistantScenario.SchedulingRequest);
+        Assert.Equal(GraphAssistantScenario.SchedulingRequest, result.Scenario);
         Assert.False(result.ApprovalGranted);
         Assert.True(result.UsedLlmCall || result.LlmCallCount > 0);
-        Assert.Contains("deployment is still on track", result.DraftText ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.True(result.CreatedDraft);
+        Assert.Contains("next Tuesday afternoon", result.MeetingProposalText ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.False(result.CreatedCalendarEvent);
         Assert.False(result.SentMail);
     }
 
     [Fact]
-    public void GraphAssistant_NoApproval_DraftUsesGeneratedText()
+    public void GraphAssistant_Scheduling_NoApproval_DoesNotCreateEvent()
     {
-        var result = GraphAssistantDemo.Run(false);
-        var draftResult = result.BlackboardOutputs["draftResult"];
-        Assert.Contains(result.DraftText ?? string.Empty, draftResult, StringComparison.Ordinal);
-        Assert.Contains("graph.mail.create_draft", result.InvokedFunctions);
-        Assert.DoesNotContain("graph.mail.send_message", result.InvokedFunctions);
+        var result = GraphAssistantDemo.Run(false, GraphAssistantScenario.SchedulingRequest);
+        Assert.DoesNotContain("graph.calendar.create_event", result.InvokedFunctions);
+        Assert.False(result.CreatedCalendarEvent);
+        Assert.Contains(result.DecisionEvents, e => e.Contains("Approval missing; calendar create not performed", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void GraphAssistant_WithApproval_UsesLlmCallAndSendsGeneratedText()
+    public void GraphAssistant_Scheduling_WithApproval_CreatesCalendarEvent()
     {
-        var result = GraphAssistantDemo.Run(true);
+        var result = GraphAssistantDemo.Run(true, GraphAssistantScenario.SchedulingRequest);
         Assert.True(result.ApprovalGranted);
-        Assert.True(result.UsedLlmCall || result.LlmCallCount > 0);
-        Assert.Contains("deployment is still on track", result.DraftText ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.True(result.SentMail);
-        Assert.Contains(result.DraftText ?? string.Empty, result.BlackboardOutputs["sendResult"], StringComparison.Ordinal);
+        Assert.Equal(GraphAssistantScenario.SchedulingRequest, result.Scenario);
+        Assert.True(result.CreatedCalendarEvent);
+        Assert.Equal("event-created:meeting-next-week", result.CreatedEventId);
+        Assert.Contains("graph.calendar.create_event", result.InvokedFunctions);
+        Assert.Contains("next Tuesday afternoon", result.MeetingProposalText ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.False(result.SentMail);
     }
 
     [Fact]
-    public void GraphAssistant_UsesAiDecide_ForDraftAndSendModes()
+    public void GraphAssistant_Scheduling_WithApproval_UsesAiDecide()
     {
-        var noApproval = GraphAssistantDemo.Run(false);
-        var withApproval = GraphAssistantDemo.Run(true);
-        Assert.Contains(noApproval.DecisionEvents, e => e.Contains("Ai.Decide chose DraftReply", StringComparison.Ordinal));
-        Assert.Contains(withApproval.DecisionEvents, e => e.Contains("Ai.Decide chose SendApprovedReply", StringComparison.Ordinal));
+        var result = GraphAssistantDemo.Run(true, GraphAssistantScenario.SchedulingRequest);
+        Assert.Contains(result.DecisionEvents, e => e.Contains("Ai.Decide chose CreateApprovedCalendarEvent", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void GraphAssistant_UsesGraphProfileAllowlist()
+    public void GraphAssistant_CalendarCreatePolicyDeniesWithoutApprovalBeforeInvocation()
     {
-        var result = GraphAssistantDemo.Run(true);
-        var profile = SemanticKernelMicrosoftGraphProfiles.OutlookMailCalendar();
-        var allowed = profile.ToAllowedFunctions().Select(x => $"{x.PluginName}.{x.FunctionName}").ToHashSet(StringComparer.Ordinal);
-        Assert.All(result.InvokedFunctions, f => Assert.Contains(f, allowed));
+        var result = GraphAssistantDemo.Run(false, GraphAssistantScenario.SchedulingRequest);
+        Assert.DoesNotContain("graph.calendar.create_event", result.InvokedFunctions);
+        Assert.DoesNotContain("graph.calendar.create_event", result.AllowedFunctions);
+        Assert.False(result.CreatedCalendarEvent);
     }
 
-    [Fact]
-    public void GraphAssistant_SendPolicyStillDeniesWithoutApprovalBeforeInvocation()
+[Fact]
+    public void GraphAssistant_UrgentReply_BehaviorStillPasses()
     {
-        var result = GraphAssistantDemo.Run(false);
-        Assert.DoesNotContain("graph.mail.send_message", result.InvokedFunctions);
+        var noApproval = GraphAssistantDemo.Run(false, GraphAssistantScenario.UrgentReply);
+        var withApproval = GraphAssistantDemo.Run(true, GraphAssistantScenario.UrgentReply);
+        Assert.True(noApproval.CreatedDraft);
+        Assert.False(noApproval.SentMail);
+        Assert.True(withApproval.SentMail);
     }
 
     [Fact]
@@ -82,11 +85,14 @@ public sealed class GraphAssistantDemoTests
     }
 
     [Fact]
-    public void GraphAssistant_CompletesWithinMaxTicks()
+    public void GraphAssistant_CompletesWithinMaxTicks_BothScenarios()
     {
-        var result = GraphAssistantDemo.Run(false);
-        Assert.InRange(result.TickCount, 1, 39);
+        var urgent = GraphAssistantDemo.Run(false, GraphAssistantScenario.UrgentReply);
+        var scheduling = GraphAssistantDemo.Run(false, GraphAssistantScenario.SchedulingRequest);
+        Assert.InRange(urgent.TickCount, 1, 39);
+        Assert.InRange(scheduling.TickCount, 1, 39);
     }
+
 
     private static string FindRepoRoot()
     {

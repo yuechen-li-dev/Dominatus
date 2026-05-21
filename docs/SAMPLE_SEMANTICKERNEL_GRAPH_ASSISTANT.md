@@ -12,7 +12,7 @@ Microsoft Graph/Outlook capabilities are modeled as fake Semantic Kernel functio
 - graph.calendar.list_events
 - graph.calendar.create_event
 
-No live Graph SDK or network calls are used.
+No live Graph SDK, identity SDK, or network calls are used.
 
 ## Safety model
 - Capability profile: `SemanticKernelMicrosoftGraphProfiles.OutlookMailCalendar()`.
@@ -20,41 +20,53 @@ No live Graph SDK or network calls are used.
 - Allowlist mode B (approval): read + draft + send + create event.
 - `ActuationPolicy` denies `send_message` and `create_event` unless approval is granted.
 
+## Scenario API (M2)
+`GraphAssistantDemo.Run` now supports deterministic scenarios:
+- `Run(bool approvalGranted)` keeps M1 urgent-reply compatibility.
+- `Run(bool approvalGranted, GraphAssistantScenario scenario, TextWriter? output = null)` enables:
+  - `GraphAssistantScenario.UrgentReply`
+  - `GraphAssistantScenario.SchedulingRequest`
+
 ## Ai.Decide usage
 The sample uses `Ai.Decide` on slot `GraphAssistant.NextAction` with deterministic options:
 - DraftReply
 - SendApprovedReply
-- CreateCalendarEvent
+- DraftMeetingProposal
+- CreateApprovedCalendarEvent
 - Idle
 
-Default weighting keeps urgent reply handling first:
-- no approval => `DraftReply`
-- approval granted => `SendApprovedReply`
+Selection is scenario-aware:
+- UrgentReply + no approval => `DraftReply`
+- UrgentReply + approval => `SendApprovedReply`
+- SchedulingRequest + no approval => `DraftMeetingProposal`
+- SchedulingRequest + approval + free slot => `CreateApprovedCalendarEvent`
 
-## M1 LLM draft generation (fake/no-live)
-M1 adds `Dominatus.Llm.OptFlow` and executes a real `Llm.Call` step with:
-- stableId: `graph-assistant.draft-urgent-reply`
-- intent: draft concise urgent deployment-status reply
-- persona: concise professional Outlook assistant
-- context: urgent subject/sender/body + calendar summary + approval mode
-- outputs stored in blackboard keys:
-  - `GraphAssistant.DraftText`
-  - `GraphAssistant.DraftJson`
+## LLM draft generation (fake/no-live)
+The sample executes real `Llm.Call` steps with fake local infrastructure (`FakeLlmClient` + in-memory cassette):
+- `graph-assistant.draft-urgent-reply`
+- `graph-assistant.draft-meeting-proposal`
 
-The sample uses `FakeLlmClient` + in-memory cassette mode, so no provider/network/model calls occur.
+Meeting proposal call details:
+- intent: draft concise proposal from scheduling email + available slot
+- persona: concise professional Outlook scheduling assistant
+- context: scheduling subject/sender/body, slot, timezone (UTC)
+- output keys:
+  - `GraphAssistant.MeetingProposalText`
+  - `GraphAssistant.MeetingProposalJson`
+
+The fake deterministic meeting proposal text includes the stable phrase:
+- `I can meet next Tuesday afternoon...`
 
 ## Expected behavior
-- Mode A (`Run(false)`): reads mail/calendar, uses `Llm.Call` to generate draft text, creates draft with generated text, does not send mail, does not create event.
-- Mode B (`Run(true)`): reads mail/calendar, uses `Llm.Call`, sends generated urgent reply text through approved send action.
+- `UrgentReply` no approval: generate urgent reply text, create mail draft only.
+- `UrgentReply` approval: generate urgent reply text, send approved mail.
+- `SchedulingRequest` no approval: generate meeting proposal text, optionally draft mail response, do not create calendar event.
+- `SchedulingRequest` approval: generate meeting proposal text, create fake calendar event (`event-created:meeting-next-week`), no mail send.
 
 ## Why this demonstrates the safe assistant stack
-The end-to-end flow is explicit and testable:
-Graph profile ➜ allowlist ➜ `Ai.Decide` ➜ `Llm.Call` draft text ➜ approval gate ➜ SK function execution.
+Graph profile ➜ allowlist ➜ `Ai.Decide` ➜ `Llm.Call` draft/proposal text ➜ approval gate ➜ fake SK function execution.
 
-This demonstrates automation safety for Outlook-like tasks without exposing unsafe send/create behavior by default.
-
-## Future live adapter notes
-A future adapter can replace fake invokers with real Graph and real LLM handlers while preserving allowlist/profile/policy/orchestration contracts.
+This demonstrates both Outlook mail and calendar workflows without live Graph or live model risk.
 
 ## Non-goals
 No OAuth, login, live Graph, real email/calendar effects, live LLM providers, planners/agents/MCP/server/UI.
