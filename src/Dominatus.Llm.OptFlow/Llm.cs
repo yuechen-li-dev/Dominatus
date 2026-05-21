@@ -3,6 +3,7 @@ using System.Text.Json;
 using Dominatus.Core.Blackboard;
 using Dominatus.Core.Nodes;
 using Dominatus.Core.Runtime;
+using Dominatus.Llm.Context;
 
 namespace Dominatus.Llm.OptFlow;
 
@@ -197,10 +198,33 @@ public static class Llm
         string stableId,
         string intent,
         string persona,
-        Action<LlmContextBuilder> context,
+        LlmContextPacket packet,
         BbKey<string> storeTextAs,
         BbKey<string>? storeResultJsonAs = null,
         LlmSamplingOptions? sampling = null)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        return Call(
+            stableId,
+            intent,
+            persona,
+            context: c => c.AddPacket(packet),
+            storeTextAs,
+            storeResultJsonAs,
+            sampling,
+            packetMetadata: BuildPacketMetadata(packet));
+    }
+
+    public static AiStep Call(
+        string stableId,
+        string intent,
+        string persona,
+        Action<LlmContextBuilder> context,
+        BbKey<string> storeTextAs,
+        BbKey<string>? storeResultJsonAs = null,
+        LlmSamplingOptions? sampling = null,
+        LlmPromptContextPacketMetadata? packetMetadata = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
         ArgumentException.ThrowIfNullOrWhiteSpace(intent);
@@ -229,7 +253,10 @@ public static class Llm
             canonicalContextJson,
             resolvedSampling,
             LlmPromptCommand.DefaultPromptTemplateVersion,
-            LlmPromptCommand.DefaultOutputContractVersion);
+            LlmPromptCommand.DefaultOutputContractVersion)
+        {
+            ContextPacket = packetMetadata
+        };
 
         return new LlmPromptStep(request, storeTextAs, storeResultJsonAs);
     }
@@ -555,7 +582,20 @@ public static class Llm
                 stableId = Request.StableId,
                 intent = Request.Intent,
                 text = textValue,
-                finishReason = (string?)null
+                finishReason = (string?)null,
+                contextPacket = Request.ContextPacket is null
+                    ? null
+                    : new
+                    {
+                        storeId = Request.ContextPacket.StoreId,
+                        sourceKind = Request.ContextPacket.SourceKind,
+                        loadoutId = Request.ContextPacket.LoadoutId,
+                        characterCount = Request.ContextPacket.CharacterCount,
+                        maxChars = Request.ContextPacket.MaxChars,
+                        wasBudgetConstrained = Request.ContextPacket.WasBudgetConstrained,
+                        includedChunkIds = Request.ContextPacket.IncludedChunkIds,
+                        omittedChunkIds = Request.ContextPacket.OmittedChunkIds
+                    }
             });
 
             ctx.Bb.Set(_textKey, textValue);
@@ -570,6 +610,17 @@ public static class Llm
             return true;
         }
     }
+
+    private static LlmPromptContextPacketMetadata BuildPacketMetadata(LlmContextPacket packet)
+        => new(
+            packet.StoreId,
+            packet.Provenance.SourceKind.ToString().ToLowerInvariant(),
+            packet.Provenance.LoadoutId,
+            packet.CharacterCount,
+            packet.MaxChars,
+            packet.WasBudgetConstrained,
+            packet.IncludedChunkIds.ToArray(),
+            packet.OmittedChunkIds.ToArray());
 
     private sealed record LlmMagiDecisionStep(
         LlmMagiRequest Request,

@@ -270,3 +270,5 @@ A bounded-choice LLM decision system must allow the model to reject the frame.
 - Use `Llm.Call` for simple semantic transforms where the output is text and no bounded option decision is required.
 - Use `Llm.Decide` when runtime must choose among authored options with mandatory refusal.
 - Use `Llm.MagiDecide` for high-stakes multi-perspective judgment.
+
+- Context packets now feed directly into `Llm.Call` in M8b; keep `Call` for transform-only usage, and use `Decide`/`MagiDecide` for decisions.

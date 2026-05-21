@@ -14,6 +14,8 @@ public sealed record LlmPromptCommand(
     public const string DefaultPromptTemplateVersion = "llm.prompt.call.v1";
     public const string DefaultOutputContractVersion = "llm.prompt.result.v1";
 
+    public LlmPromptContextPacketMetadata? ContextPacket { get; init; }
+
     public LlmTextRequest ToTextRequest()
         => new(
             StableId,
