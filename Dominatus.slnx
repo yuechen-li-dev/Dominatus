@@ -5,6 +5,7 @@
   <Project Path="samples/Dominatus.Llm.ContextDogfood/Dominatus.Llm.ContextDogfood.csproj" />
   <Project Path="samples/Dominatus.SimConsole/Dominatus.SimConsole.csproj" Id="8741215a-1ee9-4090-823d-b2860b51c3e1" />
   <Project Path="samples/Dominatus.SemanticKernelOrchestration/Dominatus.SemanticKernelOrchestration.csproj" />
+  <Project Path="samples/Dominatus.SemanticKernelGraphAssistant/Dominatus.SemanticKernelGraphAssistant.csproj" />
   <Project Path="src/Ariadne.Console/Ariadne.ConsoleApp.csproj" Id="4ffe8ebb-8ad5-4faa-bdad-afddf42b99e7" />
   <Project Path="src/Ariadne.OptFlow/Ariadne.OptFlow.csproj" Id="7f70086a-7f3d-4fcf-a681-49c83963a640" />
   <Project Path="src/Dominatus.Core/Dominatus.Core.csproj" />
@@ -30,4 +31,5 @@
   <Project Path="src/Dominatus.Actuators.SemanticKernel/Dominatus.Actuators.SemanticKernel.csproj" />
   <Project Path="tests/Dominatus.Actuators.SemanticKernel.Tests/Dominatus.Actuators.SemanticKernel.Tests.csproj" />
   <Project Path="tests/Dominatus.SemanticKernelOrchestration.Tests/Dominatus.SemanticKernelOrchestration.Tests.csproj" />
+  <Project Path="tests/Dominatus.SemanticKernelGraphAssistant.Tests/Dominatus.SemanticKernelGraphAssistant.Tests.csproj" />
 </Solution>

@@ -150,3 +150,5 @@ Capability profiles classify capabilities only; runtime actuation gating should 
 
 ## M4 pointer
 The orchestration ladder now includes Graph-through-SK approval boundaries via `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.
+
+- Added orchestration ladder sample: `samples/Dominatus.SemanticKernelGraphAssistant` (Ai.Decide + SK profile allowlist + ActuationPolicy gating).
