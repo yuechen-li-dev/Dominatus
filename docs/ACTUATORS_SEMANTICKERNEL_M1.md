@@ -54,3 +54,5 @@ It is informational only and not an authorization mechanism.
 - Added M0 Semantic Kernel orchestration sample: `samples/Dominatus.SemanticKernelOrchestration`.
 
 See orchestration-boundary doctrine in `docs/ORCHESTRATION_LADDER.md` (Semantic Kernel/MCP as capability surfaces, Dominatus as orchestration kernel).
+
+See also: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md](ACTUATORS_SEMANTICKERNEL_M2_MCP.md) for MCP-through-Semantic-Kernel guidance (no auto-allow, no native MCP client in M2).
