@@ -115,3 +115,5 @@ yield return Ai.Await(LastWriteId, LastWriteResult);
 
 
 - [M3 Local calendar (.ics)](./ACTUATORS_STANDARD_M3_CALENDAR.md)
+
+- M5 HTTP web safety policy: see `ACTUATORS_STANDARD_M5_HTTP_WEB_SAFETY.md` for explicit host whitelist + deterministic deny/suspicion rules.

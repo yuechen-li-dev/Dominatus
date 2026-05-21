@@ -15,6 +15,19 @@ public sealed class PackageSmokeProjectGuardTests
         Assert.DoesNotContain("Dominatus.Actuators.Standard.csproj", text, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void StandardProject_DoesNotReferenceWebBlocklistOrProxyStylePackages()
+    {
+        var projectPath = Path.Combine(ProjectRoot(), "src", "Dominatus.Actuators.Standard", "Dominatus.Actuators.Standard.csproj");
+        var text = File.ReadAllText(projectPath);
+
+        Assert.DoesNotContain("adblock", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("dns", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("proxy", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("malware", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("browser", text, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string ProjectRoot()
         => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 }
