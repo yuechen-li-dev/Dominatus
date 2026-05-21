@@ -34,6 +34,16 @@ public class ContextDogfoodDemoTests
     }
 
     [Fact]
+    public void Dogfood_PacketManifestIncludesStructuredLoadoutProvenance()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var manifest = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["codex-author"]));
+        Assert.Equal(LlmContextPacketSourceKind.Loadout, manifest.Provenance.SourceKind);
+        Assert.Equal("codex-author", manifest.Provenance.LoadoutId);
+        Assert.Equal("Codex Author", manifest.Provenance.LoadoutTitle);
+    }
+
+    [Fact]
     public void Dogfood_ManifestShowsIncludedAndOmittedChunks()
     {
         var result = ContextDogfoodDemo.Run(NewOutputDir());
@@ -91,6 +101,7 @@ public class ContextDogfoodDemoTests
         var prompt = File.ReadAllText(Path.Combine(result.OutputDirectory, "packets", "LLM_REVIEW_PROMPT.md"));
         Assert.Contains(".manifest.json", prompt);
         Assert.Contains("Which omitted chunks would you have wanted?", prompt);
+        Assert.Contains("packet provenance", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
