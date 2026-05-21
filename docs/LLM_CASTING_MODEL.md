@@ -264,3 +264,9 @@ A bounded-choice LLM decision system must allow the model to reject the frame.
 - `proposedAlternative` is non-executable advisory text only.
 - Refusal never executes or commits a new authored option.
 - Re-entry restores recorded refusal outputs without redispatching provider.
+
+## Prompt-call doctrine (M8a)
+
+- Use `Llm.Call` for simple semantic transforms where the output is text and no bounded option decision is required.
+- Use `Llm.Decide` when runtime must choose among authored options with mandatory refusal.
+- Use `Llm.MagiDecide` for high-stakes multi-perspective judgment.
