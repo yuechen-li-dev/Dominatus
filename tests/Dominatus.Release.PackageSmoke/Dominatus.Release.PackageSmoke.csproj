@@ -7,10 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dominatus.Core" Version="0.2.0" />
-    <PackageReference Include="Dominatus.OptFlow" Version="0.2.0" />
-    <PackageReference Include="Dominatus.Actuators.Standard" Version="0.2.0" />
-    <PackageReference Include="Dominatus.Actuators.HomeAssistant" Version="0.2.0" />
-    <PackageReference Include="Dominatus.Server" Version="0.2.0" />
+    <PackageReference Include="Dominatus.Core" Version="0.2.1" />
+    <PackageReference Include="Dominatus.OptFlow" Version="0.2.1" />
+    <PackageReference Include="Ariadne.OptFlow" Version="0.2.1" />
+    <PackageReference Include="Dominatus.UtilityLite" Version="0.2.1" />
+    <PackageReference Include="Dominatus.Llm.Context" Version="0.1.0-preview" />
+    <PackageReference Include="Dominatus.Llm.OptFlow" Version="0.2.1-preview" />
+    <PackageReference Include="Dominatus.Actuators.Standard" Version="0.2.1" />
+    <PackageReference Include="Dominatus.Actuators.HomeAssistant" Version="0.2.1" />
+    <PackageReference Include="Dominatus.Actuators.SemanticKernel" Version="0.1.0-preview" />
+    <PackageReference Include="Dominatus.Server" Version="0.2.1" />
   </ItemGroup>
 </Project>

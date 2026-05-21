@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Actuators.HomeAssistant</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Yuechen Li</Authors>
     <Description>Home Assistant actuator pack for Dominatus. Provides allowlisted REST state reads and service calls through typed Dominatus actuation handlers.</Description>
     <PackageTags>ai;agent;actuator;home-assistant;home-automation;dominatus</PackageTags>

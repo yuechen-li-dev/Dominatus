@@ -5,10 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Dominatus.UtilityLite</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Dominatus Contributors</Authors>
     <Description>Readable utility helpers for Dominatus, including `When.*` conditions and score combinators for agent intent selection.</Description>
     <PackageTags>utility-ai;ai;hfsm;scoring;decision-making;game-ai</PackageTags>
+    <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

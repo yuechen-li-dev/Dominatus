@@ -6,10 +6,11 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Llm.OptFlow</PackageId>
-    <Version>0.2.0-preview</Version>
+    <Version>0.2.1-preview</Version>
     <Authors>Dominatus Contributors</Authors>
     <Description>LLM-oriented authoring and integration helpers for Dominatus workflows with deterministic runtime boundaries and auditable decisions.</Description>
     <PackageTags>ai;agents;llm;hfsm;utility-ai;tool-use;simulation</PackageTags>
+    <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

@@ -5,10 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Ariadne.OptFlow</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Dominatus Contributors</Authors>
     <Description>A dialogue-focused authoring layer for Dominatus, built on the same stateful runtime used for game and simulation agents.</Description>
     <PackageTags>dialogue;narrative;text-adventure;ai;hfsm;game-ai</PackageTags>
+    <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
