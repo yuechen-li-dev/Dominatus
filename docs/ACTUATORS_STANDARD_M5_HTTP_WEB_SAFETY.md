@@ -10,8 +10,9 @@
 - Unknown ordinary destinations are allowed unless explicit rule/suspicion denies.
 
 ## Scope and limitations
-This is a small deterministic guardrail layer, **not** comprehensive adblocking or malware protection.
+This is a deterministic guardrail layer, **not** comprehensive adblocking or malware protection.
 No DNS checks, remote feeds, subscriptions, crawlers, or external blocklists are used.
+This policy reduces agent web-risk. It is not a complete browser security product.
 
 ## API
 - `WebSafetyCategory`
@@ -61,22 +62,42 @@ Weighted deterministic signals (configured order) with raw sum and clamped score
 Each matching signal contributes weight and is captured in `WebSafetyScoreReport.Matches`.
 `WebSafetyScoreReport.RawScore` captures the unclamped sum for audit/tuning.
 
-Default signal baseline:
-- `host.ads` host contains `ads` (+0.35)
-- `host.raw_ip` host is raw IPv4/IPv6 (+0.80)
-- `host.tracker` host contains `tracker` (+0.35)
-- `host.analytics` host contains `analytics` (+0.35)
-- `path.collect` path/query contains `/collect` (+0.25)
-- `path.beacon` path/query contains `/beacon` (+0.25)
-- `query.utm` path/query contains `utm_` (+0.25)
-- `path.pixel` path/query contains `pixel` (+0.40)
+## Default signal library
+The signal model is behavioral (weighted vocabulary), not a complete blocklist.
+
+Defaults now include richer host/path/query suspicion vocabulary:
+- Host telemetry/tracking words (`telemetry`, `metrics`, `event`, `ingest`, `track`, `pixel`, etc.).
+- Host adtech/tracker vendor examples (`criteo`, `adnxs`, `taboola`, `hotjar`, `mixpanel`, etc.).
+- Path telemetry/tracking/exfil words (`/collect`, `/events`, `/identify`, `/exfil`, `/dump`, etc.).
+- Query click-id and exfil indicators (`gclid=`, `fbclid=`, `cid=`, `payload=`, `exfil=`, `utm_`).
+
+Vendor names are baseline examples, not comprehensive coverage.
+
+### Hard-block categories
+`WebSafetyPolicyOptions.BlockCategories` defaults to:
+- `Malware`
+- `Phishing`
+
+Evaluation order is:
+1. Non-HTTP command: allow
+2. Whitelist (`AllowedHosts` / `AllowedDestinations`): allow
+3. Explicit block rules: deny
+4. Suspicion scoring
+5. Any match in `BlockCategories`: deny immediately
+6. Threshold deny (`score >= SuspicionThreshold`) when enabled
+7. Allow
+
+Whitelist precedence still wins over hard-block categories.
+Hard-block deny reasons include category and signal IDs, without leaking query values.
+
+Combinatorial scoring can flag fresh domains by behavior signatures (for example, `data-ingest.io` + `/collect/events` + `cid=` + `payload=`), where `RawScore` exceeds 1.0 and the user-facing score remains clamped to 1.0.
 
 If `score >= SuspicionThreshold` and `BlockSuspiciousByDefault = true`, request is denied.
 Whitelist is evaluated before scoring. Explicit block rules are evaluated before scoring.
 Suspicion deny reasons include matched signal IDs and destination host/path (not full query values).
 
-## M5.3 hardening note
-M5.3 fixed an ambiguous host+path rule bug and added raw-IP/path-scoped allowlist hardening.
+## M5.4 hardening note
+M5.4 expands the default pure-data signal library and adds category hard-blocking for malware/phishing-style signal matches.
 
 ## Registration
 Recommended explicit registration on host policy chain:
@@ -94,4 +115,4 @@ This policy composes with existing Core `IActuationPolicy` behavior and can be c
 
 ## Non-goals
 No browser/proxy integration, DNS lookups, remote threat intelligence, or runtime network policy fetching.
-This is agent web safety guardrailing, not consumer adblock completeness.
+This is agent web safety guardrailing, not consumer adblock completeness or a uBlock replacement.
