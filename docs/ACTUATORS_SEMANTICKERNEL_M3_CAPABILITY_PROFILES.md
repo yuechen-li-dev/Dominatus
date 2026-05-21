@@ -120,3 +120,7 @@ host.AddPolicy(
 ```
 
 `AllowedFunctions` remains non-bypassable: even if policy allows, non-allowlisted functions are denied in the handler resolver.
+
+
+## M4 extension
+M4 adds Microsoft Graph Outlook mail-calendar profile helpers and allowlist examples. See `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.

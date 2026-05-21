@@ -67,3 +67,7 @@ A native Dominatus MCP actuator could be justified later only if host requiremen
 
 
 See also: `ACTUATORS_SEMANTICKERNEL_M3_CAPABILITY_PROFILES.md` for host-facing risk classification; M2 no-auto-allow doctrine remains unchanged.
+
+
+## M4 pointer
+Graph-through-SK profile details are documented in `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.

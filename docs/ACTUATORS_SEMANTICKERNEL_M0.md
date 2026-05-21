@@ -80,3 +80,7 @@ See also: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md](ACTUATORS_SEMANTICKERNEL_M2_MCP.m
 
 
 See also: `ACTUATORS_SEMANTICKERNEL_M3_CAPABILITY_PROFILES.md` for risk-tiered capability profile classification layered on top of explicit allowlists.
+
+
+## M4 note
+For Microsoft Graph/Outlook profile guidance, see `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.

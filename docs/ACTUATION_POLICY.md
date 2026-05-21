@@ -132,3 +132,7 @@ This keeps concerns separate:
 - workflow = approval/accountability boundary
 
 - Standard HTTP safety policy (`HttpWebSafetyActuationPolicy`) is an example concrete `IActuationPolicy` over HTTP commands; see `ACTUATORS_STANDARD_M5_HTTP_WEB_SAFETY.md`.
+
+
+## M4 pointer
+For approval-gating examples on Graph send/update/cancel operations, see `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.
