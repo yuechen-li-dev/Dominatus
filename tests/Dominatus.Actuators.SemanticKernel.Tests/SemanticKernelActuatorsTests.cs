@@ -72,7 +72,7 @@ public sealed class SemanticKernelActuatorsTests
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
         var text = File.ReadAllText(Path.Combine(root,"src","Dominatus.Actuators.SemanticKernel","Dominatus.Actuators.SemanticKernel.csproj"));
-        var forbidden = new[] { "Dominatus.OptFlow", "Dominatus.Llm.OptFlow", "Ariadne.OptFlow", "Stride", "HomeAssistant", "Mcp", "Planner", "Agents" };
+        var forbidden = new[] { "Dominatus.OptFlow", "Dominatus.Llm.OptFlow", "Ariadne.OptFlow", "Stride", "HomeAssistant", "Mcp", "Planner", "Agents", "Microsoft.Graph", "Graph", "OpenApi", "ModelContextProtocol", "A2A" };
         Assert.All(forbidden, f => Assert.DoesNotContain(f, text, StringComparison.OrdinalIgnoreCase));
     }
 
