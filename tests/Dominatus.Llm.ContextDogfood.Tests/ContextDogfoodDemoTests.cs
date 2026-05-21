@@ -17,6 +17,31 @@ public class ContextDogfoodDemoTests
         Assert.True(File.Exists(Path.Combine(outputDir, "packets", "LLM_REVIEW_PROMPT.md")));
     }
 
+
+    [Fact]
+    public void Dogfood_Run_CreatesPacketManifestArtifacts()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        Assert.All(new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep" }, id => Assert.True(File.Exists(result.PacketManifestPaths[id])));
+    }
+
+    [Fact]
+    public void Dogfood_PacketManifestContainsDiagnostics()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var manifest = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["codex-author"]));
+        Assert.NotEmpty(manifest.Diagnostics);
+    }
+
+    [Fact]
+    public void Dogfood_ManifestShowsIncludedAndOmittedChunks()
+    {
+        var result = ContextDogfoodDemo.Run(NewOutputDir());
+        var manifest = LlmContextPacketManifestJson.Deserialize(File.ReadAllText(result.PacketManifestPaths["release-prep"]));
+        Assert.NotEmpty(manifest.IncludedChunkIds);
+        Assert.NotEmpty(manifest.OmittedChunkIds);
+    }
+
     [Fact]
     public void Dogfood_BinaryContextManifestContainsStoreChunk()
     {
@@ -60,12 +85,12 @@ public class ContextDogfoodDemoTests
     }
 
     [Fact]
-    public void Dogfood_ReviewPromptContainsFeedbackQuestions()
+    public void Dogfood_ReviewPromptMentionsManifestInspection()
     {
         var result = ContextDogfoodDemo.Run(NewOutputDir());
         var prompt = File.ReadAllText(Path.Combine(result.OutputDirectory, "packets", "LLM_REVIEW_PROMPT.md"));
-        Assert.Contains("Which loadout would you want for implementation work?", prompt);
-        Assert.Contains("SOUL.context", prompt);
+        Assert.Contains(".manifest.json", prompt);
+        Assert.Contains("Which omitted chunks would you have wanted?", prompt);
     }
 
     [Fact]

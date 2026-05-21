@@ -56,3 +56,5 @@ M1 is still **offline/context-only**:
 
 See also: `docs/LLM_CONTEXT_M2_CONTAINER.md` for the binary `.context` durable container layer.
 See also: [LLM Context M3 Dogfood](LLM_CONTEXT_M3_DOGFOOD.md).
+
+- Loadout-driven packets now expose manifest diagnostics and budget telemetry (M4).

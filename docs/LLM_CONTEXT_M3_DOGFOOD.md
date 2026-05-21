@@ -43,3 +43,5 @@ Both should load to equivalent `LlmContextStore` data.
 
 ## Non-goals (M3)
 No live providers, no API keys, no SK planners/agents, no MCP, no OptFlow integration, and no runtime actuation for context writes.
+
+- See M4 packet manifest diagnostics: `LLM_CONTEXT_M4_PACKET_MANIFEST.md`.

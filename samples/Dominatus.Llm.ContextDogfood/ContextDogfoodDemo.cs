@@ -9,6 +9,7 @@ public sealed record ContextDogfoodResult(
     string JsonPath,
     string BinaryContextPath,
     IReadOnlyDictionary<string, string> PacketPaths,
+    IReadOnlyDictionary<string, string> PacketManifestPaths,
     IReadOnlyDictionary<string, LlmContextPacket> Packets,
     LlmContextContainerManifest Manifest);
 
@@ -33,13 +34,17 @@ public static class ContextDogfoodDemo
 
         var packetMap = new Dictionary<string, LlmContextPacket>(StringComparer.Ordinal);
         var packetPathMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        var packetManifestPathMap = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var loadoutId in new[] { "codex-author", "chatgpt-reviewer", "claude-auditor", "release-prep" })
         {
             var packet = store.BuildPacket(loadoutId, now);
             var packetPath = Path.Combine(packetsDir, $"{loadoutId}.md");
             File.WriteAllText(packetPath, packet.Text);
+            var manifestJsonPath = Path.Combine(packetsDir, $"{loadoutId}.manifest.json");
+            File.WriteAllText(manifestJsonPath, LlmContextPacketManifestJson.Serialize(packet.ToManifest()));
             packetMap[loadoutId] = packet;
             packetPathMap[loadoutId] = packetPath;
+            packetManifestPathMap[loadoutId] = manifestJsonPath;
         }
 
         var manifestPath = Path.Combine(outDir, "manifest.json");
@@ -56,6 +61,10 @@ public static class ContextDogfoodDemo
             writer.WriteLine($"Wrote packet: {pair.Key} {pair.Value}");
         }
         writer.WriteLine($"Wrote manifest: {manifestPath}");
+        foreach (var pair in packetManifestPathMap)
+        {
+            writer.WriteLine($"Wrote packet manifest: {pair.Key} {pair.Value}");
+        }
         writer.WriteLine($"Wrote review prompt: {reviewPromptPath}");
         writer.WriteLine();
         writer.WriteLine("LLM review prompt:");
@@ -64,7 +73,7 @@ public static class ContextDogfoodDemo
         writer.WriteLine("2. What chunks are missing?");
         writer.WriteLine("3. What should become persistent SOUL/PROJECT context?");
 
-        return new ContextDogfoodResult(outDir, jsonPath, binaryPath, packetPathMap, packetMap, manifest);
+        return new ContextDogfoodResult(outDir, jsonPath, binaryPath, packetPathMap, packetManifestPathMap, packetMap, manifest);
     }
 
     private static LlmContextStore CreateStore(DateTimeOffset now)
@@ -103,7 +112,7 @@ public static class ContextDogfoodDemo
         var sb = new StringBuilder();
         sb.AppendLine("# Dominatus LLM Context Dogfood Review Prompt");
         sb.AppendLine();
-        sb.AppendLine("Review the generated packet files and answer:");
+        sb.AppendLine("Review each generated packet markdown plus matching .manifest.json and answer:");
         sb.AppendLine("1. Which loadout would you want for implementation work?");
         sb.AppendLine("2. Which loadout would you want for review/audit work?");
         sb.AppendLine("3. Which packet felt too broad or too narrow?");
@@ -111,6 +120,11 @@ public static class ContextDogfoodDemo
         sb.AppendLine("5. Does this feel better than a pasted conversation summary?");
         sb.AppendLine("6. What additional metadata would help?");
         sb.AppendLine("7. What should become SOUL.context vs PROJECT.context vs SESSION.context?");
+        sb.AppendLine("8. Which omitted chunks would you have wanted?");
+        sb.AppendLine("9. Were any included chunks low-value?");
+        sb.AppendLine("10. Was the loadout budget too tight?");
+        sb.AppendLine("11. Were omissions due to filters or budget?");
+        sb.AppendLine("12. Should any chunks be split, merged, or reprioritized?");
         return sb.ToString();
     }
 }
