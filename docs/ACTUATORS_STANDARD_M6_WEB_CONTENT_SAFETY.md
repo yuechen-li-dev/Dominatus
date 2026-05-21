@@ -1,36 +1,43 @@
 # ACTUATORS_STANDARD_M6_WEB_CONTENT_SAFETY
 
 ## Purpose
-M6 adds a post-fetch content-safety scaffold for caller-provided web content blocks. It scores blocks and sanitizes output before LLM context/reasoning.
+M6 adds a deterministic post-fetch content-safety layer for caller-provided web content blocks. M6.1 hardens the LLM handoff so omitted content is visible instead of silently erased.
 
-## How it differs from HTTP WebSafety
-- **HTTP WebSafety (M5)**: pre-fetch destination safety (URL/host/path policy before transport).
-- **WebContentSafety (M6)**: post-fetch block-level sanitization of fetched content.
+## Honest SafeText handoff
+`WebContentSafetyReport` now exposes omission diagnostics:
+- `HasOmissions`
+- `OmissionSummary`
+- `OmittedBlockRecords`
 
-Both are policy/scoring helpers, not complete browser security products.
+This keeps downstream models/tools aware of what was removed and why.
 
-## Threat model
-Even same-origin content can contain sponsored widgets, prompt-injection text, unsafe download CTAs, and tracking/affiliate links.
+## Omission annotations
+By default, `SafeText` includes inline sentinels in original block order:
+`[CONTENT OMITTED: <Category>; block=<id>; signals=<top-signal-ids>]`
 
-## Block model
-`WebContentBlock` models extracted blocks (`Text`, `Link`, `Image`, `Script`, `IFrame`, `Download`, `Unknown`) with optional text/url/label/class/source hints.
+`AnnotateOmissions=false` restores kept-only rendering.
 
-## Signal model
-`WebContentSafetySignal` uses deterministic target+pattern matching (`TextContains`, `LabelContains`, `ClassOrIdContains`, `UrlContains`, `SourceHintContains`, `KindIs`) with weighted categories.
+## OmittedBlockRecords
+Each omitted block provides:
+- `BlockId`
+- `Category`
+- `RawScore` / `Score`
+- `TopSignalIds` (deterministic, bounded by `MaxOmissionSignalIds`)
 
-## Default signals
-Baseline signals cover Advertisement, Sponsored, Tracker, PromptInjection, UnsafeDownload, Affiliate, and Suspicious patterns.
+## Markdown-style link rendering
+Kept block rendering preserves link semantics:
+- Link: `[Label](Url)` / `[link](Url)`
+- Download: `[download: Label](Url)` / `[download](Url)`
+- Image: `[image: Label]` or `[image](Url)`
 
-## SafeText output
-`WebContentSafetyReport.SafeText` includes only kept blocks and joins rendered block text with configured separator.
+## Prompt-injection hardening
+Default signal coverage now includes stronger direct override/exfiltration/script patterns and dangerous URL schemes (`javascript:`, `data:`).
 
-## LLM handoff
-Use the sequence:
-1. HTTP destination policy (M5)
-2. Fetch
-3. WebContentSafety evaluation
-4. Send `SafeText` + provenance to `Llm.Context`
-5. Use sanitized packets for `Llm.Call` / `Llm.Decide`
+## False-positive tuning
+Overbroad prompt-injection phrases like `follow these instructions` and `system prompt` are downgraded to weak `Suspicious` signals so legitimate documentation/instructions are not hard-omitted by themselves.
 
-## Limitations and non-goals
-No browser engine, HTML/DOM parser, JS execution, OCR, ML/LLM classification, network calls, external lists, Core/MCP/SemanticKernel dependencies, or endpoint changes.
+## Dangerous links and shorteners
+Shortener signals (e.g., `bit.ly`) are added as `Suspicious`; high-risk schemes remain prompt-injection/hard-omit paths.
+
+## Limitations
+This remains a scoring helper, not a browser/parser/adblocker. No DOM/CSS parsing, JS execution, OCR, ML/LLM classification, external blocklists, live network policy calls, or Core/MCP/endpoint changes.
