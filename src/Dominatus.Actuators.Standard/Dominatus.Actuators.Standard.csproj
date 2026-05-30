@@ -5,16 +5,16 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Actuators.Standard</PackageId>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <Authors>Yuechen Li</Authors>
-    <Description>Standard actuator pack for Dominatus. Provides sandboxed file text operations and wall-clock time commands behind typed Dominatus actuation handlers.</Description>
-    <PackageTags>ai;agent;actuator;automation;files;time;dominatus</PackageTags>
+    <Description>Standard actuator pack for Dominatus. Provides sandboxed file text, wall-clock time, calendar, HTTP, process, HTTP WebSafety, and WebContentSafety helpers behind typed Dominatus actuation boundaries.</Description>
+    <PackageTags>ai;agent;actuator;automation;files;time;http;web-safety;dominatus</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Initial preview standard actuator pack with named-root sandboxed text file commands and injectable wall-clock time commands.</PackageReleaseNotes>
+    <PackageReleaseNotes>Adds HTTP WebSafety policy hardening and WebContentSafety prompt-injection/content filtering helpers while retaining standard file, time, calendar, HTTP, and process actuators.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

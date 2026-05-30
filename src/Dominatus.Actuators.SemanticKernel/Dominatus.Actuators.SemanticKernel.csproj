@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Actuators.SemanticKernel</PackageId>
-    <Version>0.1.0-preview</Version>
+    <Version>0.1.1-preview</Version>
     <Authors>Yuechen Li</Authors>
     <Description>Semantic Kernel actuator pack for Dominatus. Exposes allowlisted Semantic Kernel plugin functions as typed Dominatus actuation commands while keeping Dominatus as the orchestrator.</Description>
     <PackageTags>ai;agent;actuator;semantic-kernel;plugins;dominatus</PackageTags>
@@ -14,7 +14,7 @@
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Initial preview Semantic Kernel actuator pack with allowlisted plugin function invocation.</PackageReleaseNotes>
+    <PackageReleaseNotes>Adds capability profiles, ActuationPolicy integration, and Outlook mail/calendar capability profile helpers without introducing provider SDK dependencies.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
