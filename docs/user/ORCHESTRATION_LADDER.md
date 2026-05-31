@@ -114,7 +114,21 @@ Repo references:
 - `samples/Dominatus.SemanticKernelOrchestration`
 - `docs/samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md`
 
-### Example C — Context packet review
+### Example C — Parallel module implementation
+
+Use deterministic host orchestration when dependencies are explicit and independent work can safely run in isolated workers:
+
+- `Auth` produces a shared contract first.
+- `Api`, `Database`, and `Frontend` run in parallel with `Task.WhenAll` after the contract exists.
+- Each worker owns a tiny Dominatus world/agent path and calls `Llm.Call` with a fake deterministic provider.
+- The coordinator merges returned module results in fixed order, with no shared mid-tick `WorldBb` mutation.
+
+Repo references:
+
+- `samples/Dominatus.ParallelModuleWorkflow`
+- `docs/samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md`
+
+### Example D — Context packet review
 
 Use `Dominatus.Llm.Context` loadout packet + `Llm.Call(...)` for semantic review/rewrite/summarize transforms.
 
@@ -158,3 +172,5 @@ The orchestration ladder now includes Graph-through-SK approval boundaries via `
 ## M11a OpenRouter rung
 
 OpenRouter sits at the provider-access rung, below Dominatus orchestration. The approved call path is `Llm` helpers → actuation handler → `RankedLlmClient` → `OpenRouterLlmClient` → OpenRouter HTTP API. It does not introduce streaming, routing policy, model catalog sync, or OpenRouter-specific orchestration.
+
+- Added parallel module workflow sample: `samples/Dominatus.ParallelModuleWorkflow` (Auth contract first, then Api/Database/Frontend via host-level `Task.WhenAll` over isolated fake-LLM Dominatus workers).
