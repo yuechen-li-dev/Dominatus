@@ -1,0 +1,82 @@
+using System.Diagnostics;
+using Dominatus.RTSBenchmark.Simulation;
+
+namespace Dominatus.RTSBenchmark;
+
+public static class RtsBenchmarkRunner
+{
+    public static RtsBenchmarkResult Run(RtsBenchmarkOptions? options = null, TextWriter? output = null)
+    {
+        options ??= new RtsBenchmarkOptions();
+        Validate(options);
+        var (ships, ticks) = DefaultsFor(options.Mode);
+        ships = options.OverrideShips ?? ships;
+        ticks = options.OverrideTicks ?? ticks;
+
+        var simulation = new BattleSimulation(ships, options.CheckpointInterval, options.WriteCheckpoints, output);
+        var sw = Stopwatch.StartNew();
+        simulation.RunTicks(ticks);
+        sw.Stop();
+
+        var power = simulation.ComputeFleetPower();
+        var finalShips = simulation.Ships.Count(s => s.Alive);
+        var winner = DetermineWinner(power.Dominion, power.Collective);
+        var elapsedSeconds = Math.Max(sw.Elapsed.TotalSeconds, 0.000001d);
+        var metrics = simulation.Metrics;
+        var hash = DeterminismHasher.Compute(options.Mode, ticks, ships, simulation.Ships, metrics, winner, power.Dominion, power.Collective);
+        var result = new RtsBenchmarkResult
+        {
+            Mode = options.Mode,
+            TicksSimulated = ticks,
+            InitialShips = ships,
+            FinalShips = finalShips,
+            AgentTicks = metrics.AgentTicks,
+            DecisionsEvaluated = metrics.DecisionsEvaluated,
+            ActionsEmitted = metrics.ActionsEmitted,
+            EventsDelivered = metrics.EventsDelivered,
+            DamageEvents = metrics.DamageEvents,
+            RepairEvents = metrics.RepairEvents,
+            DestroyedShips = metrics.DestroyedShips,
+            ElapsedWallClock = sw.Elapsed,
+            AgentTicksPerSecond = metrics.AgentTicks / elapsedSeconds,
+            DecisionsPerSecond = metrics.DecisionsEvaluated / elapsedSeconds,
+            ActionsPerSecond = metrics.ActionsEmitted / elapsedSeconds,
+            EventsPerSecond = metrics.EventsDelivered / elapsedSeconds,
+            DeterminismHash = hash,
+            Winner = winner,
+            DominionFleetPower = power.Dominion,
+            CollectiveFleetPower = power.Collective,
+            Checkpoints = simulation.Checkpoints.ToArray(),
+            DominionActions = metrics.DominionActions,
+            CollectiveActions = metrics.CollectiveActions,
+            DominionEvents = metrics.DominionEvents,
+            CollectiveEvents = metrics.CollectiveEvents
+        };
+
+        BattleReport.Write(output ?? TextWriter.Null, result);
+        return result;
+    }
+
+    public static (int Ships, int Ticks) DefaultsFor(BenchmarkMode mode) => mode switch
+    {
+        BenchmarkMode.Smoke => (50, 250),
+        BenchmarkMode.Skirmish => (200, 1_000),
+        BenchmarkMode.Battle => (1_000, 2_000),
+        BenchmarkMode.Armada => (5_000, 5_000),
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
+    };
+
+    private static void Validate(RtsBenchmarkOptions options)
+    {
+        if (options.OverrideShips is <= 0) throw new ArgumentOutOfRangeException(nameof(options.OverrideShips), "OverrideShips must be greater than zero.");
+        if (options.OverrideTicks is <= 0) throw new ArgumentOutOfRangeException(nameof(options.OverrideTicks), "OverrideTicks must be greater than zero.");
+        if (options.CheckpointInterval <= 0) throw new ArgumentOutOfRangeException(nameof(options.CheckpointInterval), "CheckpointInterval must be greater than zero.");
+    }
+
+    private static Faction? DetermineWinner(float dominionFleetPower, float collectiveFleetPower)
+    {
+        if (dominionFleetPower <= 0 && collectiveFleetPower <= 0) return null;
+        if (Math.Abs(dominionFleetPower - collectiveFleetPower) < 0.001f) return null;
+        return dominionFleetPower > collectiveFleetPower ? Faction.Dominion : Faction.Collective;
+    }
+}

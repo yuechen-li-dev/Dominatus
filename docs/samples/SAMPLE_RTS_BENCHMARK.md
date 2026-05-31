@@ -575,3 +575,100 @@ A good M1 prompt should ask for:
 M0 outcome: **A — success**.
 
 The design contract exists; it defines the premise, factions, deterministic simulation model, metrics, modes, output, and testing strategy; it explicitly excludes LLM/GPU/network work; it recommends an M1 architecture after inspecting current Dominatus APIs; and it adds documentation links without runtime behavior changes.
+
+## M1 implementation: runnable headless RTS benchmark
+
+M1 adds the runnable sample at:
+
+```text
+samples/Dominatus.RTSBenchmark
+```
+
+and the test project at:
+
+```text
+tests/Dominatus.RTSBenchmark.Tests
+```
+
+The sample implements the M0 Option A-small path: one `AiAgent` per ship, a small HFSM rooted in a real `Ai.Decide` utility decision, per-agent blackboard inputs mirrored from the authoritative simulation state, and a benchmark-local deterministic action buffer for primary action resolution.
+
+### How to run
+
+Default Smoke run:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0
+```
+
+Manual Battle run:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Battle
+```
+
+Focused override run:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Smoke --ships 100 --ticks 500 --checkpoint-interval 100
+```
+
+CLI arguments:
+
+- `--mode Smoke|Skirmish|Battle|Armada` selects the benchmark size. Default is `Smoke`.
+- `--ships N` overrides the mode ship count.
+- `--ticks N` overrides the mode tick count.
+- `--checkpoint-interval N` changes checkpoint cadence.
+- `--no-checkpoints` suppresses checkpoint lines.
+
+### Modes
+
+- `Smoke`: 50 ships, 250 ticks; quick correctness and local smoke path.
+- `Skirmish`: 200 ships, 1,000 ticks; medium local run.
+- `Battle`: 1,000 ships, 2,000 ticks; manual benchmark run.
+- `Armada`: 5,000 ships, 5,000 ticks; manual-only stress option and not used by tests.
+
+### What M1 measures
+
+The primary score is:
+
+```text
+AgentTicksPerSecond = AgentTicks / elapsed wall-clock seconds
+```
+
+Secondary rates are decisions/sec, actions/sec, and events/sec. M1 also reports ticks simulated, initial/final ships, destroyed ships, damage events, repair events, delivered coordination events, final fleet powers, winner/draw, checkpoints, and a deterministic hash.
+
+The determinism hash intentionally excludes wall-clock time and derived rate values. It includes the mode, simulated ticks, ship counts, final per-ship alive/hull/shield/position/cooldown state, deterministic counters, winner, and final fleet power.
+
+### Tick flow implemented
+
+Each tick runs deterministic phases:
+
+1. Sensor phase mirrors decision-facing facts into each ship agent blackboard.
+2. Decision phase ticks each alive ship's `AiAgent` once and uses real `Ai.Decide` over RTS actions.
+3. Action emission records selected ship intents in the benchmark-local action buffer.
+4. Resolution sorts actions deterministically and applies movement, focus fire, repairs/regeneration, cooldowns, and destruction.
+5. Event phase uses the real Dominatus mailbox/event bus path for coordination events such as focus orders, target sightings, repair requests, ally-under-fire notices, ship destruction, and synapse loss.
+6. Metrics/checkpoint phases update fleet power and optional checkpoint output.
+
+### What M1 implements vs future work
+
+M1 implements deterministic headless CPU orchestration for Dominion and Collective fleets with utility decisions, real mail/event delivery, action records, combat/repair resolution, checkpoints, CLI output, and focused tests.
+
+M1 deliberately does **not** implement rendering, windows, GPU work, shaders, live LLM calls, `Llm.Call`, OpenAI/OpenRouter/Anthropic providers, Semantic Kernel, network access, pathfinding, real physics, a parallel scheduler, server endpoints, an ECS rewrite, or large data files.
+
+Future milestones can add squad/group-agent modes, optional `ActuatorHost` comparison paths, richer doctrine coordination, replay files, profiling/alloc reductions, or a non-measured visualization of saved reports.
+
+### Validation commands
+
+```bash
+dotnet build samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0
+dotnet test tests/Dominatus.RTSBenchmark.Tests/Dominatus.RTSBenchmark.Tests.csproj --framework net10.0
+dotnet test Dominatus.slnx
+```
+
+## M1 outcome
+
+M1 outcome: **A — success**.
+
+The benchmark sample now exists and runs; Smoke mode completes; each ship has an `AiAgent`; ship actions are selected through real `Ai.Decide`; combat resolves through a deterministic benchmark-local action buffer; Dominatus mailbox/event delivery is used for coordination events and counted; repeated runs produce stable deterministic hashes; metrics, score, checkpoints, and final reports are printed; focused utility tests pass; and the sample avoids LLM, GPU, network, provider, and rendering dependencies.
