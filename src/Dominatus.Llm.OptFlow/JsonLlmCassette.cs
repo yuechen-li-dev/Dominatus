@@ -178,7 +178,8 @@ public sealed class JsonLlmCassette : ILlmCassette
             Model: resultDto.Model,
             FinishReason: resultDto.FinishReason,
             InputTokens: resultDto.InputTokens,
-            OutputTokens: resultDto.OutputTokens);
+            OutputTokens: resultDto.OutputTokens,
+            ProviderId: resultDto.ProviderId);
 
         return ValidateEntry(new CassetteEntry(dto.RequestHash, request, result), path);
     }
@@ -245,6 +246,7 @@ public sealed class JsonLlmCassette : ILlmCassette
                 Text = entry.Result.Text,
                 RequestHash = entry.Result.RequestHash,
                 Provider = entry.Result.Provider,
+                ProviderId = entry.Result.ProviderId,
                 Model = entry.Result.Model,
                 FinishReason = entry.Result.FinishReason,
                 InputTokens = entry.Result.InputTokens,
@@ -307,6 +309,8 @@ public sealed class JsonLlmCassette : ILlmCassette
         public string? RequestHash { get; set; }
 
         public string? Provider { get; set; }
+
+        public string? ProviderId { get; set; }
 
         public string? Model { get; set; }
 

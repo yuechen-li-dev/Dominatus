@@ -74,3 +74,7 @@ When `storeResultJsonAs` is provided, the runtime stores JSON including:
 For the full orchestration ladder and decision checklist, see `docs/ORCHESTRATION_LADDER.md`.
 
 - M9a adds durable LLM streaming primitives (`LlmStream*` models, fake streaming client, recorder, and handler) with provider `IAsyncEnumerable` isolated at the boundary. See `LLM_V1_M9a_STREAMING.md`.
+
+## M10a ranked client note
+
+`Llm.Call` can use `RankedLlmClient` through the existing `LlmTextActuationHandler` because ranked fallback implements `ILlmClient`. Replay/strict cassette hits still suppress provider calls before the ranked client is invoked. Provider metadata is stored on `LlmTextResult.ProviderId`, but M8a prompt-call result JSON remains text-oriented and does not surface provider ID without broader actuation payload changes. See [LLM_V1_M10a_RANKED_CLIENT.md](LLM_V1_M10a_RANKED_CLIENT.md).

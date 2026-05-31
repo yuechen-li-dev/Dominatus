@@ -152,3 +152,5 @@ Capability profiles classify capabilities only; runtime actuation gating should 
 The orchestration ladder now includes Graph-through-SK approval boundaries via `ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md`.
 
 - Added orchestration ladder sample: `samples/Dominatus.SemanticKernelGraphAssistant` (Ai.Decide + SK profile allowlist + ActuationPolicy gating).
+
+- M10a adds ranked text-provider fallback as a boring `ILlmClient` implementation (`RankedLlmClient`). It is provider routing below the text actuation boundary, not a new orchestration layer. See `docs/LLM_V1_M10a_RANKED_CLIENT.md`.

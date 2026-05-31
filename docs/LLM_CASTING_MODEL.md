@@ -279,3 +279,7 @@ For ladder guidance on when to choose `Llm.Call`, `Llm.Decide`, `Llm.MagiDecide`
 
 
 - M9b adds authored stream helper (`Llm.Stream`) over M9a durable streaming.
+
+## M10a ranked provider fallback pointer
+
+M10a adds `RankedLlmClient`, a provider-agnostic `ILlmClient` wrapper for ordered text-completion fallback. This does not change the casting model: LLMs remain temporary performers behind `LlmTextActuationHandler`, while `Llm.Call`, `Llm.Decide`, `MagiDecide`, cassette/replay, approval, refusal, and context packet behavior stay above the provider boundary. See [LLM_V1_M10a_RANKED_CLIENT.md](LLM_V1_M10a_RANKED_CLIENT.md).
