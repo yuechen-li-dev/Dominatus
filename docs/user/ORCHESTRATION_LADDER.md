@@ -100,7 +100,22 @@ if (eventName == "counter.increment")
 
 For UI event routing with deterministic field transitions, prefer a dispatch table over an HFSM.
 
-### Example B — Semantic Kernel ledger orchestration sample
+### Example B — Utility-driven town simulation
+
+Use Dominatus HFSM/utility/mailbox state for runtime behavior, and reserve `Llm.Call` for semantic flavor text:
+
+- C# records hold stable townie identity/invariants.
+- Blackboards hold mutable needs and locations.
+- `Ai.Decide` chooses actions from utility scores.
+- Mailbox events coordinate social visits.
+- Fake `Llm.Call` produces dialogue only when `Chat` is selected.
+
+Repo references:
+
+- `samples/Dominatus.TinyTown`
+- `docs/samples/SAMPLE_TINYTOWN.md`
+
+### Example C — Semantic Kernel ledger orchestration sample
 
 Use Dominatus for durable orchestration over time:
 
@@ -114,7 +129,7 @@ Repo references:
 - `samples/Dominatus.SemanticKernelOrchestration`
 - `docs/samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md`
 
-### Example C — Parallel module implementation
+### Example D — Parallel module implementation
 
 Use deterministic host orchestration when dependencies are explicit and independent work can safely run in isolated workers:
 
@@ -128,7 +143,7 @@ Repo references:
 - `samples/Dominatus.ParallelModuleWorkflow`
 - `docs/samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md`
 
-### Example D — Context packet review
+### Example E — Context packet review
 
 Use `Dominatus.Llm.Context` loadout packet + `Llm.Call(...)` for semantic review/rewrite/summarize transforms.
 
@@ -174,3 +189,5 @@ The orchestration ladder now includes Graph-through-SK approval boundaries via `
 OpenRouter sits at the provider-access rung, below Dominatus orchestration. The approved call path is `Llm` helpers → actuation handler → `RankedLlmClient` → `OpenRouterLlmClient` → OpenRouter HTTP API. It does not introduce streaming, routing policy, model catalog sync, or OpenRouter-specific orchestration.
 
 - Added parallel module workflow sample: `samples/Dominatus.ParallelModuleWorkflow` (Auth contract first, then Api/Database/Frontend via host-level `Task.WhenAll` over isolated fake-LLM Dominatus workers).
+
+- Added TinyTown sample: `samples/Dominatus.TinyTown` (utility AI directs life-sim behavior; fake `Llm.Call` is used only for chat dialogue).

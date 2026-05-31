@@ -38,6 +38,7 @@ This index separates user-facing documentation from release prep, development lo
 
 ## Samples
 
+- [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation with blackboard needs, `Ai.Decide`, mailbox social events, and fake `Llm.Call` dialogue only.
 - [Parallel Module Workflow](samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md) — deterministic Auth-contract-first workflow with `Task.WhenAll` over independent fake-LLM Dominatus module workers.
 - [Semantic Kernel Graph Assistant](samples/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md) — fake Outlook/Graph assistant with Dominatus-owned state, SK capability profile, LLM proposals, and approval-gated actions.
 - [Semantic Kernel Orchestration](samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md) — Microsoft-style orchestration loop implemented with Dominatus HFSM/utility/mailbox plus SK functions.
