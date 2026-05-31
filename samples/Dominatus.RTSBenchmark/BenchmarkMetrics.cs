@@ -7,17 +7,19 @@ public sealed class BenchmarkMetrics
     internal const int CooldownPhase = 0;
     internal const int SensorPhase = 1;
     internal const int DecisionPhase = 2;
-    internal const int ActionResolutionPhase = 3;
-    internal const int EventDeliveryPhase = 4;
-    internal const int MetricsPhase = 5;
-    internal const int CheckpointPhase = 6;
-    internal const int HashingPhase = 7;
+    internal const int ActionSortPhase = 3;
+    internal const int ActionResolutionPhase = 4;
+    internal const int EventDeliveryPhase = 5;
+    internal const int MetricsPhase = 6;
+    internal const int CheckpointPhase = 7;
+    internal const int HashingPhase = 8;
 
     private static readonly string[] PhaseNames =
     [
         "Cooldown",
         "Sensor",
         "Decision",
+        "ActionSort",
         "ActionResolution",
         "EventDelivery",
         "Metrics",
@@ -28,6 +30,9 @@ public sealed class BenchmarkMetrics
     private readonly long[] _phaseElapsedTicks = new long[PhaseNames.Length];
 
     public long AgentTicks;
+    public long AgentTickCalls;
+    public long HfsmTicks;
+    public long DecideSteps;
     public long DecisionsEvaluated;
     public long ActionsEmitted;
     public long EventsDelivered;
@@ -39,8 +44,21 @@ public sealed class BenchmarkMetrics
     public long DominionEvents;
     public long CollectiveEvents;
     public long UtilityOptionsEvaluated;
+    public long UtilityOptionsSelected;
+    public long ActionStatesEntered;
+    public long IdleActionsEmitted;
+    public long RetreatActionsEmitted;
+    public long FocusFireActionsEmitted;
+    public long RepairActionsEmitted;
+    public long AdvanceActionsEmitted;
+    public long LaunchDroneActionsEmitted;
+    public long RegenerateActionsEmitted;
+    public long HoldFormationActionsEmitted;
     public long BlackboardWrites;
     public long BlackboardReads;
+    public long DecisionBlackboardReads;
+    public long DecisionBlackboardWrites;
+    public long SensorBlackboardWrites;
     public long SensorPairsChecked;
     public long SpatialMaxCellsUsed;
     public long SpatialCellQueries;
@@ -53,8 +71,16 @@ public sealed class BenchmarkMetrics
     public long NearContacts;
     public long SensorBandContacts;
     public long ActionsSorted;
+    public long ActionSortBatches;
+    public long MaxActionsInTick;
     public long MailboxEventsSent;
     public long MailboxEventsDelivered;
+    public long TargetSpottedEvents;
+    public long RepairRequestedEvents;
+    public long CommandFocusOrderEvents;
+    public long ShipDestroyedEvents;
+    public long SynapseLostEvents;
+    public long AllyUnderFireEvents;
     public long CheckpointsWritten;
 
     internal void AddPhaseTicks(int phase, long elapsedTicks) => _phaseElapsedTicks[phase] += elapsedTicks;

@@ -11,6 +11,8 @@ public static class ShipAgentFactory
 {
     private static readonly string[] ActionIds = Enum.GetNames<ShipActionType>();
 
+    public static int UtilityOptionCount => ActionIds.Length;
+
     public static AiAgent Create(ShipState ship)
     {
         var graph = new HfsmGraph { Root = "Root" };

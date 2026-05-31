@@ -12,6 +12,7 @@ public sealed class BattleSimulation
     private readonly Dictionary<int, AiAgent> _agents = new();
     private readonly Dictionary<int, int> _shipToAgentId = new();
     private readonly List<ShipAction> _actions = new();
+    private ShipAction[] _sortedActions = [];
     private readonly BenchmarkMetrics _metrics = new();
     private readonly List<string> _checkpoints = new();
     private readonly TextWriter? _output;
@@ -71,6 +72,10 @@ public sealed class BattleSimulation
         phaseStart = Stopwatch.GetTimestamp();
         DecisionPhase(tick);
         _metrics.AddPhaseTicks(BenchmarkMetrics.DecisionPhase, Stopwatch.GetTimestamp() - phaseStart);
+
+        phaseStart = Stopwatch.GetTimestamp();
+        SortActions();
+        _metrics.AddPhaseTicks(BenchmarkMetrics.ActionSortPhase, Stopwatch.GetTimestamp() - phaseStart);
 
         phaseStart = Stopwatch.GetTimestamp();
         ResolutionPhase(tick);
@@ -193,29 +198,50 @@ public sealed class BattleSimulation
         {
             if (!ship.Alive) continue;
             var agent = _agents[ship.Id];
-            agent.Tick(_world);
+            UtilityDiagnostics.BeginDecision(_metrics);
+            try
+            {
+                agent.Tick(_world);
+            }
+            finally
+            {
+                UtilityDiagnostics.EndDecision();
+            }
+
             _metrics.AgentTicks++;
-            _metrics.DecisionsEvaluated += 9;
-            _metrics.UtilityOptionsEvaluated += 9;
-            var selected = BbGet(agent, BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
+            _metrics.AgentTickCalls++;
+            _metrics.HfsmTicks++;
+            _metrics.DecideSteps++;
+            _metrics.DecisionsEvaluated += ShipAgentFactory.UtilityOptionCount;
+            _metrics.UtilityOptionsEvaluated += ShipAgentFactory.UtilityOptionCount;
+            _metrics.UtilityOptionsSelected++;
+            var selected = BbGetDecision(agent, BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
             var type = Enum.TryParse<ShipActionType>(selected, out var parsed) ? parsed : ShipActionType.Idle;
             ship.CurrentAction = type.ToString();
             ship.TargetId = ChooseTargetForAction(ship, type);
             _actions.Add(new ShipAction(tick, ship.Id, ship.Faction, type, ship.TargetId, PriorityFor(type)));
-            _metrics.ActionsEmitted++;
+            CountActionEmission(type);
             if (ship.Faction == Faction.Dominion) _metrics.DominionActions++; else _metrics.CollectiveActions++;
         }
     }
 
+    private void SortActions()
+    {
+        _metrics.ActionSortBatches++;
+        _metrics.ActionsSorted += _actions.Count;
+        _metrics.MaxActionsInTick = Math.Max(_metrics.MaxActionsInTick, _actions.Count);
+        _sortedActions = _actions.OrderBy(a => a.Tick)
+            .ThenBy(a => a.Priority)
+            .ThenBy(a => a.Faction)
+            .ThenBy(a => a.ActorId)
+            .ThenBy(a => a.TargetId ?? -1)
+            .ThenBy(a => a.Type)
+            .ToArray();
+    }
+
     private void ResolutionPhase(int tick)
     {
-        _metrics.ActionsSorted += _actions.Count;
-        foreach (var action in _actions.OrderBy(a => a.Tick)
-                     .ThenBy(a => a.Priority)
-                     .ThenBy(a => a.Faction)
-                     .ThenBy(a => a.ActorId)
-                     .ThenBy(a => a.TargetId ?? -1)
-                     .ThenBy(a => a.Type))
+        foreach (var action in _sortedActions)
         {
             if (!_byId.TryGetValue(action.ActorId, out var actor) || !actor.Alive) continue;
             var def = ShipClassDefinition.Get(actor.Class);
@@ -247,6 +273,40 @@ public sealed class BattleSimulation
         }
     }
 
+    private void CountActionEmission(ShipActionType type)
+    {
+        _metrics.ActionsEmitted++;
+        _metrics.ActionStatesEntered++;
+        switch (type)
+        {
+            case ShipActionType.Advance:
+                _metrics.AdvanceActionsEmitted++;
+                break;
+            case ShipActionType.FocusFire:
+                _metrics.FocusFireActionsEmitted++;
+                break;
+            case ShipActionType.Retreat:
+                _metrics.RetreatActionsEmitted++;
+                break;
+            case ShipActionType.RepairAlly:
+                _metrics.RepairActionsEmitted++;
+                break;
+            case ShipActionType.LaunchDrone:
+                _metrics.LaunchDroneActionsEmitted++;
+                break;
+            case ShipActionType.Regenerate:
+                _metrics.RegenerateActionsEmitted++;
+                break;
+            case ShipActionType.ScreenHighValue:
+            case ShipActionType.HoldFormation:
+                _metrics.HoldFormationActionsEmitted++;
+                break;
+            case ShipActionType.Idle:
+                _metrics.IdleActionsEmitted++;
+                break;
+        }
+    }
+
     private void EventPhase(int tick)
     {
         foreach (var ship in _ships)
@@ -271,14 +331,40 @@ public sealed class BattleSimulation
         {
             if (!ship.Alive || ship.Faction != faction) continue;
             _metrics.MailboxEventsSent++;
+            CountEventMessage(message);
             if (_world.Mail.Send(new AgentId(_shipToAgentId[ship.Id]), message))
             {
                 _metrics.EventsDelivered++;
                 _metrics.MailboxEventsDelivered++;
                 if (sourceFaction == Faction.Dominion) _metrics.DominionEvents++; else _metrics.CollectiveEvents++;
                 if (message is CommandFocusOrder order)
-                    BbSet(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, order.TargetShipId);
+                    BbSetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, order.TargetShipId);
             }
+        }
+    }
+
+    private void CountEventMessage<T>(T message) where T : notnull
+    {
+        switch (message)
+        {
+            case TargetSpotted:
+                _metrics.TargetSpottedEvents++;
+                break;
+            case RepairRequested:
+                _metrics.RepairRequestedEvents++;
+                break;
+            case CommandFocusOrder:
+                _metrics.CommandFocusOrderEvents++;
+                break;
+            case ShipDestroyed:
+                _metrics.ShipDestroyedEvents++;
+                break;
+            case SynapseLost:
+                _metrics.SynapseLostEvents++;
+                break;
+            case AllyUnderFire:
+                _metrics.AllyUnderFireEvents++;
+                break;
         }
     }
 
@@ -338,12 +424,12 @@ public sealed class BattleSimulation
 
     private int? ChooseTargetForAction(ShipState ship, ShipActionType type) => type switch
     {
-        ShipActionType.FocusFire or ShipActionType.LaunchDrone => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction)
-            ?? ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, -1), ship.Faction),
-        ShipActionType.RepairAlly => ValidAllyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestRepairTargetId, -1), ship.Faction),
-        ShipActionType.Retreat => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.ImmediateThreatId, -1), ship.Faction)
-            ?? ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction),
-        _ => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction)
+        ShipActionType.FocusFire or ShipActionType.LaunchDrone => ValidEnemyId(BbGetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction)
+            ?? ValidEnemyId(BbGetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, -1), ship.Faction),
+        ShipActionType.RepairAlly => ValidAllyId(BbGetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.BestRepairTargetId, -1), ship.Faction),
+        ShipActionType.Retreat => ValidEnemyId(BbGetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.ImmediateThreatId, -1), ship.Faction)
+            ?? ValidEnemyId(BbGetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction),
+        _ => ValidEnemyId(BbGetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction)
     };
 
     private int? ValidEnemyId(int id, Faction faction) => _byId.TryGetValue(id, out var ship) && ship.Alive && ship.Faction != faction ? id : null;
@@ -490,9 +576,24 @@ public sealed class BattleSimulation
         return agent.Bb.GetOrDefault(key, defaultValue);
     }
 
+    private T BbGetDecision<T>(AiAgent agent, BbKey<T> key, T defaultValue = default!)
+    {
+        _metrics.BlackboardReads++;
+        _metrics.DecisionBlackboardReads++;
+        return agent.Bb.GetOrDefault(key, defaultValue);
+    }
+
     private void BbSet<T>(AiAgent agent, BbKey<T> key, T value)
     {
         _metrics.BlackboardWrites++;
+        _metrics.SensorBlackboardWrites++;
+        agent.Bb.Set(key, value);
+    }
+
+    private void BbSetDecision<T>(AiAgent agent, BbKey<T> key, T value)
+    {
+        _metrics.BlackboardWrites++;
+        _metrics.DecisionBlackboardWrites++;
         agent.Bb.Set(key, value);
     }
 

@@ -28,6 +28,9 @@ public sealed record RtsBenchmarkResult
     public required int InitialShips { get; init; }
     public required int FinalShips { get; init; }
     public required long AgentTicks { get; init; }
+    public required long AgentTickCalls { get; init; }
+    public required long HfsmTicks { get; init; }
+    public required long DecideSteps { get; init; }
     public required long DecisionsEvaluated { get; init; }
     public required long ActionsEmitted { get; init; }
     public required long EventsDelivered { get; init; }
@@ -37,9 +40,28 @@ public sealed record RtsBenchmarkResult
     public required TimeSpan ElapsedWallClock { get; init; }
     public required TimeSpan MeasuredSimulationTime { get; init; }
     public required IReadOnlyList<RtsBenchmarkPhaseTiming> PhaseTimings { get; init; }
+    public required long AllocatedBytes { get; init; }
+    public required double BytesPerAgentTick { get; init; }
+    public required double BytesPerDecision { get; init; }
+    public required int Gen0Collections { get; init; }
+    public required int Gen1Collections { get; init; }
+    public required int Gen2Collections { get; init; }
     public required long UtilityOptionsEvaluated { get; init; }
+    public required long UtilityOptionsSelected { get; init; }
+    public required long ActionStatesEntered { get; init; }
+    public required long IdleActionsEmitted { get; init; }
+    public required long RetreatActionsEmitted { get; init; }
+    public required long FocusFireActionsEmitted { get; init; }
+    public required long RepairActionsEmitted { get; init; }
+    public required long AdvanceActionsEmitted { get; init; }
+    public required long LaunchDroneActionsEmitted { get; init; }
+    public required long RegenerateActionsEmitted { get; init; }
+    public required long HoldFormationActionsEmitted { get; init; }
     public required long BlackboardWrites { get; init; }
     public required long BlackboardReads { get; init; }
+    public required long DecisionBlackboardReads { get; init; }
+    public required long DecisionBlackboardWrites { get; init; }
+    public required long SensorBlackboardWrites { get; init; }
     public required long SensorPairsChecked { get; init; }
     public required RtsSensorMode SensorMode { get; init; }
     public required float SpatialCellSize { get; init; }
@@ -57,12 +79,27 @@ public sealed record RtsBenchmarkResult
     public required double RelevantContactsPerAgentTick { get; init; }
     public required double IgnoredContactsPerSensorPair { get; init; }
     public required long ActionsSorted { get; init; }
+    public required long ActionSortBatches { get; init; }
+    public required long MaxActionsInTick { get; init; }
+    public required double AverageActionsPerTick { get; init; }
     public required long MailboxEventsSent { get; init; }
     public required long MailboxEventsDelivered { get; init; }
+    public required long TargetSpottedEvents { get; init; }
+    public required long RepairRequestedEvents { get; init; }
+    public required long CommandFocusOrderEvents { get; init; }
+    public required long ShipDestroyedEvents { get; init; }
+    public required long SynapseLostEvents { get; init; }
+    public required long AllyUnderFireEvents { get; init; }
     public required long CheckpointsWritten { get; init; }
     public required string HotPathSummary { get; init; }
     public required double AgentTicksPerSecond { get; init; }
     public required double DecisionsPerSecond { get; init; }
+    public required double AgentTicksPerDecisionSecond { get; init; }
+    public required double UtilityOptionsPerAgentTick { get; init; }
+    public required double DecisionsPerAgentTick { get; init; }
+    public required double ActionsPerAgentTick { get; init; }
+    public required double EventsPerAgentTick { get; init; }
+    public required double EventsPerAction { get; init; }
     public required double ActionsPerSecond { get; init; }
     public required double EventsPerSecond { get; init; }
     public required string DeterminismHash { get; init; }
