@@ -672,3 +672,54 @@ dotnet test Dominatus.slnx
 M1 outcome: **A — success**.
 
 The benchmark sample now exists and runs; Smoke mode completes; each ship has an `AiAgent`; ship actions are selected through real `Ai.Decide`; combat resolves through a deterministic benchmark-local action buffer; Dominatus mailbox/event delivery is used for coordination events and counted; repeated runs produce stable deterministic hashes; metrics, score, checkpoints, and final reports are printed; focused utility tests pass; and the sample avoids LLM, GPU, network, provider, and rendering dependencies.
+
+## M2 phase timing and hotspot diagnostics
+
+M2 extends the runnable `samples/Dominatus.RTSBenchmark` sample with measurement-first diagnostics. It does not optimize the simulation or change `Dominatus.Core`; its purpose is to answer where benchmark time is currently spent before selecting future work.
+
+The result API now reports a measured simulation window and per-phase timings:
+
+- `MeasuredSimulationTime` is the sum of measured benchmark phases. It covers the simulation loop plus final metrics/hash work that is explicitly timed, not process startup or console report formatting.
+- `PhaseTimings` contains one `RtsBenchmarkPhaseTiming` record per phase with `Name`, raw `ElapsedTicks`, converted `Elapsed`, and `PercentOfMeasuredRuntime`.
+- `ElapsedWallClock` remains the outer benchmark stopwatch for the run, including the measured simulation work and final metrics/hash timing before console report formatting.
+
+The standard phase names are:
+
+- `Cooldown` — per-ship cooldown decrement.
+- `Sensor` — authoritative ship state mirrored into decision-facing blackboards, including nearest-enemy and vulnerable-ally scans.
+- `Decision` — real per-ship `AiAgent.Tick` / `Ai.Decide` work plus action intent emission.
+- `ActionResolution` — deterministic action sorting and combat/repair/movement resolution.
+- `EventDelivery` — mailbox sends and delivered coordination events.
+- `Metrics` — final fleet-power/winner aggregation.
+- `Checkpoint` — checkpoint line construction and writes when checkpoints are enabled.
+- `Hashing` — deterministic hash finalization.
+
+The final console report always includes a compact hotspot line such as:
+
+```text
+Hot path: Sensor 61.3%, Decision 22.1%, ActionResolution 9.4%
+```
+
+The hotspot summary is built by sorting phases by elapsed time descending and formatting the top three percentages with invariant-culture one-decimal formatting. Percentages are derived from local timings and are therefore machine/run dependent, but the shape of the string is deterministic for a given set of phase measurements.
+
+M2 also adds diagnostic counters to help distinguish Dominatus runtime machinery from benchmark-local RTS simulation work:
+
+- `SensorPairsChecked`
+- `UtilityOptionsEvaluated`
+- `ActionsSorted`
+- `MailboxEventsSent`
+- `MailboxEventsDelivered`
+- `CheckpointsWritten`
+- `BlackboardReads`
+- `BlackboardWrites`
+
+Timings and diagnostics are intentionally excluded from `DeterminismHash`. The hash remains a replay/result fingerprint over deterministic simulation inputs, final ship state, winner, fleet power, and core deterministic outcome counters. Runtime measurements are expected to vary by machine, load, JIT state, and operating system scheduling, so including them would make the determinism hash useless.
+
+Interpretation guidance:
+
+- If `Sensor` dominates, a future milestone should evaluate spatial partitioning or lower-cost visibility queries.
+- If `Decision` dominates, future work should inspect blackboard/key access and `Ai.Decide`/HFSM overhead.
+- If `EventDelivery` dominates, future work should evaluate event batching or narrower delivery fanout.
+- If `ActionResolution` dominates, future work should tune the benchmark-local action buffer and deterministic sort path.
+
+M2 deliberately stops at measurement. It does not add spatial partitioning, a parallel scheduler, Core changes, new ship classes, rendering, network calls, LLM calls, BenchmarkDotNet, or CI performance thresholds.
