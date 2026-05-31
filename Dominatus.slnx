@@ -3,6 +3,7 @@
   <Project Path="samples/Dominatus.FishTank/Dominatus.Fishtank.csproj" />
   <Project Path="samples/Dominatus.Llm.DemoConsole/Dominatus.Llm.DemoConsole.csproj" />
   <Project Path="samples/Dominatus.ParallelModuleWorkflow/Dominatus.ParallelModuleWorkflow.csproj" />
+  <Project Path="samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj" />
   <Project Path="samples/Dominatus.Llm.ContextDogfood/Dominatus.Llm.ContextDogfood.csproj" />
   <Project Path="samples/Dominatus.SimConsole/Dominatus.SimConsole.csproj" Id="8741215a-1ee9-4090-823d-b2860b51c3e1" />
   <Project Path="samples/Dominatus.SemanticKernelOrchestration/Dominatus.SemanticKernelOrchestration.csproj" />
@@ -36,4 +37,5 @@
   <Project Path="tests/Dominatus.SemanticKernelOrchestration.Tests/Dominatus.SemanticKernelOrchestration.Tests.csproj" />
   <Project Path="tests/Dominatus.SemanticKernelGraphAssistant.Tests/Dominatus.SemanticKernelGraphAssistant.Tests.csproj" />
   <Project Path="tests/Dominatus.ParallelModuleWorkflow.Tests/Dominatus.ParallelModuleWorkflow.Tests.csproj" />
+  <Project Path="tests/Dominatus.RTSBenchmark.Tests/Dominatus.RTSBenchmark.Tests.csproj" />
 </Solution>

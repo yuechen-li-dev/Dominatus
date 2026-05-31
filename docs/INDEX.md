@@ -40,7 +40,7 @@ This index separates user-facing documentation from release prep, development lo
 
 - [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation with blackboard needs, `Ai.Decide`, mailbox social events, and fake `Llm.Call` dialogue only.
 - [Parallel Module Workflow](samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md) — deterministic Auth-contract-first workflow with `Task.WhenAll` over independent fake-LLM Dominatus module workers.
-- [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — planned headless CPU benchmark for deterministic agent-orchestration throughput with utility decisions, events, action records, and no LLM/GPU/network path.
+- [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — runnable headless CPU benchmark for deterministic agent-orchestration throughput with utility decisions, events, action records, and no LLM/GPU/network path.
 - [Semantic Kernel Graph Assistant](samples/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md) — fake Outlook/Graph assistant with Dominatus-owned state, SK capability profile, LLM proposals, and approval-gated actions.
 - [Semantic Kernel Orchestration](samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md) — Microsoft-style orchestration loop implemented with Dominatus HFSM/utility/mailbox plus SK functions.
 - [`samples/Dominatus.Llm.ContextDogfood`](../samples/Dominatus.Llm.ContextDogfood) — context packets, loadouts, manifests, and PRIMER.context dogfood.
