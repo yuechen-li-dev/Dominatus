@@ -11,6 +11,9 @@ public sealed record RtsBenchmarkOptions
     public bool WriteCheckpoints { get; init; } = true;
     public RtsSensorMode SensorMode { get; init; } = RtsSensorMode.SpatialGrid;
     public float? SpatialCellSize { get; init; }
+    public bool EnableDynamicSensorCadence { get; init; } = true;
+    public int? MinSensorCadenceTicks { get; init; }
+    public int? MaxSensorCadenceTicks { get; init; }
 }
 
 public sealed record RtsBenchmarkPhaseTiming
@@ -63,6 +66,20 @@ public sealed record RtsBenchmarkResult
     public required long DecisionBlackboardWrites { get; init; }
     public required long SensorBlackboardWrites { get; init; }
     public required long SensorPairsChecked { get; init; }
+    public required bool DynamicSensorCadenceEnabled { get; init; }
+    public required long SensorRefreshesPerformed { get; init; }
+    public required long SensorRefreshesSkipped { get; init; }
+    public required long StaleTacticalSummaryUses { get; init; }
+    public required long ForcedSensorRefreshes { get; init; }
+    public required long DamageForcedRefreshes { get; init; }
+    public required long EventForcedRefreshes { get; init; }
+    public required long TargetInvalidationRefreshes { get; init; }
+    public required long ImmediateCadenceSelections { get; init; }
+    public required long NearCadenceSelections { get; init; }
+    public required long SensorBandCadenceSelections { get; init; }
+    public required long IdleCadenceSelections { get; init; }
+    public required double SensorRefreshSkipRate { get; init; }
+    public required double AverageSensorCadenceTicks { get; init; }
     public required RtsSensorMode SensorMode { get; init; }
     public required float SpatialCellSize { get; init; }
     public required long SpatialMaxCellsUsed { get; init; }

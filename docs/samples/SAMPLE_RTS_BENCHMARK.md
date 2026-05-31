@@ -842,13 +842,13 @@ The final report now includes:
 
 - sensor mode;
 - spatial cell size;
-- broad equivalent pairs (`aliveShips * (aliveShips - 1)` accumulated per tick);
+- broad equivalent pairs (actual refreshed ships multiplied by other living ships; with dynamic cadence disabled this is `aliveShips * (aliveShips - 1)` per tick);
 - spatial candidate pairs before exact distance filtering, excluding self;
 - pairs skipped by the grid;
 - maximum populated cells seen in any tick;
 - total spatial cell visits across all ship queries.
 
-`SensorPairsChecked` means exact ship-pair distance checks performed by the tactical sensor phase after dead/self filtering. In `BroadScan`, it should match the broad equivalent pair count. In `SpatialGrid`, it should match the spatial candidates passed to exact tactical distance filtering.
+`SensorPairsChecked` means exact ship-pair distance checks performed by the tactical sensor phase after dead/self filtering. In `BroadScan`, it should match the broad equivalent pair count for ships that actually refreshed sensors. In `SpatialGrid`, it should match the spatial candidates passed to exact tactical distance filtering for refreshed ships.
 
 ### Interpreting Sensor phase changes
 
@@ -960,3 +960,98 @@ M5 should provide enough evidence to choose an M6 direction:
 - inspect Core HFSM or `Ai.Decide` hot paths only if sample-level overhead is insufficient to explain the measured cost.
 
 M5 deliberately stops at measurement. Any optimization should be a separate milestone with before/after evidence from these counters.
+
+## M6 dynamic sensor cadence
+
+M6 optimizes the benchmark-local tactical sensor phase by applying the same cadence principle used elsewhere in Dominatus: work that does not need to be recomputed every tick should be refreshed at a deterministic urgency-dependent interval. The RTS sensor pass is benchmark perception work, not an HFSM transition scan, so M6 keeps the cadence state in `BattleSimulation` rather than changing Core scheduling.
+
+### Concept
+
+Sensor cost is approximately:
+
+```text
+ships × refresh frequency × candidate count
+```
+
+M4 reduced candidate count with `SpatialGrid`. M6 reduces refresh frequency. A ship that skips its sensor refresh reuses the previous `TacticalSummary`, mirrors that stale-but-bounded summary back to its blackboard, and avoids both BroadScan and SpatialGrid candidate lookup for that ship on that tick.
+
+`SensorMode` and dynamic cadence are orthogonal:
+
+- `SensorMode = BroadScan|SpatialGrid` chooses candidate discovery for ships that refresh this tick.
+- `EnableDynamicSensorCadence` chooses whether every living ship refreshes every tick or can reuse its last tactical summary.
+
+The default options are deterministic:
+
+- `EnableDynamicSensorCadence = true`
+- `MinSensorCadenceTicks = 1` when unset
+- `MaxSensorCadenceTicks = 12` when unset
+
+Both min and max must be at least one tick, and max must be greater than or equal to min when both are supplied.
+
+### Cadence rules
+
+After each refresh, the benchmark chooses the next per-ship sensor cadence from the newly computed tactical summary:
+
+- immediate threat present: 1 tick;
+- near contacts or significant local threat: 2 ticks;
+- sensor-band contacts or relevant support contacts: 4 ticks;
+- no relevant contacts: 8 ticks.
+
+Role and state modifiers then clamp that base cadence:
+
+- scouts, command cruisers, and synapse cruisers refresh at least every 3 ticks;
+- carriers and hive arks refresh at least every 4 ticks;
+- repair-capable ships refresh at least every 3 ticks when a repair target is known, otherwise every 4 ticks;
+- needle drones refresh every 1–2 ticks while engaged and at least every 4 ticks otherwise;
+- damaged ships below 35% hull and ships with a live current target refresh at least every 2 ticks;
+- the final value is clamped to the configured min/max bounds.
+
+### Invalidation rules
+
+A refresh is forced when any of these deterministic local conditions apply:
+
+- the previous tactical summary is missing;
+- the current tick has reached the ship's next scheduled refresh;
+- the ship took hull/shield damage since its last sensor refresh;
+- the ship's current target is missing or dead;
+- the ship received a sensor-relevant event: `TargetSpotted`, `AllyUnderFire`, `CommandFocusOrder`, Collective `SynapseLost`, or `RepairRequested` for repair-capable ships.
+
+M6 counts damage, event, and target invalidation separately in the result so forced refresh pressure can be distinguished from ordinary cadence expiration.
+
+### Diagnostics and interpretation
+
+The final report includes a **Sensor cadence diagnostics** section:
+
+- dynamic cadence enabled/disabled;
+- refreshes performed;
+- refreshes skipped;
+- skip rate;
+- stale summary uses;
+- forced refreshes, broken down by damage/event/target invalidation;
+- average selected cadence;
+- cadence selection counts for immediate, near, sensor-band, and idle cases.
+
+`BroadSensorPairsEquivalent` now represents the actual broad-scan-equivalent pair work for ships that refreshed sensors, not the theoretical work if every living ship had refreshed every tick. Spatial diagnostics similarly reflect actual refreshed-ship candidate queries.
+
+The determinism hash includes deterministic cadence counters (`SensorRefreshesPerformed`, `SensorRefreshesSkipped`, forced refreshes, and cadence selection counters). It still excludes timing, allocation, and GC data.
+
+### CLI
+
+Additional flags:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Smoke --sensor SpatialGrid --no-checkpoints
+
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Smoke --sensor SpatialGrid --no-checkpoints --disable-sensor-cadence
+
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --min-sensor-cadence 1 --max-sensor-cadence 12
+```
+
+Use the dynamic and disabled runs together to compare score, top phases, sensor phase time/percent, skip rate, and average cadence. Do not treat any one run as a guaranteed speedup claim; compare on the same machine and options.
+
+### Future work
+
+- Tune cadence by doctrine and fleet composition.
+- Expose a per-class cadence table instead of hard-coded benchmark defaults.
+- Integrate event-driven refresh queues if the benchmark later gets a broader event scheduler.
+- Revisit cadence interaction with a future parallel scheduler.

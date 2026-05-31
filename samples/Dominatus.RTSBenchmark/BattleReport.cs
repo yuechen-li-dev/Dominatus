@@ -38,6 +38,15 @@ public static class BattleReport
         output.WriteLine($"  Pairs skipped by grid: {result.SpatialPairsSkippedByGrid}");
         output.WriteLine($"  Spatial max cells used: {result.SpatialMaxCellsUsed}");
         output.WriteLine($"  Spatial cell queries: {result.SpatialCellQueries}");
+        output.WriteLine("Sensor cadence diagnostics:");
+        output.WriteLine($"  Dynamic cadence: {(result.DynamicSensorCadenceEnabled ? "enabled" : "disabled")}");
+        output.WriteLine($"  Refreshes performed: {result.SensorRefreshesPerformed}");
+        output.WriteLine($"  Refreshes skipped: {result.SensorRefreshesSkipped}");
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Skip rate: {result.SensorRefreshSkipRate:P1}"));
+        output.WriteLine($"  Stale summary uses: {result.StaleTacticalSummaryUses}");
+        output.WriteLine($"  Forced refreshes: {result.ForcedSensorRefreshes} (damage {result.DamageForcedRefreshes}, event {result.EventForcedRefreshes}, target {result.TargetInvalidationRefreshes})");
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Average cadence: {result.AverageSensorCadenceTicks:0.00} ticks"));
+        output.WriteLine($"  Cadence selections: immediate {result.ImmediateCadenceSelections}, near {result.NearCadenceSelections}, sensor {result.SensorBandCadenceSelections}, idle {result.IdleCadenceSelections}");
         output.WriteLine("Decision diagnostics:");
         output.WriteLine($"  Agent tick calls: {result.AgentTickCalls}");
         output.WriteLine($"  HFSM ticks: {result.HfsmTicks}");

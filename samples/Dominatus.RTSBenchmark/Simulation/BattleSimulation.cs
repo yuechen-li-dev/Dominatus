@@ -21,13 +21,34 @@ public sealed class BattleSimulation
     private readonly int _initialShips;
     private readonly RtsSensorMode _sensorMode;
     private readonly float _spatialCellSize;
+    private readonly bool _dynamicSensorCadenceEnabled;
+    private readonly int _minSensorCadenceTicks;
+    private readonly int _maxSensorCadenceTicks;
+    private readonly Dictionary<int, SensorCadenceState> _sensorCadence = new();
     private readonly SpatialShipGrid? _spatialGrid;
     private readonly List<ShipState> _spatialCandidates = new();
 
     public BattleSimulation(int shipCount, int checkpointInterval, bool writeCheckpoints, TextWriter? output, RtsSensorMode sensorMode, float spatialCellSize)
+        : this(shipCount, checkpointInterval, writeCheckpoints, output, sensorMode, spatialCellSize, enableDynamicSensorCadence: false, minSensorCadenceTicks: 1, maxSensorCadenceTicks: 12)
+    {
+    }
+
+    public BattleSimulation(
+        int shipCount,
+        int checkpointInterval,
+        bool writeCheckpoints,
+        TextWriter? output,
+        RtsSensorMode sensorMode,
+        float spatialCellSize,
+        bool enableDynamicSensorCadence,
+        int minSensorCadenceTicks,
+        int maxSensorCadenceTicks)
     {
         _sensorMode = sensorMode;
         _spatialCellSize = spatialCellSize;
+        _dynamicSensorCadenceEnabled = enableDynamicSensorCadence;
+        _minSensorCadenceTicks = minSensorCadenceTicks;
+        _maxSensorCadenceTicks = maxSensorCadenceTicks;
         _ships = FleetFactory.CreateFleets(shipCount);
         _byId = _ships.ToDictionary(s => s.Id);
         _initialShips = _ships.Count;
@@ -41,6 +62,11 @@ public sealed class BattleSimulation
             _world.Add(agent);
             _agents[ship.Id] = agent;
             _shipToAgentId[ship.Id] = agent.Id.Value;
+            _sensorCadence[ship.Id] = new SensorCadenceState
+            {
+                CurrentSensorCadenceTicks = _minSensorCadenceTicks,
+                LastObservedIntegrity = ship.Hull + ship.ShieldOrCarapace
+            };
         }
 
         if (_sensorMode == RtsSensorMode.SpatialGrid)
@@ -57,6 +83,9 @@ public sealed class BattleSimulation
             RunTick(tick);
     }
 
+    public int MinSensorCadenceTicks => _minSensorCadenceTicks;
+    public int MaxSensorCadenceTicks => _maxSensorCadenceTicks;
+
     public void RunTick(int tick)
     {
         _actions.Clear();
@@ -66,7 +95,7 @@ public sealed class BattleSimulation
         _metrics.AddPhaseTicks(BenchmarkMetrics.CooldownPhase, Stopwatch.GetTimestamp() - phaseStart);
 
         phaseStart = Stopwatch.GetTimestamp();
-        SensorPhase();
+        SensorPhase(tick);
         _metrics.AddPhaseTicks(BenchmarkMetrics.SensorPhase, Stopwatch.GetTimestamp() - phaseStart);
 
         phaseStart = Stopwatch.GetTimestamp();
@@ -102,15 +131,13 @@ public sealed class BattleSimulation
         }
     }
 
-    private void SensorPhase()
+    private void SensorPhase(int tick)
     {
         var aliveShips = 0;
         foreach (var candidate in _ships)
         {
             if (candidate.Alive) aliveShips++;
         }
-
-        _metrics.BroadSensorPairsEquivalent += (long)aliveShips * Math.Max(0, aliveShips - 1);
 
         if (_sensorMode == RtsSensorMode.SpatialGrid)
         {
@@ -122,14 +149,131 @@ public sealed class BattleSimulation
         {
             if (!ship.Alive) continue;
             var agent = _agents[ship.Id];
+            var state = _sensorCadence[ship.Id];
             var def = ShipClassDefinition.Get(ship.Class);
             var ownHullFraction = Math.Clamp(ship.Hull / Math.Max(1f, def.Hull), 0f, 1f);
+
+            var damageInvalidated = TookDamageSinceLastRefresh(ship, state);
+            var targetInvalidated = CurrentTargetInvalid(ship);
+            var dueByCadence = tick >= state.NextSensorRefreshTick;
+            var missingSummary = state.LastTacticalSummary is null;
+            var forcedByEvent = state.ForceSensorRefresh;
+            var shouldRefresh = !_dynamicSensorCadenceEnabled || dueByCadence || forcedByEvent || missingSummary || damageInvalidated || targetInvalidated;
+
+            if (!shouldRefresh)
+            {
+                _metrics.SensorRefreshesSkipped++;
+                _metrics.StaleTacticalSummaryUses++;
+                MirrorTacticalSummary(agent, ownHullFraction, ship.CooldownRemaining <= 0, state.LastTacticalSummary!);
+                continue;
+            }
+
+            if (_dynamicSensorCadenceEnabled)
+            {
+                if (forcedByEvent || damageInvalidated || targetInvalidated)
+                    _metrics.ForcedSensorRefreshes++;
+                if (forcedByEvent) _metrics.EventForcedRefreshes++;
+                if (damageInvalidated) _metrics.DamageForcedRefreshes++;
+                if (targetInvalidated) _metrics.TargetInvalidationRefreshes++;
+            }
+
+            _metrics.SensorRefreshesPerformed++;
+            _metrics.BroadSensorPairsEquivalent += Math.Max(0, aliveShips - 1);
             var focusTargetId = BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, -1);
             var counters = new TacticalContactCounters();
             var contacts = GetSensorCandidates(ship, def);
             var summary = TacticalModel.ComputeSummary(ship, contacts, focusTargetId, ref counters);
             AddTacticalCounters(counters);
             MirrorTacticalSummary(agent, ownHullFraction, ship.CooldownRemaining <= 0, summary);
+
+            var cadence = _dynamicSensorCadenceEnabled
+                ? SelectSensorCadence(ship, def, ownHullFraction, summary)
+                : _minSensorCadenceTicks;
+            if (!_dynamicSensorCadenceEnabled)
+                _metrics.TotalSelectedSensorCadenceTicks += cadence;
+            state.LastTacticalSummary = summary;
+            state.LastSensorRefreshTick = tick;
+            state.CurrentSensorCadenceTicks = cadence;
+            state.NextSensorRefreshTick = tick + cadence;
+            state.ForceSensorRefresh = false;
+            state.LastObservedIntegrity = ship.Hull + ship.ShieldOrCarapace;
+        }
+    }
+
+    private bool TookDamageSinceLastRefresh(ShipState ship, SensorCadenceState state)
+    {
+        var integrity = ship.Hull + ship.ShieldOrCarapace;
+        return integrity < state.LastObservedIntegrity - 0.001f;
+    }
+
+    private bool CurrentTargetInvalid(ShipState ship)
+    {
+        return ship.TargetId is int targetId && targetId > 0 && (!_byId.TryGetValue(targetId, out var target) || !target.Alive);
+    }
+
+    internal int SelectSensorCadenceForTest(ShipState ship, TacticalSummary summary)
+    {
+        var def = ShipClassDefinition.Get(ship.Class);
+        var ownHullFraction = Math.Clamp(ship.Hull / Math.Max(1f, def.Hull), 0f, 1f);
+        return SelectSensorCadence(ship, def, ownHullFraction, summary);
+    }
+
+    private int SelectSensorCadence(ShipState ship, ShipClassDefinition def, float ownHullFraction, TacticalSummary summary)
+    {
+        int cadence;
+        if (summary.ImmediateThreatId is > 0)
+        {
+            cadence = 1;
+            _metrics.ImmediateCadenceSelections++;
+        }
+        else if (summary.BestAttackTargetBand == TacticalDistanceBand.Near || summary.LocalThreatScore >= 0.35f)
+        {
+            cadence = 2;
+            _metrics.NearCadenceSelections++;
+        }
+        else if (summary.BestAttackTargetBand == TacticalDistanceBand.Sensor || summary.RelevantEnemyContacts > 0 || summary.RelevantAllyContacts > 0)
+        {
+            cadence = 4;
+            _metrics.SensorBandCadenceSelections++;
+        }
+        else
+        {
+            cadence = 8;
+            _metrics.IdleCadenceSelections++;
+        }
+
+        cadence = ApplyRoleCadence(ship, summary, cadence);
+
+        if (ownHullFraction < 0.35f)
+            cadence = Math.Min(cadence, 2);
+        if (ship.TargetId is int targetId && targetId > 0 && _byId.TryGetValue(targetId, out var target) && target.Alive)
+            cadence = Math.Min(cadence, 2);
+
+        cadence = Math.Clamp(cadence, _minSensorCadenceTicks, _maxSensorCadenceTicks);
+        _metrics.TotalSelectedSensorCadenceTicks += cadence;
+        return cadence;
+    }
+
+    private static int ApplyRoleCadence(ShipState ship, TacticalSummary summary, int cadence)
+    {
+        switch (ship.Class)
+        {
+            case ShipClass.ScoutFrigate:
+            case ShipClass.CommandCruiser:
+            case ShipClass.SynapseCruiser:
+                return Math.Min(cadence, 3);
+            case ShipClass.Carrier:
+            case ShipClass.HiveArk:
+                return Math.Min(cadence, 4);
+            case ShipClass.RepairTender:
+            case ShipClass.Regenerator:
+                return summary.BestRepairTargetId is > 0 ? Math.Min(cadence, 3) : Math.Min(cadence, 4);
+            case ShipClass.NeedleDrone:
+                return summary.ImmediateThreatId is > 0 || summary.BestAttackTargetBand == TacticalDistanceBand.Immediate
+                    ? Math.Min(cadence, 2)
+                    : Math.Min(cadence, 4);
+            default:
+                return cadence;
         }
     }
 
@@ -337,10 +481,25 @@ public sealed class BattleSimulation
                 _metrics.EventsDelivered++;
                 _metrics.MailboxEventsDelivered++;
                 if (sourceFaction == Faction.Dominion) _metrics.DominionEvents++; else _metrics.CollectiveEvents++;
+                if (RequiresSensorRefresh(message, ship))
+                    _sensorCadence[ship.Id].ForceSensorRefresh = true;
                 if (message is CommandFocusOrder order)
                     BbSetDecision(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, order.TargetShipId);
             }
         }
+    }
+
+    private static bool RequiresSensorRefresh<T>(T message, ShipState recipient) where T : notnull
+    {
+        return message switch
+        {
+            TargetSpotted => true,
+            AllyUnderFire => true,
+            CommandFocusOrder => true,
+            SynapseLost => recipient.Faction == Faction.Collective,
+            RepairRequested => ShipClassDefinition.Get(recipient.Class).RepairAmount > 0f,
+            _ => false
+        };
     }
 
     private void CountEventMessage<T>(T message) where T : notnull
@@ -598,4 +757,15 @@ public sealed class BattleSimulation
     }
 
     private static Faction Opposing(Faction faction) => faction == Faction.Dominion ? Faction.Collective : Faction.Dominion;
+
+    private sealed class SensorCadenceState
+    {
+        public int NextSensorRefreshTick;
+        public int LastSensorRefreshTick;
+        public int CurrentSensorCadenceTicks;
+        public bool ForceSensorRefresh;
+        public TacticalSummary? LastTacticalSummary;
+        public float LastObservedIntegrity;
+    }
 }
+

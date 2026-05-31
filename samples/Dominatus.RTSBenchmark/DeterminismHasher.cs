@@ -28,7 +28,14 @@ public static class DeterminismHasher
             .Append(";ignoredOutOfRange=").Append(metrics.IgnoredOutOfRangeContacts)
             .Append(";immediate=").Append(metrics.ImmediateThreatContacts)
             .Append(";near=").Append(metrics.NearContacts)
-            .Append(";sensorBand=").Append(metrics.SensorBandContacts).Append(';');
+            .Append(";sensorBand=").Append(metrics.SensorBandContacts)
+            .Append(";sensorRefreshes=").Append(metrics.SensorRefreshesPerformed)
+            .Append(";sensorSkips=").Append(metrics.SensorRefreshesSkipped)
+            .Append(";forcedSensorRefreshes=").Append(metrics.ForcedSensorRefreshes)
+            .Append(";cadenceImmediate=").Append(metrics.ImmediateCadenceSelections)
+            .Append(";cadenceNear=").Append(metrics.NearCadenceSelections)
+            .Append(";cadenceSensor=").Append(metrics.SensorBandCadenceSelections)
+            .Append(";cadenceIdle=").Append(metrics.IdleCadenceSelections).Append(';');
         sb.Append("powerD=").Append(Q(dominionFleetPower)).Append(";powerC=").Append(Q(collectiveFleetPower)).Append(';');
 
         foreach (var ship in ships.OrderBy(s => s.Id))

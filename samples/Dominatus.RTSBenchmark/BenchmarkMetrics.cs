@@ -60,6 +60,18 @@ public sealed class BenchmarkMetrics
     public long DecisionBlackboardWrites;
     public long SensorBlackboardWrites;
     public long SensorPairsChecked;
+    public long SensorRefreshesPerformed;
+    public long SensorRefreshesSkipped;
+    public long StaleTacticalSummaryUses;
+    public long ForcedSensorRefreshes;
+    public long DamageForcedRefreshes;
+    public long EventForcedRefreshes;
+    public long TargetInvalidationRefreshes;
+    public long ImmediateCadenceSelections;
+    public long NearCadenceSelections;
+    public long SensorBandCadenceSelections;
+    public long IdleCadenceSelections;
+    public long TotalSelectedSensorCadenceTicks;
     public long SpatialMaxCellsUsed;
     public long SpatialCellQueries;
     public long SpatialCandidatePairs;

@@ -14,8 +14,19 @@ public static class RtsBenchmarkRunner
         ships = options.OverrideShips ?? ships;
         ticks = options.OverrideTicks ?? ticks;
         var spatialCellSize = ResolveSpatialCellSize(options);
+        var minSensorCadenceTicks = options.MinSensorCadenceTicks ?? 1;
+        var maxSensorCadenceTicks = options.MaxSensorCadenceTicks ?? 12;
 
-        var simulation = new BattleSimulation(ships, options.CheckpointInterval, options.WriteCheckpoints, output, options.SensorMode, spatialCellSize);
+        var simulation = new BattleSimulation(
+            ships,
+            options.CheckpointInterval,
+            options.WriteCheckpoints,
+            output,
+            options.SensorMode,
+            spatialCellSize,
+            options.EnableDynamicSensorCadence,
+            minSensorCadenceTicks,
+            maxSensorCadenceTicks);
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var gen0Before = GC.CollectionCount(0);
         var gen1Before = GC.CollectionCount(1);
@@ -83,6 +94,20 @@ public static class RtsBenchmarkRunner
             DecisionBlackboardWrites = metrics.DecisionBlackboardWrites,
             SensorBlackboardWrites = metrics.SensorBlackboardWrites,
             SensorPairsChecked = metrics.SensorPairsChecked,
+            DynamicSensorCadenceEnabled = options.EnableDynamicSensorCadence,
+            SensorRefreshesPerformed = metrics.SensorRefreshesPerformed,
+            SensorRefreshesSkipped = metrics.SensorRefreshesSkipped,
+            StaleTacticalSummaryUses = metrics.StaleTacticalSummaryUses,
+            ForcedSensorRefreshes = metrics.ForcedSensorRefreshes,
+            DamageForcedRefreshes = metrics.DamageForcedRefreshes,
+            EventForcedRefreshes = metrics.EventForcedRefreshes,
+            TargetInvalidationRefreshes = metrics.TargetInvalidationRefreshes,
+            ImmediateCadenceSelections = metrics.ImmediateCadenceSelections,
+            NearCadenceSelections = metrics.NearCadenceSelections,
+            SensorBandCadenceSelections = metrics.SensorBandCadenceSelections,
+            IdleCadenceSelections = metrics.IdleCadenceSelections,
+            SensorRefreshSkipRate = metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped == 0 ? 0d : metrics.SensorRefreshesSkipped / (double)(metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped),
+            AverageSensorCadenceTicks = metrics.SensorRefreshesPerformed == 0 ? 0d : metrics.TotalSelectedSensorCadenceTicks / (double)metrics.SensorRefreshesPerformed,
             SensorMode = options.SensorMode,
             SpatialCellSize = spatialCellSize,
             SpatialMaxCellsUsed = metrics.SpatialMaxCellsUsed,
@@ -152,6 +177,10 @@ public static class RtsBenchmarkRunner
         if (options.OverrideTicks is <= 0) throw new ArgumentOutOfRangeException(nameof(options.OverrideTicks), "OverrideTicks must be greater than zero.");
         if (options.CheckpointInterval <= 0) throw new ArgumentOutOfRangeException(nameof(options.CheckpointInterval), "CheckpointInterval must be greater than zero.");
         if (options.SpatialCellSize is <= 0f) throw new ArgumentOutOfRangeException(nameof(options.SpatialCellSize), "SpatialCellSize must be greater than zero when set.");
+        if (options.MinSensorCadenceTicks is <= 0) throw new ArgumentOutOfRangeException(nameof(options.MinSensorCadenceTicks), "MinSensorCadenceTicks must be greater than or equal to one when set.");
+        if (options.MaxSensorCadenceTicks is <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxSensorCadenceTicks), "MaxSensorCadenceTicks must be greater than or equal to one when set.");
+        if (options.MinSensorCadenceTicks is int min && options.MaxSensorCadenceTicks is int max && max < min)
+            throw new ArgumentOutOfRangeException(nameof(options.MaxSensorCadenceTicks), "MaxSensorCadenceTicks must be greater than or equal to MinSensorCadenceTicks.");
     }
 
     public static float DefaultSpatialCellSize() => ShipClassDefinition.All.Values.Max(def => def.SensorRange);
