@@ -108,4 +108,4 @@ M1 should add provider abstraction hardening and optional persisted cassette for
 
 ## Follow-on
 
-For durable file-backed cassette persistence added after M0d, see `docs/LLM_V1_M1a.md`.
+For durable file-backed cassette persistence added after M0d, see `docs/DevLog/LLM_V1_M1a.md`.

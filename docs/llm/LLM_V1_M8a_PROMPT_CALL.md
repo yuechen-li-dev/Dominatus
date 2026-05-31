@@ -71,7 +71,7 @@ When `storeResultJsonAs` is provided, the runtime stores JSON including:
 
 - See M8b packet-call integration: [LLM_V1_M8b_CONTEXT_PACKET_CALL.md](LLM_V1_M8b_CONTEXT_PACKET_CALL.md)
 
-For the full orchestration ladder and decision checklist, see `docs/ORCHESTRATION_LADDER.md`.
+For the full orchestration ladder and decision checklist, see `docs/user/ORCHESTRATION_LADDER.md`.
 
 - M9a adds durable LLM streaming primitives (`LlmStream*` models, fake streaming client, recorder, and handler) with provider `IAsyncEnumerable` isolated at the boundary. See `LLM_V1_M9a_STREAMING.md`.
 

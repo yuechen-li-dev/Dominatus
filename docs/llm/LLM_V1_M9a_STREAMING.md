@@ -35,12 +35,12 @@ Provider streams are ephemeral transport mechanics. Dominatus state must remain 
 - M9d: live provider streaming implementations.
 
 
-- See M9b helper: `docs/LLM_V1_M9b_STREAM_HELPER.md`.
+- See M9b helper: `docs/llm/LLM_V1_M9b_STREAM_HELPER.md`.
 
 
 ## Server integration
 
-Durable stream inspection/reconnect over HTTP is documented in `docs/DOMINATUS_SERVER_M1_STREAMS.md`.
+Durable stream inspection/reconnect over HTTP is documented in `docs/server/DOMINATUS_SERVER_M1_STREAMS.md`.
 
 
-- Server integration note: durable stream SSE endpoint is documented in `docs/DOMINATUS_SERVER_M2_STREAM_SSE.md`.
+- Server integration note: durable stream SSE endpoint is documented in `docs/server/DOMINATUS_SERVER_M2_STREAM_SSE.md`.

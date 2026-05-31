@@ -15,9 +15,9 @@ Binary chunked `.context` is future work.
 ```
 
 
-See also: `docs/LLM_CONTEXT_M1_LOADOUTS.md` for named loadouts (M1).
+See also: `docs/llm/LLM_CONTEXT_M1_LOADOUTS.md` for named loadouts (M1).
 
 
-See also: `docs/LLM_CONTEXT_M2_CONTAINER.md` for the binary `.context` durable container layer.
+See also: `docs/llm/LLM_CONTEXT_M2_CONTAINER.md` for the binary `.context` durable container layer.
 
 - M4 adds packet diagnostics and packet manifests for auditability.

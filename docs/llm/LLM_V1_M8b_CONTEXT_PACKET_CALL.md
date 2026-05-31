@@ -45,7 +45,7 @@ Packet text is not duplicated into result JSON.
 - `Llm.Decide`: bounded option selection.
 - `Llm.MagiDecide`: multi-perspective high-stakes judgment.
 
-For when to use packet + `Llm.Call` versus `Llm.Decide`/`Llm.MagiDecide`/HFSM, see `docs/ORCHESTRATION_LADDER.md`.
+For when to use packet + `Llm.Call` versus `Llm.Decide`/`Llm.MagiDecide`/HFSM, see `docs/user/ORCHESTRATION_LADDER.md`.
 
 
-- Stream helper packet parity: `docs/LLM_V1_M9b_STREAM_HELPER.md`.
+- Stream helper packet parity: `docs/llm/LLM_V1_M9b_STREAM_HELPER.md`.

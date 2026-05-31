@@ -23,4 +23,4 @@ Non-goals remain unchanged: no provider integrations, no live LLM calls, no SK/M
 
 ## M4.3 hardening note
 
-See `docs/LLM_CONTEXT_M4_3_DOGFOOD_HARDENING.md` for release-prep loadout hardening, pressure-test budget diagnostics, and manifest enum readability updates.
+See `docs/llm/LLM_CONTEXT_M4_3_DOGFOOD_HARDENING.md` for release-prep loadout hardening, pressure-test budget diagnostics, and manifest enum readability updates.

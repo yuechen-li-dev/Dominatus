@@ -51,4 +51,4 @@ Not included: SSE, SignalR, WebSockets, provider stream passthrough, write/cance
 
 ## M2 update
 
-SSE live stream endpoint added in M2: `/dominatus/streams/{streamId}/events` with `?after=N` reconnect semantics over the same durable registry. See `docs/DOMINATUS_SERVER_M2_STREAM_SSE.md`.
+SSE live stream endpoint added in M2: `/dominatus/streams/{streamId}/events` with `?after=N` reconnect semantics over the same durable registry. See `docs/server/DOMINATUS_SERVER_M2_STREAM_SSE.md`.
