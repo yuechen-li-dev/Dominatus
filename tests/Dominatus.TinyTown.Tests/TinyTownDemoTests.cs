@@ -62,7 +62,7 @@ public sealed class TinyTownDemoTests
         var result = TinyTownDemo.RunSocialScenario();
 
         Assert.True(result.LlmCallCount > 0);
-        Assert.Contains("Maya: Good to see you, Theo. Work has been a lot today.", result.DialogueLines);
+        Assert.Contains(result.DialogueLines, line => line.Contains("Maya: So...", StringComparison.Ordinal) && line.Contains("Theo:", StringComparison.Ordinal));
         Assert.Contains(result.EventLog, e => e.Contains("Chat", StringComparison.Ordinal));
     }
 
@@ -102,6 +102,106 @@ public sealed class TinyTownDemoTests
     }
 
     [Fact]
+    public void TinyTown_Relationships_AreIncludedInResult()
+    {
+        var result = TinyTownDemo.RunScenario(0);
+
+        Assert.Contains(result.Relationships, r => r.A == "maya" && r.B == "theo" && r.UnresolvedIssueId == "missed-celebration");
+        Assert.Contains(result.Relationships, r => r.A == "lina" && r.B == "maya");
+        Assert.Contains(result.Relationships, r => r.A == "nia" && r.B == "theo");
+    }
+
+    [Fact]
+    public void TinyTown_Chat_ParsesStructuredDialogueOutcome()
+    {
+        var result = TinyTownDemo.RunAwkwardMayaTheoConversation();
+        var outcome = Assert.Single(result.DialogueOutcomes);
+
+        Assert.Equal("awkward", outcome.Tone);
+        Assert.Equal("partial_repair", outcome.Outcome);
+        Assert.Contains("Maya: So...", outcome.Dialogue, StringComparison.Ordinal);
+        Assert.Contains("Theo:", outcome.Dialogue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TinyTown_Chat_AppliesRelationshipDeltas()
+    {
+        var before = Relationship(TinyTownDemo.RunScenario(0), "maya", "theo");
+        var after = Relationship(TinyTownDemo.RunAwkwardMayaTheoConversation(), "maya", "theo");
+
+        Assert.Equal(before.Affinity + 0.08f, after.Affinity, precision: 3);
+        Assert.Equal(before.Tension - 0.12f, after.Tension, precision: 3);
+        Assert.Equal(0, after.LastInteractionTick);
+    }
+
+    [Fact]
+    public void TinyTown_Chat_AppendsMemoryRecord()
+    {
+        var result = TinyTownDemo.RunAwkwardMayaTheoConversation();
+        var memory = Assert.Single(result.Memories, m => m.Kind == "dialogue");
+
+        Assert.Equal("memory.maya-theo.chat.0", memory.Id);
+        Assert.Contains("awkward but honest", memory.Summary, StringComparison.Ordinal);
+        Assert.Contains("maya", memory.TownieIds);
+        Assert.Contains("theo", memory.TownieIds);
+    }
+
+    [Fact]
+    public void TinyTown_Chat_ContextIncludesPriorMemory()
+    {
+        var result = TinyTownDemo.RunAwkwardMayaTheoConversation();
+        var context = Assert.Single(result.LlmCallContexts);
+
+        Assert.Contains("missed Maya", context, StringComparison.Ordinal);
+        Assert.Contains("work celebration", context, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TinyTown_InvalidRelationshipDeltas_AreClamped()
+    {
+        var result = TinyTownDemo.RunInvalidDeltaClampScenario();
+        var outcome = Assert.Single(result.DialogueOutcomes);
+        var relationship = Relationship(result, "maya", "theo");
+
+        Assert.Equal(0.25f, outcome.AffinityDelta);
+        Assert.Equal(-0.25f, outcome.TensionDelta);
+        Assert.InRange(relationship.Affinity, 0f, 1f);
+        Assert.InRange(relationship.Tension, 0f, 1f);
+        Assert.Equal(0.90f, relationship.Affinity, precision: 3);
+        Assert.Equal(0.20f, relationship.Tension, precision: 3);
+    }
+
+    [Fact]
+    public void TinyTown_NonChatActions_DoNotModifyRelationshipsViaLlm()
+    {
+        var before = TinyTownDemo.RunScenario(0);
+        var result = TinyTownDemo.RunHungryScenario();
+
+        Assert.Empty(result.DialogueOutcomes);
+        Assert.Equal(0, result.LlmCallCount);
+        Assert.Equal(before.Relationships, result.Relationships);
+    }
+
+    [Fact]
+    public void TinyTown_DeterministicAcrossRuns_WithRelationshipMemory()
+    {
+        var first = TinyTownDemo.RunAwkwardMayaTheoConversation();
+        var second = TinyTownDemo.RunAwkwardMayaTheoConversation();
+
+        Assert.Equal(first.Relationships, second.Relationships);
+        Assert.Equal(first.Memories.Select(MemoryKey), second.Memories.Select(MemoryKey));
+        Assert.Equal(first.DialogueOutcomes, second.DialogueOutcomes);
+    }
+
+    [Fact]
+    public void TinyTown_LlmIsDmNotAgent_DocsOrResultInvariant()
+    {
+        var result = TinyTownDemo.RunAwkwardMayaTheoConversation();
+
+        Assert.Contains(result.EventLog, e => e.Contains("DM scene outcome", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void TinyTown_NoLiveDependencies()
     {
         var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
@@ -113,6 +213,16 @@ public sealed class TinyTownDemoTests
             Assert.DoesNotContain(package, csproj, StringComparison.OrdinalIgnoreCase);
         }
         Assert.Contains("Dominatus.Llm.OptFlow", csproj, StringComparison.Ordinal);
+    }
+
+    private static string MemoryKey(TownMemoryRecord memory)
+        => $"{memory.Id}|{memory.Tick}|{string.Join(",", memory.TownieIds)}|{memory.Kind}|{memory.Summary}";
+
+    private static RelationshipSnapshot Relationship(TinyTownSimulationResult result, string a, string b)
+    {
+        var first = string.CompareOrdinal(a, b) <= 0 ? a : b;
+        var second = string.CompareOrdinal(a, b) <= 0 ? b : a;
+        return result.Relationships.Single(r => r.A == first && r.B == second);
     }
 
     private static string FindRepoRoot(string start)

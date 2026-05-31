@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dominatus.Core;
 using Dominatus.Core.Blackboard;
 using Dominatus.Core.Decision;
@@ -33,6 +34,45 @@ public sealed record WorkSchedule(int StartTick, int EndTick);
 
 public sealed record FriendVisitRequested(string FromTownieId, string ToTownieId, string Location, int Tick);
 
+public sealed record RelationshipState
+{
+    public required string A { get; init; }
+    public required string B { get; init; }
+    public float Affinity { get; init; }
+    public float Tension { get; init; }
+    public int LastInteractionTick { get; init; }
+    public string? UnresolvedIssueId { get; init; }
+}
+
+public sealed record RelationshipSnapshot
+{
+    public required string A { get; init; }
+    public required string B { get; init; }
+    public required float Affinity { get; init; }
+    public required float Tension { get; init; }
+    public required int LastInteractionTick { get; init; }
+    public string? UnresolvedIssueId { get; init; }
+}
+
+public sealed record TownMemoryRecord
+{
+    public required string Id { get; init; }
+    public required int Tick { get; init; }
+    public required IReadOnlyList<string> TownieIds { get; init; }
+    public required string Summary { get; init; }
+    public required string Kind { get; init; }
+}
+
+public sealed record DialogueSceneOutcome
+{
+    public required string Dialogue { get; init; }
+    public required string Tone { get; init; }
+    public required string Outcome { get; init; }
+    public float AffinityDelta { get; init; }
+    public float TensionDelta { get; init; }
+    public required string MemorySummary { get; init; }
+}
+
 public sealed record TinyTownSimulationResult
 {
     public required int TicksRun { get; init; }
@@ -41,6 +81,10 @@ public sealed record TinyTownSimulationResult
     public required IReadOnlyList<string> DialogueLines { get; init; }
     public required int LlmCallCount { get; init; }
     public required bool UsedAiDecide { get; init; }
+    public required IReadOnlyList<RelationshipSnapshot> Relationships { get; init; }
+    public required IReadOnlyList<TownMemoryRecord> Memories { get; init; }
+    public required IReadOnlyList<DialogueSceneOutcome> DialogueOutcomes { get; init; }
+    public required IReadOnlyList<string> LlmCallContexts { get; init; }
 }
 
 public sealed record TownieSnapshot
@@ -68,6 +112,7 @@ public sealed record TinyTownScenarioOptions
     public IReadOnlyDictionary<string, float>? Bladder { get; init; }
     public IReadOnlyDictionary<string, string>? Locations { get; init; }
     public bool DisableSocialActions { get; init; }
+    public string? ForcedDialogueResponseJson { get; init; }
 }
 
 public static class TinyTownDemo
@@ -100,7 +145,7 @@ public static class TinyTownDemo
         var profiles = CreateProfiles();
         var profilesById = profiles.ToDictionary(x => x.Id, StringComparer.Ordinal);
         var host = new ActuatorHost();
-        var fakeLlm = new ScriptedTinyTownLlmClient();
+        var fakeLlm = new ScriptedTinyTownLlmClient(options?.ForcedDialogueResponseJson);
         host.Register(new LlmTextActuationHandler(fakeLlm, new InMemoryLlmCassette(), LlmCassetteMode.Live));
         var world = new AiWorld(host);
         var eventLog = new List<string>();
@@ -108,6 +153,9 @@ public static class TinyTownDemo
         var agents = new Dictionary<string, AiAgent>(StringComparer.Ordinal);
         var ids = new Dictionary<string, AgentId>(StringComparer.Ordinal);
         var visitCursors = new Dictionary<string, EventCursor>(StringComparer.Ordinal);
+        var relationships = CreateInitialRelationships();
+        var memories = CreateInitialMemories();
+        var dialogueOutcomes = new List<DialogueSceneOutcome>();
 
         foreach (var profile in profiles)
         {
@@ -133,11 +181,12 @@ public static class TinyTownDemo
             world.Tick(1f);
             world.Tick(1f);
 
+            var chattedPairs = new HashSet<string>(StringComparer.Ordinal);
             foreach (var profile in profiles)
             {
                 var agent = agents[profile.Id];
                 var action = agent.Bb.GetOrDefault(CurrentActionKey, "Idle");
-                ExecuteAction(world, agent, profile, profilesById, ids, tick, action, eventLog, dialogueLines);
+                ExecuteAction(world, agent, profile, profilesById, ids, tick, action, eventLog, dialogueLines, relationships, memories, dialogueOutcomes, chattedPairs);
             }
         }
 
@@ -148,7 +197,11 @@ public static class TinyTownDemo
             EventLog = eventLog.ToArray(),
             DialogueLines = dialogueLines.ToArray(),
             LlmCallCount = fakeLlm.CallCount,
-            UsedAiDecide = agents.Values.Any(a => a.Bb.GetOrDefault(UsedAiDecideKey, false))
+            UsedAiDecide = agents.Values.Any(a => a.Bb.GetOrDefault(UsedAiDecideKey, false)),
+            Relationships = relationships.Values.Select(ToSnapshot).OrderBy(x => RelationshipKey(x.A, x.B), StringComparer.Ordinal).ToArray(),
+            Memories = memories.ToArray(),
+            DialogueOutcomes = dialogueOutcomes.ToArray(),
+            LlmCallContexts = fakeLlm.CanonicalContexts.ToArray()
         };
 
         if (output is not null)
@@ -186,11 +239,31 @@ public static class TinyTownDemo
         });
 
     public static TinyTownSimulationResult RunSocialScenario()
-        => RunScenario(4, new TinyTownScenarioOptions
+        => RunAwkwardMayaTheoConversation();
+
+    public static TinyTownSimulationResult RunAwkwardMayaTheoConversation()
+        => RunScenario(1, new TinyTownScenarioOptions
         {
             Hunger = HighAll(), Energy = HighAll(), Fun = HighAll(), Hygiene = HighAll(), Bladder = HighAll(),
-            Social = new Dictionary<string, float> { ["maya"] = 0.1f, ["theo"] = 0.1f },
+            Social = new Dictionary<string, float> { ["maya"] = 0.1f, ["theo"] = 0.95f, ["lina"] = 0.95f, ["nia"] = 0.95f },
             Locations = new Dictionary<string, string> { ["maya"] = Cafe, ["theo"] = Cafe }
+        });
+
+    public static TinyTownSimulationResult RunFriendlyTheoNiaConversation()
+        => RunScenario(1, new TinyTownScenarioOptions
+        {
+            Hunger = HighAll(), Energy = HighAll(), Fun = HighAll(), Hygiene = HighAll(), Bladder = HighAll(),
+            Social = new Dictionary<string, float> { ["maya"] = 0.95f, ["theo"] = 0.1f, ["lina"] = 0.95f, ["nia"] = 0.95f },
+            Locations = new Dictionary<string, string> { ["theo"] = Cafe, ["nia"] = Cafe }
+        });
+
+    public static TinyTownSimulationResult RunInvalidDeltaClampScenario()
+        => RunScenario(1, new TinyTownScenarioOptions
+        {
+            Hunger = HighAll(), Energy = HighAll(), Fun = HighAll(), Hygiene = HighAll(), Bladder = HighAll(),
+            Social = new Dictionary<string, float> { ["maya"] = 0.1f, ["theo"] = 0.95f, ["lina"] = 0.95f, ["nia"] = 0.95f },
+            Locations = new Dictionary<string, string> { ["maya"] = Cafe, ["theo"] = Cafe },
+            ForcedDialogueResponseJson = """{ "dialogue": "Maya: This is a bounded test.\nTheo: The engine decides the state.", "tone": "volatile", "outcome": "clamp_test", "affinityDelta": 999, "tensionDelta": -999, "memorySummary": "Maya and Theo tested whether impossible relationship deltas are safely clamped." }"""
         });
 
     private static Dictionary<string, float> HighAll() => new(StringComparer.Ordinal)
@@ -318,7 +391,20 @@ public static class TinyTownDemo
         Dec(agent, BladderKey, 0.025f);
     }
 
-    private static void ExecuteAction(AiWorld world, AiAgent agent, TownieProfile profile, IReadOnlyDictionary<string, TownieProfile> profilesById, IReadOnlyDictionary<string, AgentId> ids, int tick, string action, List<string> eventLog, List<string> dialogueLines)
+    private static void ExecuteAction(
+        AiWorld world,
+        AiAgent agent,
+        TownieProfile profile,
+        IReadOnlyDictionary<string, TownieProfile> profilesById,
+        IReadOnlyDictionary<string, AgentId> ids,
+        int tick,
+        string action,
+        List<string> eventLog,
+        List<string> dialogueLines,
+        Dictionary<string, RelationshipState> relationships,
+        List<TownMemoryRecord> memories,
+        List<DialogueSceneOutcome> dialogueOutcomes,
+        HashSet<string> chattedPairs)
     {
         switch (action)
         {
@@ -333,7 +419,7 @@ public static class TinyTownDemo
                 eventLog.Add($"tick {tick}: {profile.Name} went to Work as {profile.Job}");
                 break;
             case "VisitFriend": ExecuteVisit(world, agent, profile, ids, tick, eventLog); break;
-            case "Chat": ExecuteChat(world, agent, profile, profilesById, tick, eventLog, dialogueLines); break;
+            case "Chat": ExecuteChat(world, agent, profile, profilesById, tick, eventLog, dialogueLines, relationships, memories, dialogueOutcomes, chattedPairs); break;
             default: eventLog.Add($"tick {tick}: {profile.Name} idled"); break;
         }
     }
@@ -359,43 +445,221 @@ public static class TinyTownDemo
         eventLog.Add($"tick {tick}: {profile.Name} received visit request from {NameOf(request.FromTownieId)} at {request.Location}");
     }
 
-    private static void ExecuteChat(AiWorld world, AiAgent agent, TownieProfile profile, IReadOnlyDictionary<string, TownieProfile> profilesById, int tick, List<string> eventLog, List<string> dialogueLines)
+    private static void ExecuteChat(
+        AiWorld world,
+        AiAgent agent,
+        TownieProfile profile,
+        IReadOnlyDictionary<string, TownieProfile> profilesById,
+        int tick,
+        List<string> eventLog,
+        List<string> dialogueLines,
+        Dictionary<string, RelationshipState> relationships,
+        List<TownMemoryRecord> memories,
+        List<DialogueSceneOutcome> dialogueOutcomes,
+        HashSet<string> chattedPairs)
     {
         var location = agent.Bb.GetOrDefault(LocationKey, profile.HomeLocation);
         var friend = world.Agents.FirstOrDefault(other => !ReferenceEquals(other, agent)
             && other.Bb.GetOrDefault(LocationKey, string.Empty) == location
             && profile.FriendIds.Contains(other.Bb.GetOrDefault(ProfileIdKey, string.Empty), StringComparer.Ordinal));
         if (friend is null) { eventLog.Add($"tick {tick}: {profile.Name} wanted to chat but no friend was nearby"); return; }
+
         var friendProfile = profilesById[friend.Bb.GetOrDefault(ProfileIdKey, string.Empty)];
+        var relationshipKey = RelationshipKey(profile.Id, friendProfile.Id);
+        if (!chattedPairs.Add(relationshipKey))
+        {
+            eventLog.Add($"tick {tick}: {profile.Name} deferred duplicate Chat with {friendProfile.Name} at {location}");
+            return;
+        }
+
         Inc(agent, SocialKey, 0.28f);
         Inc(friend, SocialKey, 0.18f);
-        var line = GenerateDialogue(world, agent, profile, friendProfile, location, tick);
-        dialogueLines.Add(line);
-        eventLog.Add($"tick {tick}: {profile.Name} Chat with {friendProfile.Name} at {location}: {line}");
+
+        var before = relationships[relationshipKey];
+        var relevantMemories = RelevantMemories(memories, profile.Id, friendProfile.Id);
+        var rawJson = GenerateDialogueJson(world, agent, friend, profile, friendProfile, before, relevantMemories, location, tick);
+        var outcome = ValidateDialogueOutcome(ParseDialogueOutcome(rawJson));
+        var committed = before with
+        {
+            Affinity = Clamp(before.Affinity + outcome.AffinityDelta),
+            Tension = Clamp(before.Tension + outcome.TensionDelta),
+            LastInteractionTick = tick
+        };
+        relationships[relationshipKey] = committed;
+
+        var memoryId = $"memory.{relationshipKey.Replace(':', '-')}.chat.{tick}";
+        memories.Add(new TownMemoryRecord
+        {
+            Id = memoryId,
+            Tick = tick,
+            TownieIds = [profile.Id, friendProfile.Id],
+            Kind = "dialogue",
+            Summary = outcome.MemorySummary
+        });
+
+        dialogueOutcomes.Add(outcome);
+        dialogueLines.Add(outcome.Dialogue);
+        eventLog.Add($"tick {tick}: {profile.Name} Chat with {friendProfile.Name} at {location}: {outcome.Dialogue}");
+        eventLog.Add($"tick {tick}: DM scene outcome {outcome.Outcome} tone {outcome.Tone}");
+        eventLog.Add($"tick {tick}: Relationship {relationshipKey} affinity {outcome.AffinityDelta:+0.00;-0.00;+0.00} tension {outcome.TensionDelta:+0.00;-0.00;+0.00}");
+        eventLog.Add($"tick {tick}: Memory recorded {memoryId}");
     }
 
-    private static string GenerateDialogue(AiWorld world, AiAgent agent, TownieProfile speaker, TownieProfile listener, string location, int tick)
+    private static string GenerateDialogueJson(
+        AiWorld world,
+        AiAgent speakerAgent,
+        AiAgent listenerAgent,
+        TownieProfile speaker,
+        TownieProfile listener,
+        RelationshipState relationship,
+        IReadOnlyList<TownMemoryRecord> relevantMemories,
+        string location,
+        int tick)
     {
         var step = global::Dominatus.Llm.OptFlow.Llm.Call(
             stableId: $"tinytown.dialogue.{speaker.Id}.{listener.Id}.{tick}",
-            intent: "Generate one short friendly line of life-sim dialogue between two townies.",
-            persona: "Lightweight life-sim dialogue writer.",
+            intent: "Simulate a short DM-adjudicated townie conversation and return structured scene outcome JSON with dialogue, tone, outcome, affinityDelta, tensionDelta, and memorySummary.",
+            persona: "Bounded life-sim DM. Narrate the scene and propose social consequences only; the engine commits state.",
             context: b =>
             {
                 b.Add("speaker", speaker.Name);
                 b.Add("listener", listener.Name);
                 b.Add("location", location);
-                b.Add("need_summary", $"hunger={agent.Bb.GetOrDefault(HungerKey, 1f):0.00}; energy={agent.Bb.GetOrDefault(EnergyKey, 1f):0.00}; social={agent.Bb.GetOrDefault(SocialKey, 1f):0.00}");
-                b.Add("relationship", "friends");
+                b.Add("speaker_profile", ProfileSummary(speaker));
+                b.Add("listener_profile", ProfileSummary(listener));
+                b.Add("speaker_needs", NeedsSummary(speakerAgent));
+                b.Add("listener_needs", NeedsSummary(listenerAgent));
+                b.Add("relationship", $"key={RelationshipKey(speaker.Id, listener.Id)}; affinity={relationship.Affinity:0.00}; tension={relationship.Tension:0.00}; unresolvedIssueId={relationship.UnresolvedIssueId ?? "none"}");
+                b.Add("relevant_memories", relevantMemories.Count == 0 ? "none" : string.Join(" | ", relevantMemories.Select(m => $"{m.Id}: {m.Summary}")));
+                b.Add("task", "Return only JSON for DialogueSceneOutcome. Deltas are suggestions and must stay within -0.25..0.25; Dominatus validates and commits state.");
             },
             storeTextAs: DialogueTextKey);
 
-        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, speakerAgent, speakerAgent.Events, default, world.View, world.Mail, world.Actuator);
         var wait = (IWaitEvent)step;
         var cursor = default(EventCursor);
         if (!wait.TryConsume(ctx, ref cursor)) wait.TryConsume(ctx, ref cursor);
-        return agent.Bb.GetOrDefault(DialogueTextKey, string.Empty);
+        return speakerAgent.Bb.GetOrDefault(DialogueTextKey, string.Empty);
     }
+
+    private static Dictionary<string, RelationshipState> CreateInitialRelationships()
+    {
+        var relationships = new Dictionary<string, RelationshipState>(StringComparer.Ordinal);
+        AddRelationship(relationships, "maya", "theo", 0.65f, 0.45f, "missed-celebration");
+        AddRelationship(relationships, "maya", "lina", 0.75f, 0.10f, null);
+        AddRelationship(relationships, "theo", "nia", 0.70f, 0.15f, null);
+        return relationships;
+    }
+
+    private static void AddRelationship(Dictionary<string, RelationshipState> relationships, string a, string b, float affinity, float tension, string? unresolvedIssueId)
+    {
+        var (first, second) = OrderedPair(a, b);
+        relationships.Add(RelationshipKey(first, second), new RelationshipState
+        {
+            A = first,
+            B = second,
+            Affinity = Clamp(affinity),
+            Tension = Clamp(tension),
+            LastInteractionTick = -1,
+            UnresolvedIssueId = unresolvedIssueId
+        });
+    }
+
+    private static List<TownMemoryRecord> CreateInitialMemories() =>
+    [
+        new TownMemoryRecord
+        {
+            Id = "memory.maya-theo.missed-celebration",
+            Tick = -48,
+            TownieIds = ["maya", "theo"],
+            Kind = "conflict",
+            Summary = "Theo missed Maya's work celebration after promising to come. Maya felt ignored, and Theo avoided the subject afterward."
+        }
+    ];
+
+    private static IReadOnlyList<TownMemoryRecord> RelevantMemories(IEnumerable<TownMemoryRecord> memories, string a, string b)
+        => memories.Where(m => m.TownieIds.Contains(a, StringComparer.Ordinal) && m.TownieIds.Contains(b, StringComparer.Ordinal)).ToArray();
+
+    private static DialogueSceneOutcome ParseDialogueOutcome(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<DialogueSceneOutcome>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? EmptyDialogueOutcome();
+        }
+        catch (JsonException)
+        {
+            return EmptyDialogueOutcome();
+        }
+    }
+
+    private static DialogueSceneOutcome ValidateDialogueOutcome(DialogueSceneOutcome outcome) => new()
+    {
+        Dialogue = RequiredBounded(outcome.Dialogue, 2_000, "The conversation could not be narrated."),
+        Tone = RequiredBounded(outcome.Tone, 64, "unknown"),
+        Outcome = RequiredBounded(outcome.Outcome, 64, "unresolved"),
+        AffinityDelta = ClampDelta(outcome.AffinityDelta),
+        TensionDelta = ClampDelta(outcome.TensionDelta),
+        MemorySummary = RequiredBounded(outcome.MemorySummary, 512, "The conversation happened, but no reliable summary was provided.")
+    };
+
+    private static DialogueSceneOutcome EmptyDialogueOutcome() => new()
+    {
+        Dialogue = string.Empty,
+        Tone = string.Empty,
+        Outcome = string.Empty,
+        MemorySummary = string.Empty
+    };
+
+    private static string RequiredBounded(string? value, int maxLength, string fallback)
+    {
+        var text = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        return text.Length <= maxLength ? text : text[..maxLength];
+    }
+
+    private static float ClampDelta(float value)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value)) return 0f;
+        return Math.Clamp(value, -0.25f, 0.25f);
+    }
+
+    private static RelationshipSnapshot ToSnapshot(RelationshipState relationship) => new()
+    {
+        A = relationship.A,
+        B = relationship.B,
+        Affinity = relationship.Affinity,
+        Tension = relationship.Tension,
+        LastInteractionTick = relationship.LastInteractionTick,
+        UnresolvedIssueId = relationship.UnresolvedIssueId
+    };
+
+    private static string RelationshipKey(string a, string b)
+    {
+        var (first, second) = OrderedPair(a, b);
+        return $"{first}:{second}";
+    }
+
+    private static (string First, string Second) OrderedPair(string a, string b)
+        => string.CompareOrdinal(a, b) <= 0 ? (a, b) : (b, a);
+
+    private static string ProfileSummary(TownieProfile profile)
+        => $"id={profile.Id}; name={profile.Name}; job={profile.Job}; traits={TraitsSummary(profile.Traits)}";
+
+    private static string TraitsSummary(TownieTraits traits)
+    {
+        var values = new List<string>();
+        if (traits.Social) values.Add("Social");
+        if (traits.Introvert) values.Add("Introvert");
+        if (traits.HardWorker) values.Add("HardWorker");
+        if (traits.Playful) values.Add("Playful");
+        if (traits.Creative) values.Add("Creative");
+        if (traits.Neat) values.Add("Neat");
+        if (traits.Serious) values.Add("Serious");
+        return values.Count == 0 ? "none" : string.Join(",", values);
+    }
+
+    private static string NeedsSummary(AiAgent agent)
+        => $"hunger={agent.Bb.GetOrDefault(HungerKey, 1f):0.00}; energy={agent.Bb.GetOrDefault(EnergyKey, 1f):0.00}; social={agent.Bb.GetOrDefault(SocialKey, 1f):0.00}; fun={agent.Bb.GetOrDefault(FunKey, 1f):0.00}; hygiene={agent.Bb.GetOrDefault(HygieneKey, 1f):0.00}; bladder={agent.Bb.GetOrDefault(BladderKey, 1f):0.00}";
 
     private static TownieSnapshot Snapshot(TownieProfile profile, AiAgent agent) => new()
     {
@@ -419,23 +683,60 @@ public static class TinyTownDemo
 
     private sealed class ScriptedTinyTownLlmClient : ILlmClient
     {
+        private readonly string? _forcedResponseJson;
         public int CallCount { get; private set; }
+        public List<string> CanonicalContexts { get; } = [];
+
+        public ScriptedTinyTownLlmClient(string? forcedResponseJson = null)
+        {
+            _forcedResponseJson = forcedResponseJson;
+        }
 
         public Task<LlmTextResult> GenerateTextAsync(LlmTextRequest request, string requestHash, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
-            var text = request.StableId.Contains("maya.theo", StringComparison.OrdinalIgnoreCase)
-                ? "Maya: Good to see you, Theo. Work has been a lot today."
-                : BuildGenericLine(request.StableId);
+            CanonicalContexts.Add(request.CanonicalContextJson);
+
+            var text = _forcedResponseJson
+                ?? (IsPair(request.StableId, "maya", "theo") ? AwkwardMayaTheoJson() : GenericFriendlyJson(request.StableId));
             return Task.FromResult(new LlmTextResult(text, requestHash, request.Sampling.Provider, request.Sampling.Model));
         }
 
-        private static string BuildGenericLine(string stableId)
+        private static bool IsPair(string stableId, string a, string b)
         {
             var parts = stableId.Split('.');
-            if (parts.Length >= 5) return $"{NameOf(parts[2])}: Good to see you, {NameOf(parts[3])}.";
-            return "Maya: Good to see you, Theo. Work has been a lot today.";
+            return parts.Length >= 5
+                && ((string.Equals(parts[2], a, StringComparison.Ordinal) && string.Equals(parts[3], b, StringComparison.Ordinal))
+                    || (string.Equals(parts[2], b, StringComparison.Ordinal) && string.Equals(parts[3], a, StringComparison.Ordinal)));
+        }
+
+        private static string AwkwardMayaTheoJson() => """
+            {
+              "dialogue": "Maya: So... are we pretending you didn’t miss my celebration?\nTheo: I wasn’t pretending. I just didn’t know how to apologize.",
+              "tone": "awkward",
+              "outcome": "partial_repair",
+              "affinityDelta": 0.08,
+              "tensionDelta": -0.12,
+              "memorySummary": "Maya and Theo had an awkward but honest conversation about Theo missing her work celebration. The tension eased slightly, but the issue is not fully resolved."
+            }
+            """;
+
+        private static string GenericFriendlyJson(string stableId)
+        {
+            var parts = stableId.Split('.');
+            var speaker = parts.Length >= 5 ? NameOf(parts[2]) : "Theo";
+            var listener = parts.Length >= 5 ? NameOf(parts[3]) : "Nia";
+            return $$"""
+                {
+                  "dialogue": "{{speaker}}: Good to see you. The cafe feels quieter today.\n{{listener}}: Quiet is underrated.",
+                  "tone": "warm",
+                  "outcome": "friendly_chat",
+                  "affinityDelta": 0.04,
+                  "tensionDelta": -0.02,
+                  "memorySummary": "{{speaker}} and {{listener}} shared a brief friendly chat at the cafe."
+                }
+                """;
         }
     }
 }
