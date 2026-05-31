@@ -283,3 +283,7 @@ For ladder guidance on when to choose `Llm.Call`, `Llm.Decide`, `Llm.MagiDecide`
 ## M10a ranked provider fallback pointer
 
 M10a adds `RankedLlmClient`, a provider-agnostic `ILlmClient` wrapper for ordered text-completion fallback. This does not change the casting model: LLMs remain temporary performers behind `LlmTextActuationHandler`, while `Llm.Call`, `Llm.Decide`, `MagiDecide`, cassette/replay, approval, refusal, and context packet behavior stay above the provider boundary. See [LLM_V1_M10a_RANKED_CLIENT.md](LLM_V1_M10a_RANKED_CLIENT.md).
+
+## M10b ranked provider availability pointer
+
+M10b keeps provider routing below the text actuation boundary and adds in-memory provider health state to `RankedLlmClient`. Cooling-down, disabled, and manually unavailable providers are skipped before dispatch; rate-limit `RetryAfter` is honored; snapshots make routing state inspectable. This still does not change `Llm.Call`, `Llm.Decide`, `MagiDecide`, cassette/replay, approval, refusal, or context packet semantics. See [LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md](LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md).

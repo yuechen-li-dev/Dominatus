@@ -21,9 +21,17 @@ public sealed class LlmProviderUnavailableException : LlmProviderException
 
 public sealed class LlmProviderRateLimitedException : LlmProviderException
 {
+    public TimeSpan? RetryAfter { get; }
+
     public LlmProviderRateLimitedException(string message, Exception? innerException = null)
+        : this(message, retryAfter: null, innerException)
+    {
+    }
+
+    public LlmProviderRateLimitedException(string message, TimeSpan? retryAfter, Exception? innerException = null)
         : base(message, isFallbackEligible: true, innerException)
     {
+        RetryAfter = retryAfter;
     }
 }
 

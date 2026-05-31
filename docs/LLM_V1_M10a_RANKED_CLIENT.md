@@ -14,7 +14,7 @@ Llm.Call / Llm.Decide / MagiDecide
     -> ranked inner ILlmClient providers
 ```
 
-M10a is text-completion fallback only.
+M10a is text-completion fallback only. M10b layers provider availability health state, cooldown, RetryAfter handling, manual overrides, and snapshots on top of this design; see [LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md](LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md).
 
 ## Non-goals
 
@@ -39,11 +39,12 @@ Dominatus already owns the orchestration layer. Provider fallback belongs below 
 public sealed record RankedLlmProviderEntry(
     string ProviderId,
     ILlmClient Client,
-    bool IsAvailable = true);
+    bool IsAvailable = true,
+    TimeSpan? Cooldown = null);
 
 public sealed class RankedLlmClient : ILlmClient
 {
-    public RankedLlmClient(IReadOnlyList<RankedLlmProviderEntry> providers);
+    public RankedLlmClient(IReadOnlyList<RankedLlmProviderEntry> providers, RankedLlmClientOptions? options = null);
     public RankedLlmClient(params RankedLlmProviderEntry[] providers);
 }
 ```
@@ -145,3 +146,8 @@ Cassette behavior remains above/beside the client boundary in `LlmTextActuationH
 - live/record provider calls can route through ranked fallback as one `ILlmClient`
 
 This preserves deterministic request hashes and existing cassette/replay semantics.
+
+
+## M10b availability pointer
+
+M10b preserves the M10a ranked fallback contract and adds in-memory health state. Fallback-eligible provider failures now mark a provider cooling down, rate-limit `RetryAfter` can set the cooldown window, manual availability overrides can skip or re-enable providers, and health snapshots expose provider status in ranked order. See [LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md](LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md).
