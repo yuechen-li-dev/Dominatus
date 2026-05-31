@@ -42,6 +42,15 @@ internal static class Program
                 case "--spatial-cell-size" when i + 1 < args.Length:
                     options = options with { SpatialCellSize = float.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture) };
                     break;
+                case "--disable-sensor-cadence":
+                    options = options with { EnableDynamicSensorCadence = false };
+                    break;
+                case "--min-sensor-cadence" when i + 1 < args.Length:
+                    options = options with { MinSensorCadenceTicks = int.Parse(args[++i]) };
+                    break;
+                case "--max-sensor-cadence" when i + 1 < args.Length:
+                    options = options with { MaxSensorCadenceTicks = int.Parse(args[++i]) };
+                    break;
                 case "--checkpoint-interval" when i + 1 < args.Length:
                     options = options with { CheckpointInterval = int.Parse(args[++i]) };
                     break;
@@ -67,6 +76,9 @@ internal static class Program
         output.WriteLine("  --no-checkpoints                      Disable checkpoint lines");
         output.WriteLine("  --sensor BroadScan|SpatialGrid        Default: SpatialGrid");
         output.WriteLine("  --spatial-cell-size N                 Default: max ship sensor range");
+        output.WriteLine("  --disable-sensor-cadence             Refresh every ship every tick");
+        output.WriteLine("  --min-sensor-cadence N               Default: 1");
+        output.WriteLine("  --max-sensor-cadence N               Default: 12");
         output.WriteLine("Armada is a manual benchmarking mode and is not used by tests.");
     }
 }
