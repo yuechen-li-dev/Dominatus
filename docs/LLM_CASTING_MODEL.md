@@ -287,3 +287,7 @@ M10a adds `RankedLlmClient`, a provider-agnostic `ILlmClient` wrapper for ordere
 ## M10b ranked provider availability pointer
 
 M10b keeps provider routing below the text actuation boundary and adds in-memory provider health state to `RankedLlmClient`. Cooling-down, disabled, and manually unavailable providers are skipped before dispatch; rate-limit `RetryAfter` is honored; snapshots make routing state inspectable. This still does not change `Llm.Call`, `Llm.Decide`, `MagiDecide`, cassette/replay, approval, refusal, or context packet semantics. See [LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md](LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md).
+
+## M11a OpenRouter client
+
+The casting model can use OpenRouter through `OpenRouterLlmClient`, but only behind the existing `ILlmClient` and ranked-provider seams. Dominatus still owns context packets, hashing, cassette/replay, validation, and approval gates; the adapter only translates text requests to OpenRouter chat completions.

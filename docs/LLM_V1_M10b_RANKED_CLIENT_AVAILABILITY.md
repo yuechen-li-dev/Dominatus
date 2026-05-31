@@ -159,3 +159,7 @@ Winning provider metadata remains `LlmTextResult.ProviderId`, set to the ranked 
 ## Future work
 
 Possible later milestones can add streaming fallback, live provider adapters, background health checks, provider quality/cost routing, persisted operational controls, or server-side diagnostics. M10b intentionally does none of those.
+
+## M11a OpenRouter availability note
+
+OpenRouter rate limits map to `LlmProviderRateLimitedException`. When a `Retry-After` header is present, `RankedLlmClient` uses it as the provider cooldown before OpenRouter is retried. Auth and bad-request errors are non-fallback and do not cool down into another provider.
