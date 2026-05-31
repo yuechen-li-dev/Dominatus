@@ -13,8 +13,9 @@ public static class RtsBenchmarkRunner
         var (ships, ticks) = DefaultsFor(options.Mode);
         ships = options.OverrideShips ?? ships;
         ticks = options.OverrideTicks ?? ticks;
+        var spatialCellSize = ResolveSpatialCellSize(options);
 
-        var simulation = new BattleSimulation(ships, options.CheckpointInterval, options.WriteCheckpoints, output);
+        var simulation = new BattleSimulation(ships, options.CheckpointInterval, options.WriteCheckpoints, output, options.SensorMode, spatialCellSize);
         var sw = Stopwatch.StartNew();
         simulation.RunTicks(ticks);
 
@@ -52,6 +53,13 @@ public static class RtsBenchmarkRunner
             BlackboardWrites = metrics.BlackboardWrites,
             BlackboardReads = metrics.BlackboardReads,
             SensorPairsChecked = metrics.SensorPairsChecked,
+            SensorMode = options.SensorMode,
+            SpatialCellSize = spatialCellSize,
+            SpatialMaxCellsUsed = metrics.SpatialMaxCellsUsed,
+            SpatialCellQueries = metrics.SpatialCellQueries,
+            SpatialCandidatePairs = options.SensorMode == RtsSensorMode.BroadScan ? metrics.BroadSensorPairsEquivalent : metrics.SpatialCandidatePairs,
+            SpatialPairsSkippedByGrid = options.SensorMode == RtsSensorMode.SpatialGrid ? Math.Max(0, metrics.BroadSensorPairsEquivalent - metrics.SpatialCandidatePairs) : 0,
+            BroadSensorPairsEquivalent = metrics.BroadSensorPairsEquivalent,
             RelevantEnemyContacts = metrics.RelevantEnemyContacts,
             RelevantAllyContacts = metrics.RelevantAllyContacts,
             IgnoredOutOfRangeContacts = metrics.IgnoredOutOfRangeContacts,
@@ -98,7 +106,12 @@ public static class RtsBenchmarkRunner
         if (options.OverrideShips is <= 0) throw new ArgumentOutOfRangeException(nameof(options.OverrideShips), "OverrideShips must be greater than zero.");
         if (options.OverrideTicks is <= 0) throw new ArgumentOutOfRangeException(nameof(options.OverrideTicks), "OverrideTicks must be greater than zero.");
         if (options.CheckpointInterval <= 0) throw new ArgumentOutOfRangeException(nameof(options.CheckpointInterval), "CheckpointInterval must be greater than zero.");
+        if (options.SpatialCellSize is <= 0f) throw new ArgumentOutOfRangeException(nameof(options.SpatialCellSize), "SpatialCellSize must be greater than zero when set.");
     }
+
+    public static float DefaultSpatialCellSize() => ShipClassDefinition.All.Values.Max(def => def.SensorRange);
+
+    private static float ResolveSpatialCellSize(RtsBenchmarkOptions options) => options.SpatialCellSize ?? DefaultSpatialCellSize();
 
     private static string BuildHotPathSummary(IReadOnlyList<RtsBenchmarkPhaseTiming> phaseTimings)
     {

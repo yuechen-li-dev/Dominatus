@@ -18,9 +18,15 @@ public sealed class BattleSimulation
     private readonly bool _writeCheckpoints;
     private readonly int _checkpointInterval;
     private readonly int _initialShips;
+    private readonly RtsSensorMode _sensorMode;
+    private readonly float _spatialCellSize;
+    private readonly SpatialShipGrid? _spatialGrid;
+    private readonly List<ShipState> _spatialCandidates = new();
 
-    public BattleSimulation(int shipCount, int checkpointInterval, bool writeCheckpoints, TextWriter? output)
+    public BattleSimulation(int shipCount, int checkpointInterval, bool writeCheckpoints, TextWriter? output, RtsSensorMode sensorMode, float spatialCellSize)
     {
+        _sensorMode = sensorMode;
+        _spatialCellSize = spatialCellSize;
         _ships = FleetFactory.CreateFleets(shipCount);
         _byId = _ships.ToDictionary(s => s.Id);
         _initialShips = _ships.Count;
@@ -35,6 +41,9 @@ public sealed class BattleSimulation
             _agents[ship.Id] = agent;
             _shipToAgentId[ship.Id] = agent.Id.Value;
         }
+
+        if (_sensorMode == RtsSensorMode.SpatialGrid)
+            _spatialGrid = new SpatialShipGrid(_spatialCellSize, _ships);
     }
 
     public IReadOnlyList<ShipState> Ships => _ships;
@@ -90,6 +99,20 @@ public sealed class BattleSimulation
 
     private void SensorPhase()
     {
+        var aliveShips = 0;
+        foreach (var candidate in _ships)
+        {
+            if (candidate.Alive) aliveShips++;
+        }
+
+        _metrics.BroadSensorPairsEquivalent += (long)aliveShips * Math.Max(0, aliveShips - 1);
+
+        if (_sensorMode == RtsSensorMode.SpatialGrid)
+        {
+            _spatialGrid!.Rebuild(_ships);
+            _metrics.SpatialMaxCellsUsed = Math.Max(_metrics.SpatialMaxCellsUsed, _spatialGrid.PopulatedCells);
+        }
+
         foreach (var ship in _ships)
         {
             if (!ship.Alive) continue;
@@ -98,10 +121,31 @@ public sealed class BattleSimulation
             var ownHullFraction = Math.Clamp(ship.Hull / Math.Max(1f, def.Hull), 0f, 1f);
             var focusTargetId = BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, -1);
             var counters = new TacticalContactCounters();
-            var summary = TacticalModel.ComputeSummary(ship, _ships, focusTargetId, ref counters);
+            var contacts = GetSensorCandidates(ship, def);
+            var summary = TacticalModel.ComputeSummary(ship, contacts, focusTargetId, ref counters);
             AddTacticalCounters(counters);
             MirrorTacticalSummary(agent, ownHullFraction, ship.CooldownRemaining <= 0, summary);
         }
+    }
+
+    private IEnumerable<ShipState> GetSensorCandidates(ShipState ship, ShipClassDefinition def)
+    {
+        if (_sensorMode == RtsSensorMode.BroadScan)
+        {
+            return _ships;
+        }
+
+        var candidateIds = _spatialGrid!.QueryCandidateIds(ship.X, ship.Y, def.SensorRange, out var cellsVisited);
+        _metrics.SpatialCellQueries += cellsVisited;
+        _spatialCandidates.Clear();
+        foreach (var id in candidateIds)
+        {
+            if (id == ship.Id) continue;
+            _spatialCandidates.Add(_spatialGrid.ShipById(id));
+        }
+
+        _metrics.SpatialCandidatePairs += _spatialCandidates.Count;
+        return _spatialCandidates;
     }
 
     private void AddTacticalCounters(TacticalContactCounters counters)

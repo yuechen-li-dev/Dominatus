@@ -807,3 +807,60 @@ The final report includes a `Tactical band diagnostics` section. Interpret a hig
 ### Not a spatial grid yet
 
 M3 deliberately keeps the pair scan and `SensorPairsChecked` counter. It improves the model and blackboard inputs but does not add a grid, quadtree, broadphase, parallel scheduler, real pathfinding, or physics. If future smoke/skirmish/battle reports show sensor time growing with fleet size, M4 should use these counters to justify and validate a spatial partition or command-layer broadphase.
+
+## M4 spatial grid sensor acceleration
+
+M4 keeps the M3 tactical model intact and changes only how each ship discovers local tactical contacts. Instead of making every alive ship scan every other alive ship for every sensor tick, the benchmark can rebuild a deterministic uniform grid from alive ship positions and query nearby cells for candidate contacts.
+
+### Sensor modes
+
+`RtsBenchmarkOptions.SensorMode` selects the candidate-discovery path:
+
+- `SpatialGrid` is the default M4 mode.
+- `BroadScan` remains available for comparison, diagnostics, and regression tests.
+
+The CLI accepts the same choice:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Smoke --sensor SpatialGrid --no-checkpoints
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Smoke --sensor BroadScan --no-checkpoints
+```
+
+### Cell size behavior
+
+The default spatial cell size is deterministic: it is the maximum `SensorRange` across the ship class definitions. At M4 this resolves to `72`, from the Dominion `CommandCruiser` sensor profile. A custom positive value may be supplied through `RtsBenchmarkOptions.SpatialCellSize` or `--spatial-cell-size`.
+
+Each ship maps to a cell with `floor(x / cellSize), floor(y / cellSize)`, which intentionally supports negative coordinates. A sensor query visits neighboring cells within `ceil(sensorRange / cellSize)`. With the default cell size, most classes visit a one-cell radius around their current cell. The grid can return candidates outside exact sensor range; M3 tactical banding still computes exact distances and rejects out-of-range contacts.
+
+### Deterministic ordering
+
+Grid cells are visited in deterministic coordinate order: increasing cell X, then increasing cell Y. Ship ids within cells are sorted when the grid is rebuilt, and query results are sorted by ship id before tactical scoring. Tactical tie-breaking continues to prefer higher score, then lower ship id where scores are equal. This means SpatialGrid mode does not depend on dictionary enumeration order.
+
+### Spatial diagnostics
+
+The final report now includes:
+
+- sensor mode;
+- spatial cell size;
+- broad equivalent pairs (`aliveShips * (aliveShips - 1)` accumulated per tick);
+- spatial candidate pairs before exact distance filtering, excluding self;
+- pairs skipped by the grid;
+- maximum populated cells seen in any tick;
+- total spatial cell visits across all ship queries.
+
+`SensorPairsChecked` means exact ship-pair distance checks performed by the tactical sensor phase after dead/self filtering. In `BroadScan`, it should match the broad equivalent pair count. In `SpatialGrid`, it should match the spatial candidates passed to exact tactical distance filtering.
+
+### Interpreting Sensor phase changes
+
+SpatialGrid should reduce candidate pairs when fleets are spread across multiple cells. It is still a simple per-tick full rebuild uniform grid, not a quadtree, loose octree, incremental interest manager, or parallel broad-phase. In small Smoke runs the added grid bookkeeping can offset the reduced pair count, so M4 reports both timings and structural pair counts. Performance should be read together with `Spatial candidate pairs`, `Pairs skipped by grid`, and the Sensor phase percentage.
+
+### Still not included
+
+M4 does not add rendering, GPU work, networking, live LLM calls, provider dependencies, BenchmarkDotNet, pathfinding, physics, a parallel scheduler, or a complicated spatial tree.
+
+### Future work
+
+- Tune cell sizes and formation geometry for larger battlefield spreads.
+- Avoid full per-tick grid rebuilds if movement patterns warrant incremental updates.
+- Add squad/group agent modes to reduce per-ship tactical duplication.
+- Add a parallel tick scheduler as a separate benchmark milestone.

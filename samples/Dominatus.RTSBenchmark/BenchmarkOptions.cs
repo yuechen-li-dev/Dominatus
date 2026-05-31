@@ -9,6 +9,8 @@ public sealed record RtsBenchmarkOptions
     public int? OverrideTicks { get; init; }
     public int CheckpointInterval { get; init; } = 500;
     public bool WriteCheckpoints { get; init; } = true;
+    public RtsSensorMode SensorMode { get; init; } = RtsSensorMode.SpatialGrid;
+    public float? SpatialCellSize { get; init; }
 }
 
 public sealed record RtsBenchmarkPhaseTiming
@@ -39,6 +41,13 @@ public sealed record RtsBenchmarkResult
     public required long BlackboardWrites { get; init; }
     public required long BlackboardReads { get; init; }
     public required long SensorPairsChecked { get; init; }
+    public required RtsSensorMode SensorMode { get; init; }
+    public required float SpatialCellSize { get; init; }
+    public required long SpatialMaxCellsUsed { get; init; }
+    public required long SpatialCellQueries { get; init; }
+    public required long SpatialCandidatePairs { get; init; }
+    public required long SpatialPairsSkippedByGrid { get; init; }
+    public required long BroadSensorPairsEquivalent { get; init; }
     public required long RelevantEnemyContacts { get; init; }
     public required long RelevantAllyContacts { get; init; }
     public required long IgnoredOutOfRangeContacts { get; init; }

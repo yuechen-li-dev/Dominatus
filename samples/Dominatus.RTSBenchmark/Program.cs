@@ -36,6 +36,12 @@ internal static class Program
                 case "--no-checkpoints":
                     options = options with { WriteCheckpoints = false };
                     break;
+                case "--sensor" when i + 1 < args.Length:
+                    options = options with { SensorMode = Enum.Parse<RtsSensorMode>(args[++i], ignoreCase: true) };
+                    break;
+                case "--spatial-cell-size" when i + 1 < args.Length:
+                    options = options with { SpatialCellSize = float.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture) };
+                    break;
                 case "--checkpoint-interval" when i + 1 < args.Length:
                     options = options with { CheckpointInterval = int.Parse(args[++i]) };
                     break;
@@ -59,6 +65,8 @@ internal static class Program
         output.WriteLine("  --ticks N                             Override tick count");
         output.WriteLine("  --checkpoint-interval N               Default: 500");
         output.WriteLine("  --no-checkpoints                      Disable checkpoint lines");
+        output.WriteLine("  --sensor BroadScan|SpatialGrid        Default: SpatialGrid");
+        output.WriteLine("  --spatial-cell-size N                 Default: max ship sensor range");
         output.WriteLine("Armada is a manual benchmarking mode and is not used by tests.");
     }
 }

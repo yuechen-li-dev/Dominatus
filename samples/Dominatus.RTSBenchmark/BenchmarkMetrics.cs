@@ -42,6 +42,10 @@ public sealed class BenchmarkMetrics
     public long BlackboardWrites;
     public long BlackboardReads;
     public long SensorPairsChecked;
+    public long SpatialMaxCellsUsed;
+    public long SpatialCellQueries;
+    public long SpatialCandidatePairs;
+    public long BroadSensorPairsEquivalent;
     public long RelevantEnemyContacts;
     public long RelevantAllyContacts;
     public long IgnoredOutOfRangeContacts;

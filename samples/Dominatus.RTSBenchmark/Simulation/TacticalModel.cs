@@ -4,7 +4,7 @@ public static class TacticalModel
 {
     public static TacticalSummary ComputeSummary(
         ShipState ship,
-        IReadOnlyList<ShipState> ships,
+        IEnumerable<ShipState> ships,
         int commandFocusTargetId,
         ref TacticalContactCounters counters)
     {
@@ -27,9 +27,9 @@ public static class TacticalModel
 
         foreach (var other in ships)
         {
-            counters.SensorPairsChecked++;
             if (!other.Alive || other.Id == ship.Id) continue;
 
+            counters.SensorPairsChecked++;
             var distance = Distance(ship, other);
             var otherDef = ShipClassDefinition.Get(other.Class);
             var band = ClassifyBand(distance, ownDef, otherDef, other.Faction != ship.Faction);
