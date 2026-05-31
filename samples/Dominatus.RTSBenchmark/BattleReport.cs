@@ -30,7 +30,14 @@ public static class BattleReport
             output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  {phase.Name}: {phase.PercentOfMeasuredRuntime:0.0}% ({phase.Elapsed.TotalMilliseconds:0.00} ms)"));
         output.WriteLine(result.HotPathSummary);
         output.WriteLine("Diagnostics:");
+        output.WriteLine($"  Sensor mode: {result.SensorMode}");
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Spatial cell size: {result.SpatialCellSize:0.##}"));
         output.WriteLine($"  Sensor pairs checked: {result.SensorPairsChecked}");
+        output.WriteLine($"  Broad equivalent pairs: {result.BroadSensorPairsEquivalent}");
+        output.WriteLine($"  Spatial candidate pairs: {result.SpatialCandidatePairs}");
+        output.WriteLine($"  Pairs skipped by grid: {result.SpatialPairsSkippedByGrid}");
+        output.WriteLine($"  Spatial max cells used: {result.SpatialMaxCellsUsed}");
+        output.WriteLine($"  Spatial cell queries: {result.SpatialCellQueries}");
         output.WriteLine("Tactical band diagnostics:");
         output.WriteLine($"  Relevant enemy contacts: {result.RelevantEnemyContacts}");
         output.WriteLine($"  Relevant ally contacts: {result.RelevantAllyContacts}");
