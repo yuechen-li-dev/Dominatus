@@ -5,6 +5,7 @@ public sealed record LlmTextResult
     public string Text { get; }
     public string RequestHash { get; }
     public string? Provider { get; }
+    public string? ProviderId { get; init; }
     public string? Model { get; }
     public string? FinishReason { get; }
     public int? InputTokens { get; }
@@ -17,7 +18,8 @@ public sealed record LlmTextResult
         string? Model = null,
         string? FinishReason = null,
         int? InputTokens = null,
-        int? OutputTokens = null)
+        int? OutputTokens = null,
+        string? ProviderId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Text);
         ArgumentException.ThrowIfNullOrWhiteSpace(RequestHash);
@@ -35,6 +37,7 @@ public sealed record LlmTextResult
         this.Text = Text;
         this.RequestHash = RequestHash;
         this.Provider = Provider;
+        this.ProviderId = ProviderId;
         this.Model = Model;
         this.FinishReason = FinishReason;
         this.InputTokens = InputTokens;
