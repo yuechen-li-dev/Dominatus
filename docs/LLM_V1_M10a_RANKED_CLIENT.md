@@ -151,3 +151,7 @@ This preserves deterministic request hashes and existing cassette/replay semanti
 ## M10b availability pointer
 
 M10b preserves the M10a ranked fallback contract and adds in-memory health state. Fallback-eligible provider failures now mark a provider cooling down, rate-limit `RetryAfter` can set the cooldown window, manual availability overrides can skip or re-enable providers, and health snapshots expose provider status in ranked order. See [LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md](LLM_V1_M10b_RANKED_CLIENT_AVAILABILITY.md).
+
+## M11a OpenRouter provider note
+
+`OpenRouterLlmClient` can be registered as a normal ranked provider entry. `RankedLlmClient` remains the only Dominatus routing and fallback layer; OpenRouter is just one optional `ILlmClient` implementation in the ranked list.

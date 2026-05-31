@@ -154,3 +154,7 @@ The orchestration ladder now includes Graph-through-SK approval boundaries via `
 - Added orchestration ladder sample: `samples/Dominatus.SemanticKernelGraphAssistant` (Ai.Decide + SK profile allowlist + ActuationPolicy gating).
 
 - M10a adds ranked text-provider fallback as a boring `ILlmClient` implementation (`RankedLlmClient`). It is provider routing below the text actuation boundary, not a new orchestration layer. See `docs/LLM_V1_M10a_RANKED_CLIENT.md`.
+
+## M11a OpenRouter rung
+
+OpenRouter sits at the provider-access rung, below Dominatus orchestration. The approved call path is `Llm` helpers → actuation handler → `RankedLlmClient` → `OpenRouterLlmClient` → OpenRouter HTTP API. It does not introduce streaming, routing policy, model catalog sync, or OpenRouter-specific orchestration.
