@@ -42,6 +42,12 @@ public sealed class BenchmarkMetrics
     public long BlackboardWrites;
     public long BlackboardReads;
     public long SensorPairsChecked;
+    public long RelevantEnemyContacts;
+    public long RelevantAllyContacts;
+    public long IgnoredOutOfRangeContacts;
+    public long ImmediateThreatContacts;
+    public long NearContacts;
+    public long SensorBandContacts;
     public long ActionsSorted;
     public long MailboxEventsSent;
     public long MailboxEventsDelivered;

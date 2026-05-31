@@ -723,3 +723,87 @@ Interpretation guidance:
 - If `ActionResolution` dominates, future work should tune the benchmark-local action buffer and deterministic sort path.
 
 M2 deliberately stops at measurement. It does not add spatial partitioning, a parallel scheduler, Core changes, new ship classes, rendering, network calls, LLM calls, BenchmarkDotNet, or CI performance thresholds.
+
+## M3 tactical threat/support banding
+
+M3 changes the tactical sensor and utility-decision model from “nearest broad fact” inputs to compact local tactical summaries. The benchmark still performs a deterministic pair scan in the sensor phase, so this is not yet a spatial-partition optimization. The goal is to make each ship's local utility inputs more realistic and smaller: nearby contacts matter most, sensor-band contacts provide context, and out-of-range ships do not influence local action scoring.
+
+### Distance bands
+
+Every live ship classifies every other live contact into one of four deterministic `TacticalDistanceBand` values:
+
+| Band | Meaning | Threshold |
+| --- | --- | --- |
+| `Immediate` | The contact can shoot this ship or this ship can shoot the contact now. | `distance <= own weapon range` or, for enemies, `distance <= enemy weapon range` |
+| `Near` | The contact is local and likely to matter soon. | `distance <= own sensor range * 0.5` |
+| `Sensor` | The contact is visible through normal tactical sensors/command awareness. | `distance <= own sensor range` |
+| `OutOfRange` | The contact is not locally relevant. | `distance > own sensor range` |
+
+Out-of-range contacts are counted for diagnostics but ignored for local utility summaries. They do not become immediate threats, attack targets, repair targets, or support context.
+
+### Tactical summaries instead of broad facts
+
+The sensor phase now computes one compact `TacticalSummary` per ship and mirrors only scalar/id fields into the agent blackboard:
+
+- `ImmediateThreatId`
+- `BestAttackTargetId`
+- `BestRepairTargetId`
+- `HighestValueVisibleEnemyId`
+- `LocalThreatScore`
+- `LocalSupportScore`
+- relevant enemy/ally counts
+- booleans such as `HasImmediateThreat` and `HasRepairTarget`
+
+Raw contact lists are intentionally not stored in blackboards. Authoritative ship state remains in the benchmark fleet arrays, while blackboards receive the small tactical summary needed by utility scorers.
+
+### Threat and priority scoring
+
+Threat scoring combines distance band, enemy class damage/role weight, weapon-range relation, cooldown readiness, and own hull vulnerability. The documented band weights are:
+
+```text
+Immediate = 1.00
+Near      = 0.55
+Sensor    = 0.20
+OutOfRange= 0.00
+```
+
+Attack priority favors closer targets, high-value classes, damaged targets, immediate/near contacts, and command-focus orders. Command/synapse ships, carriers/hive arks, and repair/regenerator units receive additional role priority. Repair priority is ally-only and favors nearby damaged high-value allies; damaged allies outside sensor range are ignored.
+
+### Doctrine profile bridge
+
+M3 adds a small `DoctrineProfile` bridge for future higher-level orchestration:
+
+- Dominion has higher `PreserveHighValueShips` and `RepairPriority`, so it values logistics and protection.
+- Collective has higher `Aggression` and `FocusCommandTargets`, so it favors pressure and command-target focus over preservation.
+
+The profiles are intentionally simple and deterministic. M4 or later milestones can extract doctrine into richer fleet-level orchestration without changing the M3 blackboard contract.
+
+### Decision scorer behavior
+
+Utility scorers now read tactical-summary blackboard values rather than broad global/nearly-global facts:
+
+- `Retreat` rises with `LocalThreatScore`, low hull, and `HasImmediateThreat`; Needle Drones still prefer attack unless critically damaged.
+- `FocusFire` uses `BestAttackTargetId`, target band, cooldown readiness, and attack priority.
+- `RepairAlly` uses `BestRepairTargetId` and `LocalSupportScore` for repair-capable ships.
+- `Advance` is strongest when there is no immediate threat and enemies exist only in the sensor band or no local enemies are present.
+- `HoldFormation` and `ScreenHighValue` respond to nearby support/command context and de-emphasize holding under immediate threat.
+- Command/synapse focus orders still flow through events and can boost a visible target's attack priority.
+
+### Tactical band diagnostics
+
+M3 extends the result/report with tactical-band counters:
+
+- `RelevantEnemyContacts`
+- `RelevantAllyContacts`
+- `IgnoredOutOfRangeContacts`
+- `ImmediateThreatContacts`
+- `NearContacts`
+- `SensorBandContacts`
+- `RelevantContactsPerAgentTick`
+- `IgnoredContactsPerSensorPair`
+
+The final report includes a `Tactical band diagnostics` section. Interpret a high ignored-contact ratio as evidence that many scanned pairs are not locally meaningful. That can be expected in wide battles and is one reason M4 should consider spatial partitioning if sensor work remains a hot path or ship counts scale poorly.
+
+### Not a spatial grid yet
+
+M3 deliberately keeps the pair scan and `SensorPairsChecked` counter. It improves the model and blackboard inputs but does not add a grid, quadtree, broadphase, parallel scheduler, real pathfinding, or physics. If future smoke/skirmish/battle reports show sensor time growing with fleet size, M4 should use these counters to justify and validate a spatial partition or command-layer broadphase.

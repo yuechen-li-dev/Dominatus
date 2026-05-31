@@ -93,24 +93,54 @@ public sealed class BattleSimulation
         foreach (var ship in _ships)
         {
             if (!ship.Alive) continue;
-            var def = ShipClassDefinition.Get(ship.Class);
-            var nearest = FindNearestEnemy(ship, def.SensorRange * 1.5f, countSensorPairs: true);
-            var vulnerableAlly = FindVulnerableAlly(ship, Math.Max(32f, def.Range + 16f), countSensorPairs: true);
             var agent = _agents[ship.Id];
+            var def = ShipClassDefinition.Get(ship.Class);
             var ownHullFraction = Math.Clamp(ship.Hull / Math.Max(1f, def.Hull), 0f, 1f);
-            var threat = ComputeThreat(ship, nearest);
-            var targetId = nearest?.Id ?? -1;
-            if (BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, -1) > 0)
-                targetId = BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, targetId);
-
-            BbSet(agent, BenchmarkBlackboardKeys.OwnHullFraction, ownHullFraction);
-            BbSet(agent, BenchmarkBlackboardKeys.ThreatScore, threat);
-            BbSet(agent, BenchmarkBlackboardKeys.NearestVisibleEnemyId, nearest?.Id ?? -1);
-            BbSet(agent, BenchmarkBlackboardKeys.TargetValue, nearest is null ? 0f : ShipClassDefinition.Get(nearest.Class).RoleWeight / 3f);
-            BbSet(agent, BenchmarkBlackboardKeys.VulnerableAllyId, vulnerableAlly?.Id ?? -1);
-            BbSet(agent, BenchmarkBlackboardKeys.CooldownReady, ship.CooldownRemaining <= 0);
-            BbSet(agent, BenchmarkBlackboardKeys.EnemyInWeaponRange, nearest is not null && Distance(ship, nearest) <= def.Range);
+            var focusTargetId = BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, -1);
+            var counters = new TacticalContactCounters();
+            var summary = TacticalModel.ComputeSummary(ship, _ships, focusTargetId, ref counters);
+            AddTacticalCounters(counters);
+            MirrorTacticalSummary(agent, ownHullFraction, ship.CooldownRemaining <= 0, summary);
         }
+    }
+
+    private void AddTacticalCounters(TacticalContactCounters counters)
+    {
+        _metrics.SensorPairsChecked += counters.SensorPairsChecked;
+        _metrics.RelevantEnemyContacts += counters.RelevantEnemyContacts;
+        _metrics.RelevantAllyContacts += counters.RelevantAllyContacts;
+        _metrics.IgnoredOutOfRangeContacts += counters.IgnoredOutOfRangeContacts;
+        _metrics.ImmediateThreatContacts += counters.ImmediateThreatContacts;
+        _metrics.NearContacts += counters.NearContacts;
+        _metrics.SensorBandContacts += counters.SensorBandContacts;
+    }
+
+    private void MirrorTacticalSummary(AiAgent agent, float ownHullFraction, bool cooldownReady, TacticalSummary summary)
+    {
+        var immediateThreatId = summary.ImmediateThreatId ?? -1;
+        var bestAttackTargetId = summary.BestAttackTargetId ?? -1;
+        var bestRepairTargetId = summary.BestRepairTargetId ?? -1;
+        var highestValueVisibleEnemyId = summary.HighestValueVisibleEnemyId ?? -1;
+
+        BbSet(agent, BenchmarkBlackboardKeys.OwnHullFraction, ownHullFraction);
+        BbSet(agent, BenchmarkBlackboardKeys.ThreatScore, summary.LocalThreatScore);
+        BbSet(agent, BenchmarkBlackboardKeys.LocalThreatScore, summary.LocalThreatScore);
+        BbSet(agent, BenchmarkBlackboardKeys.LocalSupportScore, summary.LocalSupportScore);
+        BbSet(agent, BenchmarkBlackboardKeys.ImmediateThreatId, immediateThreatId);
+        BbSet(agent, BenchmarkBlackboardKeys.BestAttackTargetId, bestAttackTargetId);
+        BbSet(agent, BenchmarkBlackboardKeys.BestRepairTargetId, bestRepairTargetId);
+        BbSet(agent, BenchmarkBlackboardKeys.HighestValueVisibleEnemyId, highestValueVisibleEnemyId);
+        BbSet(agent, BenchmarkBlackboardKeys.NearestVisibleEnemyId, bestAttackTargetId);
+        BbSet(agent, BenchmarkBlackboardKeys.VulnerableAllyId, bestRepairTargetId);
+        BbSet(agent, BenchmarkBlackboardKeys.TargetValue, summary.BestAttackPriorityScore);
+        BbSet(agent, BenchmarkBlackboardKeys.RelevantEnemyContacts, summary.RelevantEnemyContacts);
+        BbSet(agent, BenchmarkBlackboardKeys.RelevantAllyContacts, summary.RelevantAllyContacts);
+        BbSet(agent, BenchmarkBlackboardKeys.HasImmediateThreat, immediateThreatId > 0);
+        BbSet(agent, BenchmarkBlackboardKeys.HasRepairTarget, bestRepairTargetId > 0);
+        BbSet(agent, BenchmarkBlackboardKeys.BestAttackTargetBand, (int)summary.BestAttackTargetBand);
+        BbSet(agent, BenchmarkBlackboardKeys.BestAttackPriorityScore, summary.BestAttackPriorityScore);
+        BbSet(agent, BenchmarkBlackboardKeys.CooldownReady, cooldownReady);
+        BbSet(agent, BenchmarkBlackboardKeys.EnemyInWeaponRange, summary.BestAttackTargetBand == TacticalDistanceBand.Immediate);
     }
 
     private void DecisionPhase(int tick)
@@ -264,12 +294,12 @@ public sealed class BattleSimulation
 
     private int? ChooseTargetForAction(ShipState ship, ShipActionType type) => type switch
     {
-        ShipActionType.FocusFire or ShipActionType.LaunchDrone => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, -1), ship.Faction)
-            ?? ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1), ship.Faction),
-        ShipActionType.RepairAlly => ValidAllyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.VulnerableAllyId, -1), ship.Faction),
-        _ => BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1) > 0
-            ? BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1)
-            : null
+        ShipActionType.FocusFire or ShipActionType.LaunchDrone => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction)
+            ?? ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, -1), ship.Faction),
+        ShipActionType.RepairAlly => ValidAllyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestRepairTargetId, -1), ship.Faction),
+        ShipActionType.Retreat => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.ImmediateThreatId, -1), ship.Faction)
+            ?? ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction),
+        _ => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.BestAttackTargetId, -1), ship.Faction)
     };
 
     private int? ValidEnemyId(int id, Faction faction) => _byId.TryGetValue(id, out var ship) && ship.Alive && ship.Faction != faction ? id : null;

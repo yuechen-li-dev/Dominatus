@@ -31,6 +31,13 @@ public static class BattleReport
         output.WriteLine(result.HotPathSummary);
         output.WriteLine("Diagnostics:");
         output.WriteLine($"  Sensor pairs checked: {result.SensorPairsChecked}");
+        output.WriteLine("Tactical band diagnostics:");
+        output.WriteLine($"  Relevant enemy contacts: {result.RelevantEnemyContacts}");
+        output.WriteLine($"  Relevant ally contacts: {result.RelevantAllyContacts}");
+        output.WriteLine($"  Ignored out-of-range contacts: {result.IgnoredOutOfRangeContacts}");
+        output.WriteLine($"  Immediate/Near/Sensor band contacts: {result.ImmediateThreatContacts}/{result.NearContacts}/{result.SensorBandContacts}");
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Relevant contacts per agent tick: {result.RelevantContactsPerAgentTick:0.00}"));
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Ignored contacts per sensor pair: {result.IgnoredContactsPerSensorPair:0.00}"));
         output.WriteLine($"  Utility options evaluated: {result.UtilityOptionsEvaluated}");
         output.WriteLine($"  Blackboard reads/writes: {result.BlackboardReads}/{result.BlackboardWrites}");
         output.WriteLine($"  Actions sorted: {result.ActionsSorted}");
