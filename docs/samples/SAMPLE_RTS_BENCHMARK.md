@@ -864,3 +864,99 @@ M4 does not add rendering, GPU work, networking, live LLM calls, provider depend
 - Avoid full per-tick grid rebuilds if movement patterns warrant incremental updates.
 - Add squad/group agent modes to reduce per-ship tactical duplication.
 - Add a parallel tick scheduler as a separate benchmark milestone.
+
+## M5 allocation and decision hot-path diagnostics
+
+M5 extends the runnable RTS benchmark with diagnostics only. It intentionally does **not** optimize Dominatus Core, the spatial grid, gameplay balance, or the action/event logic. The purpose is to decide where M6 work should focus after measuring the current hot paths.
+
+### Allocation diagnostics
+
+`RtsBenchmarkResult` now reports allocation and GC counters for the measured single-threaded run:
+
+- `AllocatedBytes`
+- `BytesPerAgentTick`
+- `BytesPerDecision`
+- `Gen0Collections`
+- `Gen1Collections`
+- `Gen2Collections`
+
+The benchmark captures `GC.GetAllocatedBytesForCurrentThread()` and `GC.CollectionCount(...)` before the measured simulation phases and after metrics/hash computation, before final report formatting. This deliberately excludes console report formatting from the allocation measurement. `GC.GetAllocatedBytesForCurrentThread()` only observes allocations on the current thread; that is acceptable for M5 because the RTS benchmark remains single-threaded.
+
+Interpret `BytesPerAgentTick` as a coarse pressure indicator: it divides current-thread allocated bytes by the number of ship-agent ticks actually processed. It should be compared across the same mode and options, not treated as a universal constant. `BytesPerDecision` divides by the benchmark's utility decision-option evaluations and helps separate broad agent tick volume from utility scoring pressure.
+
+### Decision diagnostics
+
+The M5 result includes explicit hot-path counters for the per-agent decision loop:
+
+- `AgentTickCalls`
+- `HfsmTicks`
+- `DecideSteps`
+- `UtilityOptionsEvaluated`
+- `UtilityOptionsSelected`
+- `ActionStatesEntered`
+- emitted action counters for idle, retreat, focus fire, repair, advance, launch drone, regenerate, and hold formation/screening
+
+It also derives:
+
+- `UtilityOptionsPerAgentTick`
+- `AgentTicksPerDecisionSecond`
+- `DecisionsPerAgentTick`
+- `ActionsPerAgentTick`
+
+These counters are intended to distinguish runtime agent/HFSM overhead from utility option scoring and action emission pressure. `UtilityOptionsEvaluated` remains the benchmark's option-throughput counter, while `UtilityOptionsSelected` shows one selected utility result per processed agent tick.
+
+### Blackboard access diagnostics
+
+M5 counts benchmark-controlled blackboard access without modifying Core:
+
+- `DecisionBlackboardReads`
+- `DecisionBlackboardWrites`
+- `SensorBlackboardWrites`
+
+Sensor writes are counted where the benchmark mirrors tactical summaries into each agent's blackboard. Decision reads are counted by benchmark helper paths used around utility scoring and action target selection. Decision writes are counted for benchmark-controlled decision/event writes, such as focus-order target mirroring. Core blackboard internals are not instrumented, so these values should be read as benchmark-sample access pressure, not a complete Core blackboard profiler.
+
+### Event diagnostics
+
+Mailbox pressure is reported as:
+
+- `MailboxEventsSent`
+- `MailboxEventsDelivered`
+- `TargetSpottedEvents`
+- `RepairRequestedEvents`
+- `CommandFocusOrderEvents`
+- `ShipDestroyedEvents`
+- `SynapseLostEvents`
+- `AllyUnderFireEvents`
+- `EventsPerAgentTick`
+- `EventsPerAction`
+
+Event-type counters are useful for identifying whether mailbox pressure is dominated by routine command/spotting chatter, repair requests, or destruction/synapse events.
+
+### Action diagnostics and phase timing
+
+M5 separates deterministic action sorting from action resolution when it is low-risk to do so. `PhaseTimings` now includes `ActionSort` in addition to `ActionResolution`, and the result reports:
+
+- `ActionSortBatches`
+- `MaxActionsInTick`
+- `AverageActionsPerTick`
+- `ActionsSorted`
+
+This makes it possible to see whether action ordering is a meaningful cost separate from applying movement, damage, repair, and regeneration effects.
+
+### Determinism hash policy
+
+The determinism hash continues to include deterministic battle state and deterministic gameplay counters. It excludes elapsed timings, allocation bytes, GC counts, and derived diagnostic rates. Timings and allocations can vary between otherwise equivalent runs, so including them would make the hash a machine/runtime noise detector rather than a replay determinism check.
+
+### What M5 can reveal
+
+M5 should provide enough evidence to choose an M6 direction:
+
+- reduce allocations in the benchmark sample hot loop;
+- cache or reshape utility options if option evaluation dominates;
+- reduce blackboard mirror writes or benchmark-controlled blackboard reads;
+- reduce event chatter if mailbox sent/delivered counts dominate;
+- optimize action sorting if `ActionSort` and action batch counters justify it;
+- revisit sensor candidate discovery only if spatial counters still dominate;
+- inspect Core HFSM or `Ai.Decide` hot paths only if sample-level overhead is insufficient to explain the measured cost.
+
+M5 deliberately stops at measurement. Any optimization should be a separate milestone with before/after evidence from these counters.
