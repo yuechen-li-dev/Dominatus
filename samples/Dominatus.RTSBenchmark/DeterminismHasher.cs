@@ -22,7 +22,13 @@ public static class DeterminismHasher
         sb.Append("agentTicks=").Append(metrics.AgentTicks).Append(";decisions=").Append(metrics.DecisionsEvaluated)
             .Append(";actions=").Append(metrics.ActionsEmitted).Append(";events=").Append(metrics.EventsDelivered)
             .Append(";damage=").Append(metrics.DamageEvents).Append(";repair=").Append(metrics.RepairEvents)
-            .Append(";destroyed=").Append(metrics.DestroyedShips).Append(';');
+            .Append(";destroyed=").Append(metrics.DestroyedShips)
+            .Append(";relevantEnemy=").Append(metrics.RelevantEnemyContacts)
+            .Append(";relevantAlly=").Append(metrics.RelevantAllyContacts)
+            .Append(";ignoredOutOfRange=").Append(metrics.IgnoredOutOfRangeContacts)
+            .Append(";immediate=").Append(metrics.ImmediateThreatContacts)
+            .Append(";near=").Append(metrics.NearContacts)
+            .Append(";sensorBand=").Append(metrics.SensorBandContacts).Append(';');
         sb.Append("powerD=").Append(Q(dominionFleetPower)).Append(";powerC=").Append(Q(collectiveFleetPower)).Append(';');
 
         foreach (var ship in ships.OrderBy(s => s.Id))

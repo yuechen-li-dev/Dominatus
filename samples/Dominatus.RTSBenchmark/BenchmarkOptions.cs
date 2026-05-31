@@ -39,6 +39,14 @@ public sealed record RtsBenchmarkResult
     public required long BlackboardWrites { get; init; }
     public required long BlackboardReads { get; init; }
     public required long SensorPairsChecked { get; init; }
+    public required long RelevantEnemyContacts { get; init; }
+    public required long RelevantAllyContacts { get; init; }
+    public required long IgnoredOutOfRangeContacts { get; init; }
+    public required long ImmediateThreatContacts { get; init; }
+    public required long NearContacts { get; init; }
+    public required long SensorBandContacts { get; init; }
+    public required double RelevantContactsPerAgentTick { get; init; }
+    public required double IgnoredContactsPerSensorPair { get; init; }
     public required long ActionsSorted { get; init; }
     public required long MailboxEventsSent { get; init; }
     public required long MailboxEventsDelivered { get; init; }
