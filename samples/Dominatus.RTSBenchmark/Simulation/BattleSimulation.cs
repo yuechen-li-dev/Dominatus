@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using Dominatus.Core.Blackboard;
 using Dominatus.Core.Runtime;
 
 namespace Dominatus.RTSBenchmark.Simulation;
@@ -48,13 +50,33 @@ public sealed class BattleSimulation
     public void RunTick(int tick)
     {
         _actions.Clear();
+
+        var phaseStart = Stopwatch.GetTimestamp();
         DecrementCooldowns();
+        _metrics.AddPhaseTicks(BenchmarkMetrics.CooldownPhase, Stopwatch.GetTimestamp() - phaseStart);
+
+        phaseStart = Stopwatch.GetTimestamp();
         SensorPhase();
+        _metrics.AddPhaseTicks(BenchmarkMetrics.SensorPhase, Stopwatch.GetTimestamp() - phaseStart);
+
+        phaseStart = Stopwatch.GetTimestamp();
         DecisionPhase(tick);
+        _metrics.AddPhaseTicks(BenchmarkMetrics.DecisionPhase, Stopwatch.GetTimestamp() - phaseStart);
+
+        phaseStart = Stopwatch.GetTimestamp();
         ResolutionPhase(tick);
+        _metrics.AddPhaseTicks(BenchmarkMetrics.ActionResolutionPhase, Stopwatch.GetTimestamp() - phaseStart);
+
+        phaseStart = Stopwatch.GetTimestamp();
         EventPhase(tick);
+        _metrics.AddPhaseTicks(BenchmarkMetrics.EventDeliveryPhase, Stopwatch.GetTimestamp() - phaseStart);
+
         if (_writeCheckpoints && tick % _checkpointInterval == 0)
+        {
+            phaseStart = Stopwatch.GetTimestamp();
             WriteCheckpoint(tick);
+            _metrics.AddPhaseTicks(BenchmarkMetrics.CheckpointPhase, Stopwatch.GetTimestamp() - phaseStart);
+        }
     }
 
     private void DecrementCooldowns()
@@ -72,22 +94,22 @@ public sealed class BattleSimulation
         {
             if (!ship.Alive) continue;
             var def = ShipClassDefinition.Get(ship.Class);
-            var nearest = FindNearestEnemy(ship, def.SensorRange * 1.5f);
-            var vulnerableAlly = FindVulnerableAlly(ship, Math.Max(32f, def.Range + 16f));
+            var nearest = FindNearestEnemy(ship, def.SensorRange * 1.5f, countSensorPairs: true);
+            var vulnerableAlly = FindVulnerableAlly(ship, Math.Max(32f, def.Range + 16f), countSensorPairs: true);
             var agent = _agents[ship.Id];
             var ownHullFraction = Math.Clamp(ship.Hull / Math.Max(1f, def.Hull), 0f, 1f);
             var threat = ComputeThreat(ship, nearest);
             var targetId = nearest?.Id ?? -1;
-            if (agent.Bb.GetOrDefault(BenchmarkBlackboardKeys.FocusTargetId, -1) > 0)
-                targetId = agent.Bb.GetOrDefault(BenchmarkBlackboardKeys.FocusTargetId, targetId);
+            if (BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, -1) > 0)
+                targetId = BbGet(agent, BenchmarkBlackboardKeys.FocusTargetId, targetId);
 
-            agent.Bb.Set(BenchmarkBlackboardKeys.OwnHullFraction, ownHullFraction);
-            agent.Bb.Set(BenchmarkBlackboardKeys.ThreatScore, threat);
-            agent.Bb.Set(BenchmarkBlackboardKeys.NearestVisibleEnemyId, nearest?.Id ?? -1);
-            agent.Bb.Set(BenchmarkBlackboardKeys.TargetValue, nearest is null ? 0f : ShipClassDefinition.Get(nearest.Class).RoleWeight / 3f);
-            agent.Bb.Set(BenchmarkBlackboardKeys.VulnerableAllyId, vulnerableAlly?.Id ?? -1);
-            agent.Bb.Set(BenchmarkBlackboardKeys.CooldownReady, ship.CooldownRemaining <= 0);
-            agent.Bb.Set(BenchmarkBlackboardKeys.EnemyInWeaponRange, nearest is not null && Distance(ship, nearest) <= def.Range);
+            BbSet(agent, BenchmarkBlackboardKeys.OwnHullFraction, ownHullFraction);
+            BbSet(agent, BenchmarkBlackboardKeys.ThreatScore, threat);
+            BbSet(agent, BenchmarkBlackboardKeys.NearestVisibleEnemyId, nearest?.Id ?? -1);
+            BbSet(agent, BenchmarkBlackboardKeys.TargetValue, nearest is null ? 0f : ShipClassDefinition.Get(nearest.Class).RoleWeight / 3f);
+            BbSet(agent, BenchmarkBlackboardKeys.VulnerableAllyId, vulnerableAlly?.Id ?? -1);
+            BbSet(agent, BenchmarkBlackboardKeys.CooldownReady, ship.CooldownRemaining <= 0);
+            BbSet(agent, BenchmarkBlackboardKeys.EnemyInWeaponRange, nearest is not null && Distance(ship, nearest) <= def.Range);
         }
     }
 
@@ -100,7 +122,8 @@ public sealed class BattleSimulation
             agent.Tick(_world);
             _metrics.AgentTicks++;
             _metrics.DecisionsEvaluated += 9;
-            var selected = agent.Bb.GetOrDefault(BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
+            _metrics.UtilityOptionsEvaluated += 9;
+            var selected = BbGet(agent, BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
             var type = Enum.TryParse<ShipActionType>(selected, out var parsed) ? parsed : ShipActionType.Idle;
             ship.CurrentAction = type.ToString();
             ship.TargetId = ChooseTargetForAction(ship, type);
@@ -112,6 +135,7 @@ public sealed class BattleSimulation
 
     private void ResolutionPhase(int tick)
     {
+        _metrics.ActionsSorted += _actions.Count;
         foreach (var action in _actions.OrderBy(a => a.Tick)
                      .ThenBy(a => a.Priority)
                      .ThenBy(a => a.Faction)
@@ -172,12 +196,14 @@ public sealed class BattleSimulation
         foreach (var ship in _ships)
         {
             if (!ship.Alive || ship.Faction != faction) continue;
+            _metrics.MailboxEventsSent++;
             if (_world.Mail.Send(new AgentId(_shipToAgentId[ship.Id]), message))
             {
                 _metrics.EventsDelivered++;
+                _metrics.MailboxEventsDelivered++;
                 if (sourceFaction == Faction.Dominion) _metrics.DominionEvents++; else _metrics.CollectiveEvents++;
                 if (message is CommandFocusOrder order)
-                    _agents[ship.Id].Bb.Set(BenchmarkBlackboardKeys.FocusTargetId, order.TargetShipId);
+                    BbSet(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, order.TargetShipId);
             }
         }
     }
@@ -238,23 +264,24 @@ public sealed class BattleSimulation
 
     private int? ChooseTargetForAction(ShipState ship, ShipActionType type) => type switch
     {
-        ShipActionType.FocusFire or ShipActionType.LaunchDrone => ValidEnemyId(_agents[ship.Id].Bb.GetOrDefault(BenchmarkBlackboardKeys.FocusTargetId, -1), ship.Faction)
-            ?? ValidEnemyId(_agents[ship.Id].Bb.GetOrDefault(BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1), ship.Faction),
-        ShipActionType.RepairAlly => ValidAllyId(_agents[ship.Id].Bb.GetOrDefault(BenchmarkBlackboardKeys.VulnerableAllyId, -1), ship.Faction),
-        _ => _agents[ship.Id].Bb.GetOrDefault(BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1) > 0
-            ? _agents[ship.Id].Bb.GetOrDefault(BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1)
+        ShipActionType.FocusFire or ShipActionType.LaunchDrone => ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.FocusTargetId, -1), ship.Faction)
+            ?? ValidEnemyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1), ship.Faction),
+        ShipActionType.RepairAlly => ValidAllyId(BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.VulnerableAllyId, -1), ship.Faction),
+        _ => BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1) > 0
+            ? BbGet(_agents[ship.Id], BenchmarkBlackboardKeys.NearestVisibleEnemyId, -1)
             : null
     };
 
     private int? ValidEnemyId(int id, Faction faction) => _byId.TryGetValue(id, out var ship) && ship.Alive && ship.Faction != faction ? id : null;
     private int? ValidAllyId(int id, Faction faction) => _byId.TryGetValue(id, out var ship) && ship.Alive && ship.Faction == faction ? id : null;
 
-    private ShipState? FindNearestEnemy(ShipState ship, float maxDistance)
+    private ShipState? FindNearestEnemy(ShipState ship, float maxDistance, bool countSensorPairs = false)
     {
         ShipState? best = null;
         var bestDist = maxDistance * maxDistance;
         foreach (var other in _ships)
         {
+            if (countSensorPairs) _metrics.SensorPairsChecked++;
             if (!other.Alive || other.Faction == ship.Faction) continue;
             var d = DistanceSquared(ship, other);
             if (d < bestDist || (Math.Abs(d - bestDist) < 0.0001f && other.Id < (best?.Id ?? int.MaxValue)))
@@ -266,12 +293,13 @@ public sealed class BattleSimulation
         return best;
     }
 
-    private ShipState? FindVulnerableAlly(ShipState ship, float maxDistance)
+    private ShipState? FindVulnerableAlly(ShipState ship, float maxDistance, bool countSensorPairs = false)
     {
         ShipState? best = null;
         var bestHealth = 0.78f;
         foreach (var other in _ships)
         {
+            if (countSensorPairs) _metrics.SensorPairsChecked++;
             if (!other.Alive || other.Faction != ship.Faction) continue;
             if (Distance(ship, other) > maxDistance) continue;
             var def = ShipClassDefinition.Get(other.Class);
@@ -366,6 +394,7 @@ public sealed class BattleSimulation
         var cDestroyed = _ships.Count(s => s.Faction == Faction.Collective && !s.Alive);
         var line = $"[T+{tick:0000}] Dominion {dPct:0}% fleet power | Collective {cPct:0}% fleet power | destroyed D:{dDestroyed} C:{cDestroyed} | decisions {_metrics.DecisionsEvaluated} | actions {_metrics.ActionsEmitted} | events {_metrics.EventsDelivered}";
         _checkpoints.Add(line);
+        _metrics.CheckpointsWritten++;
         _output?.WriteLine(line);
     }
 
@@ -378,6 +407,19 @@ public sealed class BattleSimulation
             if (ship.Faction == Faction.Dominion) d += power; else c += power;
         }
         return (d, c);
+    }
+
+
+    private T BbGet<T>(AiAgent agent, BbKey<T> key, T defaultValue = default!)
+    {
+        _metrics.BlackboardReads++;
+        return agent.Bb.GetOrDefault(key, defaultValue);
+    }
+
+    private void BbSet<T>(AiAgent agent, BbKey<T> key, T value)
+    {
+        _metrics.BlackboardWrites++;
+        agent.Bb.Set(key, value);
     }
 
     private static Faction Opposing(Faction faction) => faction == Faction.Dominion ? Faction.Collective : Faction.Dominion;

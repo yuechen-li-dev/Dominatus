@@ -11,6 +11,14 @@ public sealed record RtsBenchmarkOptions
     public bool WriteCheckpoints { get; init; } = true;
 }
 
+public sealed record RtsBenchmarkPhaseTiming
+{
+    public required string Name { get; init; }
+    public required long ElapsedTicks { get; init; }
+    public required TimeSpan Elapsed { get; init; }
+    public required double PercentOfMeasuredRuntime { get; init; }
+}
+
 public sealed record RtsBenchmarkResult
 {
     public required BenchmarkMode Mode { get; init; }
@@ -25,6 +33,17 @@ public sealed record RtsBenchmarkResult
     public required long RepairEvents { get; init; }
     public required int DestroyedShips { get; init; }
     public required TimeSpan ElapsedWallClock { get; init; }
+    public required TimeSpan MeasuredSimulationTime { get; init; }
+    public required IReadOnlyList<RtsBenchmarkPhaseTiming> PhaseTimings { get; init; }
+    public required long UtilityOptionsEvaluated { get; init; }
+    public required long BlackboardWrites { get; init; }
+    public required long BlackboardReads { get; init; }
+    public required long SensorPairsChecked { get; init; }
+    public required long ActionsSorted { get; init; }
+    public required long MailboxEventsSent { get; init; }
+    public required long MailboxEventsDelivered { get; init; }
+    public required long CheckpointsWritten { get; init; }
+    public required string HotPathSummary { get; init; }
     public required double AgentTicksPerSecond { get; init; }
     public required double DecisionsPerSecond { get; init; }
     public required double ActionsPerSecond { get; init; }
