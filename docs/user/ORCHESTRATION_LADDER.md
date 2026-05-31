@@ -112,7 +112,7 @@ Use Dominatus for durable orchestration over time:
 Repo references:
 
 - `samples/Dominatus.SemanticKernelOrchestration`
-- `docs/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md`
+- `docs/samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md`
 
 ### Example C — Context packet review
 
@@ -129,14 +129,14 @@ Do not use `Llm.MagiDecide` unless the review is high-stakes and requires multi-
 - Do not overuse LLMs where deterministic policy is enough.
 - Use Semantic Kernel/MCP as capability ecosystems, not orchestration kernels.
 
-- M5 adds `PRIMER.context` (reusable authoring constraints/examples) alongside SOUL/PROJECT/SESSION/AGENT; see `docs/LLM_CONTEXT_M5_PRIMER_CONTEXT.md` and rust primer dogfood packets.
+- M5 adds `PRIMER.context` (reusable authoring constraints/examples) alongside SOUL/PROJECT/SESSION/AGENT; see `docs/llm/LLM_CONTEXT_M5_PRIMER_CONTEXT.md` and rust primer dogfood packets.
 
 - Ladder update: M9a introduces durable LLM stream recording in OptFlow (fake provider only), keeping orchestration node authoring on `IEnumerator<AiStep>`.
 
 
 - Orchestration update: authored `Llm.Stream` helper available in M9b.
 
-Semantic Kernel actuator MCP bridge details: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md](ACTUATORS_SEMANTICKERNEL_M2_MCP.md).
+Semantic Kernel actuator MCP bridge details: [ACTUATORS_SEMANTICKERNEL_M2_MCP.md](../actuators/ACTUATORS_SEMANTICKERNEL_M2_MCP.md).
 
 
 Semantic Kernel M3 capability profiles: use risk tiers (Read/Write/ExternalEffect/Destructive/Unknown) as workflow input, then require explicit approval gates before write/effect/destructive invocation.
@@ -153,7 +153,7 @@ The orchestration ladder now includes Graph-through-SK approval boundaries via `
 
 - Added orchestration ladder sample: `samples/Dominatus.SemanticKernelGraphAssistant` (Ai.Decide + SK profile allowlist + ActuationPolicy gating).
 
-- M10a adds ranked text-provider fallback as a boring `ILlmClient` implementation (`RankedLlmClient`). It is provider routing below the text actuation boundary, not a new orchestration layer. See `docs/LLM_V1_M10a_RANKED_CLIENT.md`.
+- M10a adds ranked text-provider fallback as a boring `ILlmClient` implementation (`RankedLlmClient`). It is provider routing below the text actuation boundary, not a new orchestration layer. See `docs/llm/LLM_V1_M10a_RANKED_CLIENT.md`.
 
 ## M11a OpenRouter rung
 

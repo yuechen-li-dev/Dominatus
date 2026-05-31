@@ -62,7 +62,7 @@ yield return Ai.Act(
 
 ## Next milestone
 
-- See `docs/STRIDECONN_M1_RUST_SIMULATOR.md` for the M1 Rust Simulator dialogue-box integration.
+- See `docs/user/STRIDECONN_M1_RUST_SIMULATOR.md` for the M1 Rust Simulator dialogue-box integration.
 
 
 ## Publish-readiness note

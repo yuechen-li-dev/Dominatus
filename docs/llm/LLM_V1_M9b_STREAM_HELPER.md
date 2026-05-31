@@ -38,7 +38,7 @@ Server reconnect/transport endpoints remain future work.
 
 ## Server integration
 
-M9b stream outputs can be consumed by `DominatusLlmStreamRegistry`; see `docs/DOMINATUS_SERVER_M1_STREAMS.md`.
+M9b stream outputs can be consumed by `DominatusLlmStreamRegistry`; see `docs/server/DOMINATUS_SERVER_M1_STREAMS.md`.
 
 
-- Durable server read + SSE consumption path is documented in `docs/DOMINATUS_SERVER_M2_STREAM_SSE.md`.
+- Durable server read + SSE consumption path is documented in `docs/server/DOMINATUS_SERVER_M2_STREAM_SSE.md`.

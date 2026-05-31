@@ -110,4 +110,4 @@ M0 does not provide authentication/authorization. Production hosts should add au
 
 ## Forward link
 
-For durable LLM stream read/reconnect endpoints added after M0, see `docs/DOMINATUS_SERVER_M1_STREAMS.md`.
+For durable LLM stream read/reconnect endpoints added after M0, see `docs/server/DOMINATUS_SERVER_M1_STREAMS.md`.

@@ -76,4 +76,4 @@ Planned future extensions:
 
 ## Follow-on
 
-M4b adds durable file-backed persistence via `JsonLlmMagiCassette`; see `docs/LLM_V1_M4b.md` for schema and validation rules.
+M4b adds durable file-backed persistence via `JsonLlmMagiCassette`; see `docs/DevLog/LLM_V1_M4b.md` for schema and validation rules.

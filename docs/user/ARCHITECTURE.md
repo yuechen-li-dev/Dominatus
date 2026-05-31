@@ -12,11 +12,11 @@ It does **not** require LLMs to function. It is fully usable on its own as a det
 
 Dominatus is a general-purpose runtime for any domain that needs agents with memory, structured control flow, commands, and save/restore semantics — including video games, simulations, and industrial control systems.
 
-For practical typed non-LLM side effects, see `Dominatus.Actuators.Standard` (sandboxed file commands + wall-clock actuators): `docs/ACTUATORS_STANDARD_M0.md`.
+For practical typed non-LLM side effects, see `Dominatus.Actuators.Standard` (sandboxed file commands + wall-clock actuators): `docs/actuators/ACTUATORS_STANDARD_M0.md`.
 
-For Home Assistant REST integration as a typed allowlisted actuator bridge, see `Dominatus.Actuators.HomeAssistant`: `docs/ACTUATORS_HOMEASSISTANT_M0.md`.
-For Home Assistant WebSocket `state_changed` environment observation bridge, see `docs/ACTUATORS_HOMEASSISTANT_M1_WEBSOCKET.md`.
-For ASP.NET inspection endpoints suitable for custom web UIs, see `Dominatus.Server` (`docs/DOMINATUS_SERVER_M0.md`).
+For Home Assistant REST integration as a typed allowlisted actuator bridge, see `Dominatus.Actuators.HomeAssistant`: `docs/actuators/ACTUATORS_HOMEASSISTANT_M0.md`.
+For Home Assistant WebSocket `state_changed` environment observation bridge, see `docs/actuators/ACTUATORS_HOMEASSISTANT_M1_WEBSOCKET.md`.
+For ASP.NET inspection endpoints suitable for custom web UIs, see `Dominatus.Server` (`docs/server/DOMINATUS_SERVER_M0.md`).
 
 ---
 
@@ -166,7 +166,7 @@ Nodes should use explicit blackboard surfaces for mutable durable state:
 `ctx.Bb` for agent-local state and `ctx.WorldBb` for shared world/session
 state. World-blackboard dirty-key transition integration is future work.
 For squad/team coordination patterns — and why Dominatus does not currently
-expose native writable team blackboards — see `docs/TEAM_COORDINATION.md`.
+expose native writable team blackboards — see `docs/user/TEAM_COORDINATION.md`.
 
 ---
 
@@ -540,7 +540,7 @@ public sealed class MyCommandHandler : IActuationHandler<MyCommand>
 `IActuationPolicy` is a pre-dispatch hook. If any registered policy returns
 `Deny`, the command never reaches its handler and an immediate failed
 `ActuationCompleted` is published instead. This is the safety/governance layer.
-See `docs/ACTUATION_POLICY.md` for the Core helper API and composition model.
+See `docs/user/ACTUATION_POLICY.md` for the Core helper API and composition model.
 
 ---
 
@@ -556,7 +556,7 @@ an event that was published before the wait began.
 The mailbox (`IAiMailbox`) lets you publish events to another agent's bus
 from outside a node: `world.Mail.Send(targetId, message)`.
 For recommended team/squad ownership patterns using mailbox + lead-owned memory,
-see `docs/TEAM_COORDINATION.md`.
+see `docs/user/TEAM_COORDINATION.md`.
 
 ---
 
@@ -946,22 +946,22 @@ world.Tick(dt)
 
 For engine integration, use connector packages rather than adding engine dependencies to `Dominatus.Core`.
 
-- Stride runtime bridge docs: `docs/STRIDECONN_M0.md`
+- Stride runtime bridge docs: `docs/user/STRIDECONN_M0.md`
 
 
-- Semantic Kernel actuator M0: `docs/ACTUATORS_SEMANTICKERNEL_M0.md` (SK as capability/plugin invocation only; Dominatus remains orchestrator).
+- Semantic Kernel actuator M0: `docs/actuators/ACTUATORS_SEMANTICKERNEL_M0.md` (SK as capability/plugin invocation only; Dominatus remains orchestrator).
 
-- See `docs/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md` for Microsoft-style ledger-loop mapping with Dominatus orchestration.
+- See `docs/samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md` for Microsoft-style ledger-loop mapping with Dominatus orchestration.
 
 
-For explicit LLM context-store doctrine and packet generation, see `docs/LLM_CONTEXT_M0.md`.
+For explicit LLM context-store doctrine and packet generation, see `docs/llm/LLM_CONTEXT_M0.md`.
 
-For orchestration sizing guidance (direct code vs dispatch vs HFSM/LLM/human approval), see `docs/ORCHESTRATION_LADDER.md`.
+For orchestration sizing guidance (direct code vs dispatch vs HFSM/LLM/human approval), see `docs/user/ORCHESTRATION_LADDER.md`.
 
 
 ## Dominatus.Server stream inspection (M1)
 
-`Dominatus.Server` now includes an optional durable LLM stream read model (`DominatusLlmStreamRegistry`) and read-only reconnect endpoints (`/dominatus/streams...`). See `docs/DOMINATUS_SERVER_M1_STREAMS.md`.
+`Dominatus.Server` now includes an optional durable LLM stream read model (`DominatusLlmStreamRegistry`) and read-only reconnect endpoints (`/dominatus/streams...`). See `docs/server/DOMINATUS_SERVER_M1_STREAMS.md`.
 
 
-- Dominatus.Server M2 adds a read-only SSE endpoint (`/dominatus/streams/{streamId}/events`) as a live tail over `DominatusLlmStreamRegistry`; see `docs/DOMINATUS_SERVER_M2_STREAM_SSE.md`.
+- Dominatus.Server M2 adds a read-only SSE endpoint (`/dominatus/streams/{streamId}/events`) as a live tail over `DominatusLlmStreamRegistry`; see `docs/server/DOMINATUS_SERVER_M2_STREAM_SSE.md`.

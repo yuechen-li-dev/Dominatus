@@ -89,5 +89,5 @@ Potential follow-ups:
 - **M4**: optional target-transition integration after design review.
 ## Related doctrine
 
-- [LLM Casting Model](LLM_CASTING_MODEL.md)
+- [LLM Casting Model](../llm/LLM_CASTING_MODEL.md)
 
