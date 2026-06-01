@@ -97,6 +97,49 @@ public sealed class BenchmarkMetrics
 
     internal void AddPhaseTicks(int phase, long elapsedTicks) => _phaseElapsedTicks[phase] += elapsedTicks;
 
+    internal RtsBenchmarkMetricsCheckpoint CaptureDeterministicCheckpoint()
+    {
+        var counters = GetType()
+            .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+            .Where(field => field.FieldType == typeof(long) || field.FieldType == typeof(int))
+            .OrderBy(field => field.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                field => field.Name,
+                field => field.FieldType == typeof(int)
+                    ? (long)(int)field.GetValue(this)!
+                    : (long)field.GetValue(this)!,
+                StringComparer.Ordinal);
+
+        return new RtsBenchmarkMetricsCheckpoint { Counters = counters };
+    }
+
+    internal void RestoreDeterministicCheckpoint(RtsBenchmarkMetricsCheckpoint checkpoint)
+    {
+        if (checkpoint?.Counters is null) throw new InvalidDataException("Checkpoint metrics are required.");
+        var fields = GetType()
+            .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+            .Where(field => field.FieldType == typeof(long) || field.FieldType == typeof(int))
+            .ToDictionary(field => field.Name, StringComparer.Ordinal);
+
+        foreach (var (name, value) in checkpoint.Counters)
+        {
+            if (!fields.TryGetValue(name, out var field))
+                continue;
+
+            if (field.FieldType == typeof(int))
+            {
+                if (value is < int.MinValue or > int.MaxValue)
+                    throw new InvalidDataException($"Metric '{name}' value {value} is outside the Int32 range.");
+                field.SetValue(this, (int)value);
+            }
+            else
+            {
+                field.SetValue(this, value);
+            }
+        }
+    }
+
+
     internal IReadOnlyList<RtsBenchmarkPhaseTiming> CreatePhaseTimings()
     {
         var measuredTicks = MeasuredSimulationTimestampTicks;

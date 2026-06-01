@@ -13,20 +13,7 @@ public static class RtsBenchmarkRunner
         var (ships, ticks) = DefaultsFor(options.Mode);
         ships = options.OverrideShips ?? ships;
         ticks = options.OverrideTicks ?? ticks;
-        var spatialCellSize = ResolveSpatialCellSize(options);
-        var minSensorCadenceTicks = options.MinSensorCadenceTicks ?? 1;
-        var maxSensorCadenceTicks = options.MaxSensorCadenceTicks ?? 12;
-
-        var simulation = new BattleSimulation(
-            ships,
-            options.CheckpointInterval,
-            options.WriteCheckpoints,
-            output,
-            options.SensorMode,
-            spatialCellSize,
-            options.EnableDynamicSensorCadence,
-            minSensorCadenceTicks,
-            maxSensorCadenceTicks);
+        var simulation = CreateSimulation(options, ships, output);
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var gen0Before = GC.CollectionCount(0);
         var gen1Before = GC.CollectionCount(1);
@@ -34,6 +21,31 @@ public static class RtsBenchmarkRunner
         var sw = Stopwatch.StartNew();
         simulation.RunTicks(ticks);
 
+        return FinishSimulation(
+            simulation,
+            options,
+            ships,
+            ticks,
+            allocatedBefore,
+            gen0Before,
+            gen1Before,
+            gen2Before,
+            sw,
+            output);
+    }
+
+    private static RtsBenchmarkResult FinishSimulation(
+        BattleSimulation simulation,
+        RtsBenchmarkOptions options,
+        int initialShips,
+        int totalTicks,
+        long allocatedBefore,
+        int gen0Before,
+        int gen1Before,
+        int gen2Before,
+        Stopwatch sw,
+        TextWriter? output)
+    {
         var metrics = simulation.Metrics;
         var phaseStart = Stopwatch.GetTimestamp();
         var power = simulation.ComputeFleetPower();
@@ -42,7 +54,7 @@ public static class RtsBenchmarkRunner
         metrics.AddPhaseTicks(BenchmarkMetrics.MetricsPhase, Stopwatch.GetTimestamp() - phaseStart);
 
         phaseStart = Stopwatch.GetTimestamp();
-        var hash = DeterminismHasher.Compute(options.Mode, ticks, ships, simulation.Ships, metrics, winner, power.Dominion, power.Collective);
+        var hash = DeterminismHasher.Compute(options.Mode, totalTicks, initialShips, simulation.Ships, metrics, winner, power.Dominion, power.Collective);
         metrics.AddPhaseTicks(BenchmarkMetrics.HashingPhase, Stopwatch.GetTimestamp() - phaseStart);
         var allocatedBytes = Math.Max(0, GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
         var gen0Collections = Math.Max(0, GC.CollectionCount(0) - gen0Before);
@@ -55,8 +67,8 @@ public static class RtsBenchmarkRunner
         var result = new RtsBenchmarkResult
         {
             Mode = options.Mode,
-            TicksSimulated = ticks,
-            InitialShips = ships,
+            TicksSimulated = totalTicks,
+            InitialShips = initialShips,
             FinalShips = finalShips,
             AgentTicks = metrics.AgentTicks,
             AgentTickCalls = metrics.AgentTickCalls,
@@ -109,7 +121,7 @@ public static class RtsBenchmarkRunner
             SensorRefreshSkipRate = metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped == 0 ? 0d : metrics.SensorRefreshesSkipped / (double)(metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped),
             AverageSensorCadenceTicks = metrics.SensorRefreshesPerformed == 0 ? 0d : metrics.TotalSelectedSensorCadenceTicks / (double)metrics.SensorRefreshesPerformed,
             SensorMode = options.SensorMode,
-            SpatialCellSize = spatialCellSize,
+            SpatialCellSize = ResolveSpatialCellSize(options),
             SpatialMaxCellsUsed = metrics.SpatialMaxCellsUsed,
             SpatialCellQueries = metrics.SpatialCellQueries,
             SpatialCandidatePairs = options.SensorMode == RtsSensorMode.BroadScan ? metrics.BroadSensorPairsEquivalent : metrics.SpatialCandidatePairs,
@@ -126,7 +138,7 @@ public static class RtsBenchmarkRunner
             ActionsSorted = metrics.ActionsSorted,
             ActionSortBatches = metrics.ActionSortBatches,
             MaxActionsInTick = metrics.MaxActionsInTick,
-            AverageActionsPerTick = ticks == 0 ? 0d : metrics.ActionsEmitted / (double)ticks,
+            AverageActionsPerTick = totalTicks == 0 ? 0d : metrics.ActionsEmitted / (double)totalTicks,
             MailboxEventsSent = metrics.MailboxEventsSent,
             MailboxEventsDelivered = metrics.MailboxEventsDelivered,
             TargetSpottedEvents = metrics.TargetSpottedEvents,
@@ -160,6 +172,90 @@ public static class RtsBenchmarkRunner
 
         BattleReport.Write(output ?? TextWriter.Null, result);
         return result;
+    }
+
+    public static RtsBenchmarkCheckpoint RunToCheckpoint(
+        RtsBenchmarkOptions options,
+        int stopAfterTicks,
+        TextWriter? output = null)
+    {
+        if (stopAfterTicks < 0) throw new ArgumentOutOfRangeException(nameof(stopAfterTicks));
+        Validate(options);
+        var (ships, totalTicks) = DefaultsFor(options.Mode);
+        ships = options.OverrideShips ?? ships;
+        totalTicks = options.OverrideTicks ?? totalTicks;
+        if (stopAfterTicks > totalTicks)
+            throw new ArgumentOutOfRangeException(nameof(stopAfterTicks), "StopAfterTicks cannot exceed the configured total tick count.");
+
+        var simulation = CreateSimulation(options, ships, output);
+        simulation.RunTicks(stopAfterTicks);
+        var checkpoint = simulation.CreateCheckpoint(options with { OverrideShips = ships, OverrideTicks = totalTicks }, stopAfterTicks);
+        RtsBenchmarkCheckpointStore.Validate(checkpoint, totalTicks);
+        return checkpoint;
+    }
+
+    public static RtsBenchmarkResult ResumeFromCheckpoint(
+        RtsBenchmarkCheckpoint checkpoint,
+        int additionalTicks,
+        TextWriter? output = null)
+    {
+        if (additionalTicks < 0) throw new ArgumentOutOfRangeException(nameof(additionalTicks));
+        RtsBenchmarkCheckpointStore.Validate(checkpoint, checkpoint.CompletedTicks + additionalTicks);
+        var options = checkpoint.Options with { OverrideShips = checkpoint.Ships.Count, OverrideTicks = checkpoint.CompletedTicks + additionalTicks };
+        Validate(options);
+        var simulation = CreateSimulationFromCheckpoint(checkpoint, options, output);
+
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var gen0Before = GC.CollectionCount(0);
+        var gen1Before = GC.CollectionCount(1);
+        var gen2Before = GC.CollectionCount(2);
+        var sw = Stopwatch.StartNew();
+        simulation.RunTicks(additionalTicks, checkpoint.CompletedTicks);
+        return FinishSimulation(
+            simulation,
+            options,
+            checkpoint.Ships.Count,
+            checkpoint.CompletedTicks + additionalTicks,
+            allocatedBefore,
+            gen0Before,
+            gen1Before,
+            gen2Before,
+            sw,
+            output);
+    }
+
+    private static BattleSimulation CreateSimulation(RtsBenchmarkOptions options, int ships, TextWriter? output)
+    {
+        var spatialCellSize = ResolveSpatialCellSize(options);
+        var minSensorCadenceTicks = options.MinSensorCadenceTicks ?? 1;
+        var maxSensorCadenceTicks = options.MaxSensorCadenceTicks ?? 12;
+        return new BattleSimulation(
+            ships,
+            options.CheckpointInterval,
+            options.WriteCheckpoints,
+            output,
+            options.SensorMode,
+            spatialCellSize,
+            options.EnableDynamicSensorCadence,
+            minSensorCadenceTicks,
+            maxSensorCadenceTicks);
+    }
+
+    private static BattleSimulation CreateSimulationFromCheckpoint(RtsBenchmarkCheckpoint checkpoint, RtsBenchmarkOptions options, TextWriter? output)
+    {
+        var spatialCellSize = ResolveSpatialCellSize(options);
+        var minSensorCadenceTicks = options.MinSensorCadenceTicks ?? 1;
+        var maxSensorCadenceTicks = options.MaxSensorCadenceTicks ?? 12;
+        return new BattleSimulation(
+            checkpoint,
+            options.CheckpointInterval,
+            options.WriteCheckpoints,
+            output,
+            options.SensorMode,
+            spatialCellSize,
+            options.EnableDynamicSensorCadence,
+            minSensorCadenceTicks,
+            maxSensorCadenceTicks);
     }
 
     public static (int Ships, int Ticks) DefaultsFor(BenchmarkMode mode) => mode switch

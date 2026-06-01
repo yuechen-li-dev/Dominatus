@@ -21,6 +21,20 @@ internal static class Program
                     WriteTrialDetails = options.TrialDetails
                 }, Console.Out);
             }
+            else if (!string.IsNullOrWhiteSpace(options.ResumeFrom))
+            {
+                var checkpoint = RtsBenchmarkCheckpointStore.LoadFromFile(options.ResumeFrom);
+                var resumeTicks = options.ResumeTicks ?? Math.Max(0, (checkpoint.Options.OverrideTicks ?? checkpoint.CompletedTicks) - checkpoint.CompletedTicks);
+                RtsBenchmarkRunner.ResumeFromCheckpoint(checkpoint, resumeTicks, Console.Out);
+            }
+            else if (options.CheckpointAt is int checkpointAt)
+            {
+                if (string.IsNullOrWhiteSpace(options.CheckpointFile))
+                    throw new ArgumentException("--checkpoint-file is required when --checkpoint-at is used.");
+                var checkpoint = RtsBenchmarkRunner.RunToCheckpoint(options.BenchmarkOptions, checkpointAt, Console.Out);
+                RtsBenchmarkCheckpointStore.SaveToFile(checkpoint, options.CheckpointFile);
+                Console.Out.WriteLine($"Saved RTSBenchmark checkpoint after {checkpoint.CompletedTicks} ticks to {options.CheckpointFile}");
+            }
             else
             {
                 RtsBenchmarkRunner.Run(options.BenchmarkOptions, Console.Out);
@@ -72,6 +86,18 @@ internal static class Program
                 case "--checkpoint-interval" when i + 1 < args.Length:
                     options = options with { BenchmarkOptions = options.BenchmarkOptions with { CheckpointInterval = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
+                case "--checkpoint-at" when i + 1 < args.Length:
+                    options = options with { CheckpointAt = int.Parse(args[++i], CultureInfo.InvariantCulture) };
+                    break;
+                case "--checkpoint-file" when i + 1 < args.Length:
+                    options = options with { CheckpointFile = args[++i] };
+                    break;
+                case "--resume-from" when i + 1 < args.Length:
+                    options = options with { ResumeFrom = args[++i] };
+                    break;
+                case "--resume-ticks" when i + 1 < args.Length:
+                    options = options with { ResumeTicks = int.Parse(args[++i], CultureInfo.InvariantCulture) };
+                    break;
                 case "--compare-sensor-cadence":
                     options = options with { CompareSensorCadence = true };
                     break;
@@ -112,6 +138,10 @@ internal static class Program
         output.WriteLine("  --ships N                             Override ship count");
         output.WriteLine("  --ticks N                             Override tick count");
         output.WriteLine("  --checkpoint-interval N               Default: 500");
+        output.WriteLine("  --checkpoint-at N                     Save an app checkpoint after N completed ticks");
+        output.WriteLine("  --checkpoint-file PATH                Path used with --checkpoint-at");
+        output.WriteLine("  --resume-from PATH                    Resume from an RTSBenchmark checkpoint file");
+        output.WriteLine("  --resume-ticks N                      Ticks to simulate after --resume-from");
         output.WriteLine("  --no-checkpoints                      Disable checkpoint lines");
         output.WriteLine("  --sensor BroadScan|SpatialGrid        Default: SpatialGrid");
         output.WriteLine("  --spatial-cell-size N                 Default: max ship sensor range");
@@ -137,5 +167,9 @@ internal static class Program
         public int? MaxDegreeOfParallelism { get; init; }
         public bool IncludeBroadScanBaseline { get; init; } = true;
         public bool TrialDetails { get; init; }
+        public int? CheckpointAt { get; init; }
+        public string? CheckpointFile { get; init; }
+        public string? ResumeFrom { get; init; }
+        public int? ResumeTicks { get; init; }
     }
 }
