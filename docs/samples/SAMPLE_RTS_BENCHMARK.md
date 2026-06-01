@@ -1127,3 +1127,78 @@ Execution: Sequential
 ```
 
 Each configuration then receives a summary block containing the primary rate distribution, key phase medians, allocation mean, skip-rate median, and hash stability. The final `Best median` line names the configuration with the highest median `AgentTicksPerSecond` within that observed trial set and gives its margin over the next best median. This line is descriptive only; it is not a performance threshold and does not imply statistical significance.
+
+## M7.1 non-Smoke scale comparison report
+
+M7 Smoke comparisons were useful for validating the repeated-trial runner, but Smoke is too small to judge sensor optimization direction. Smoke uses 50 ships over 250 ticks, so a full broad scan can be cheap enough that SpatialGrid rebuild/query bookkeeping and dynamic-cadence state maintenance compete with, or exceed, the work they save. M7.1 therefore treats Smoke as a correctness and tooling scale, and uses Skirmish as the first meaningful scale for sensor-mode claims.
+
+These results were captured on the local agent machine during this documentation update. They are machine-specific, Debug-build `dotnet run` measurements and are not formal published benchmark numbers. Public performance claims should use a documented machine, runtime, build configuration, power profile, and command line. Armada was not run; it remains manual-only.
+
+### Commands run
+
+Sequential Skirmish comparison:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Skirmish --trials 5
+```
+
+Sequential Battle comparison attempt:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Battle --trials 3
+```
+
+The Battle comparison produced no summary output after about 6 minutes and 44 seconds and was interrupted as not reasonable for this reporting pass. That means Battle remains deferred rather than reported.
+
+Optional parallel Skirmish comparison:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Skirmish --trials 5 --parallel-trials --max-degree-of-parallelism 2
+```
+
+### Sequential Skirmish results
+
+| Mode     | Config                 | Trials | Median agent-ticks/sec | Min agent-ticks/sec | Max agent-ticks/sec | Median decisions/sec | Sensor ms median | Decision ms median | Allocated bytes mean | Allocated bytes median | Skip rate median | Hash stable |
+| -------- | ---------------------- | -----: | ---------------------: | ------------------: | ------------------: | -------------------: | ---------------: | -----------------: | -------------------: | ---------------------: | ---------------: | ----------- |
+| Skirmish | BroadScan no cadence   |      5 |              29,119.04 |           27,462.93 |           29,945.74 |           262,071.38 |         1,636.12 |             623.77 |        164,530,548.80 |       not printed by CLI |             0.0% | yes         |
+| Skirmish | SpatialGrid no cadence |      5 |              31,162.99 |           27,737.54 |           32,848.86 |           280,466.93 |         1,411.00 |             644.70 |        170,379,515.20 |       not printed by CLI |             0.0% | yes         |
+| Skirmish | SpatialGrid + cadence  |      5 |              39,911.94 |           21,273.63 |           44,342.24 |           359,207.50 |           809.96 |             683.87 |        133,315,936.00 |       not printed by CLI |            56.9% | yes         |
+
+Best median configuration: `SpatialGrid + cadence`, with a reported +28.1% median advantage over the next best median configuration in this run.
+
+The dominant measured phase in the sequential comparison is Sensor for all three configurations. Sensor median time was about 2.6x Decision for `BroadScan no cadence`, about 2.2x Decision for `SpatialGrid no cadence`, and about 1.2x Decision for `SpatialGrid + cadence`. Dynamic cadence substantially reduced Sensor median time and allocation mean in this trial set, while Decision time remained in the same general range.
+
+### Optional parallel Skirmish results
+
+Parallel trials measure throughput for independent benchmark instances under CPU contention, not the primary single-thread score. They are included only as an optional batch-throughput observation.
+
+| Mode     | Execution                 | Config                 | Trials | Median agent-ticks/sec | Min agent-ticks/sec | Max agent-ticks/sec | Median decisions/sec | Sensor ms median | Decision ms median | Allocated bytes mean | Allocated bytes median | Skip rate median | Hash stable |
+| -------- | ------------------------- | ---------------------- | -----: | ---------------------: | ------------------: | ------------------: | -------------------: | ---------------: | -----------------: | -------------------: | ---------------------: | ---------------: | ----------- |
+| Skirmish | Parallel, max degree 2    | BroadScan no cadence   |      5 |              27,167.15 |           26,357.53 |           30,038.32 |           244,504.32 |         1,715.09 |             686.96 |        164,533,897.60 |       not printed by CLI |             0.0% | yes         |
+| Skirmish | Parallel, max degree 2    | SpatialGrid no cadence |      5 |              28,296.81 |           27,177.47 |           29,356.05 |           254,671.31 |         1,552.53 |             662.84 |        170,381,419.20 |       not printed by CLI |             0.0% | yes         |
+| Skirmish | Parallel, max degree 2    | SpatialGrid + cadence  |      5 |              39,841.10 |           18,590.72 |           41,241.25 |           358,569.87 |           851.88 |             665.71 |        133,323,102.40 |       not printed by CLI |            56.9% | yes         |
+
+Best median configuration in the optional parallel run: `SpatialGrid + cadence`, with a reported +40.8% median advantage over the next best median configuration. Because this mode intentionally runs independent trials concurrently, the spread should not be mixed with the sequential comparison when making single-thread claims.
+
+### Battle result
+
+Battle mode was attempted with 3 sequential trials, but no comparison summary was printed after about 6 minutes and 44 seconds. The run was stopped instead of waiting for a potentially long Debug-build comparison. M7.1 therefore does not answer Battle-scale crossover with completed data. A later pass should either run Battle in a documented Release configuration, add progress output for long comparisons, or run fewer Battle trials only if that is accepted as a separate measurement shape.
+
+### Interpretation
+
+For the required Skirmish comparison, SpatialGrid did start beating BroadScan: `SpatialGrid no cadence` had a 31,162.99 median agent-ticks/sec result versus 29,119.04 for `BroadScan no cadence`, while also reducing median Sensor time from 1,636.12 ms to 1,411.00 ms. This is a modest Skirmish-scale crossover observation, not a universal claim.
+
+Dynamic sensor cadence helped materially at Skirmish scale in this run. `SpatialGrid + cadence` reached 39,911.94 median agent-ticks/sec, reduced median Sensor time to 809.96 ms, reported a 56.9% median sensor skip rate, and had the lowest reported mean allocation. The low minimum trial for `SpatialGrid + cadence` shows that timing noise still exists, so repeated trials remain necessary.
+
+Sensor work remains the top hot path among the fields exposed by the comparison summary. Decision median time is still significant, but the largest differences between configurations come from Sensor median time and sensor refresh skip rate. The comparison CLI did not print the complete per-run hot-path summary or median allocated bytes, so those fields are intentionally marked as not printed rather than inferred.
+
+Determinism hashes were stable for every Skirmish configuration in both sequential and optional parallel comparisons. Hash stability supports interpreting the rate differences as performance/timing differences rather than divergent simulation outcomes.
+
+Current practical throughput on this machine for Skirmish sequential comparisons was about 29.1K agent-ticks/sec for `BroadScan no cadence`, 31.2K for `SpatialGrid no cadence`, and 39.9K for `SpatialGrid + cadence`. The current recommended benchmark mode for public claims is still a repeated sequential comparison, preferably Skirmish or larger, with the machine/runtime/build configuration documented. Smoke should be described as a quick correctness and tooling check rather than evidence for or against sensor optimizations.
+
+What remains noisy or unknown:
+
+- Battle-scale results are still unknown from this pass because the Debug-build comparison did not complete in a reasonable time.
+- The CLI prints mean allocated bytes but not median allocated bytes, even though the comparison data model tracks the median internally.
+- The comparison summary exposes Sensor and Decision phase medians, but not the full single-run hot-path summary for each configuration.
+- These results were captured from one machine and one run set; they should be rerun before making release-note or public benchmark claims.
