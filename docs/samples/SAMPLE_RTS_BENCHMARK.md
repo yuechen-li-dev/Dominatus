@@ -1202,3 +1202,48 @@ What remains noisy or unknown:
 - The CLI prints mean allocated bytes but not median allocated bytes, even though the comparison data model tracks the median internally.
 - The comparison summary exposes Sensor and Decision phase medians, but not the full single-run hot-path summary for each configuration.
 - These results were captured from one machine and one run set; they should be rerun before making release-note or public benchmark claims.
+
+## M8 tick-boundary checkpoint/resume proof
+
+M8 adds an app-level checkpoint/resume proof for `Dominatus.RTSBenchmark`. The benchmark can now run to a completed tick boundary, save deterministic simulation truth into the existing Dominatus save container, reload it, reconstruct agents/HFSMs deterministically, and continue from the next tick. The proof target is:
+
+1. run `N` ticks straight;
+2. run `K` ticks, save a checkpoint, load it, and run `N-K` more ticks;
+3. compare deterministic hash, deterministic counters, winner, fleet power, and final ship counts.
+
+The checkpoint deliberately does **not** serialize compiler-generated C# iterator/enumerator objects. RTSBenchmark saves the spellbook rather than pickling the goblin: explicit ship state, deterministic counters, checkpoint report lines, sensor-cadence state, tactical summaries, focus targets, and the HFSM active state path are persisted. On load the sample rebuilds the fleet arrays, `AiWorld`, one `AiAgent` per ship, blackboards, sensor cadence state, and HFSM paths from that explicit truth. Fresh node enumerators are created by the normal HFSM restore path.
+
+Checkpoints are valid only at tick boundaries after cooldown, sensor, decision, action-sort, action-resolution, mailbox/event delivery, and optional checkpoint-report phases have completed. The action buffer is scratch state and is not durable. There is no mid-tick checkpointing and no live external actuation, LLM, network, rendering, GPU, or provider state in the checkpoint.
+
+The save file uses the existing Dominatus persistence infrastructure:
+
+- Core `SaveFile`/`SaveChunk` binary container;
+- `DominatusSave.CreateCheckpointChunks` and `DominatusSave.ReadCheckpointChunks`;
+- an app-specific `ISaveChunkContributor` chunk;
+- chunk id `rtsbenchmark.state`;
+- chunk format `application/vnd.dominatus.rtsbenchmark.checkpoint+json`;
+- chunk/checkpoint version `1`.
+
+Timing, GC, and allocation measurements are intentionally not deterministic checkpoint state. A resumed run has its own wall-clock/allocation diagnostics, while equivalence tests compare deterministic hash, deterministic counters, final state summaries, and sensor/spatial counters.
+
+Programmatic APIs:
+
+```csharp
+var checkpoint = RtsBenchmarkRunner.RunToCheckpoint(options, stopAfterTicks: 100);
+RtsBenchmarkCheckpointStore.SaveToFile(checkpoint, "artifacts/rts-smoke.dsave");
+
+var loaded = RtsBenchmarkCheckpointStore.LoadFromFile("artifacts/rts-smoke.dsave");
+var result = RtsBenchmarkRunner.ResumeFromCheckpoint(loaded, additionalTicks: 150);
+```
+
+CLI examples:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --mode Smoke --ticks 250 --checkpoint-at 100 --checkpoint-file artifacts/rts-smoke.dsave
+```
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --resume-from artifacts/rts-smoke.dsave --resume-ticks 150
+```
+
+This implements the app-level proof anticipated by `docs/user/PERSISTENCE_CHECKPOINT_REVIEW.md`: Core's generic full-runtime snapshot remains intentionally bounded, while RTSBenchmark demonstrates deterministic tick-boundary resume by persisting app-owned truth and reconstructing runtime objects.

@@ -43,31 +43,97 @@ public sealed class BattleSimulation
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
         int maxSensorCadenceTicks)
+        : this(
+            FleetFactory.CreateFleets(shipCount),
+            checkpointInterval,
+            writeCheckpoints,
+            output,
+            sensorMode,
+            spatialCellSize,
+            enableDynamicSensorCadence,
+            minSensorCadenceTicks,
+            maxSensorCadenceTicks,
+            metricsCheckpoint: null,
+            checkpointLines: null,
+            sensorCadenceCheckpoints: null)
+    {
+    }
+
+    public BattleSimulation(
+        RtsBenchmarkCheckpoint checkpoint,
+        int checkpointInterval,
+        bool writeCheckpoints,
+        TextWriter? output,
+        RtsSensorMode sensorMode,
+        float spatialCellSize,
+        bool enableDynamicSensorCadence,
+        int minSensorCadenceTicks,
+        int maxSensorCadenceTicks)
+        : this(
+            checkpoint.Ships.Select(ToShipState).ToList(),
+            checkpointInterval,
+            writeCheckpoints,
+            output,
+            sensorMode,
+            spatialCellSize,
+            enableDynamicSensorCadence,
+            minSensorCadenceTicks,
+            maxSensorCadenceTicks,
+            checkpoint.Metrics,
+            checkpoint.Checkpoints,
+            checkpoint.Ships)
+    {
+    }
+
+    private BattleSimulation(
+        List<ShipState> ships,
+        int checkpointInterval,
+        bool writeCheckpoints,
+        TextWriter? output,
+        RtsSensorMode sensorMode,
+        float spatialCellSize,
+        bool enableDynamicSensorCadence,
+        int minSensorCadenceTicks,
+        int maxSensorCadenceTicks,
+        RtsBenchmarkMetricsCheckpoint? metricsCheckpoint,
+        IReadOnlyList<string>? checkpointLines,
+        IReadOnlyList<ShipCheckpoint>? sensorCadenceCheckpoints)
     {
         _sensorMode = sensorMode;
         _spatialCellSize = spatialCellSize;
         _dynamicSensorCadenceEnabled = enableDynamicSensorCadence;
         _minSensorCadenceTicks = minSensorCadenceTicks;
         _maxSensorCadenceTicks = maxSensorCadenceTicks;
-        _ships = FleetFactory.CreateFleets(shipCount);
+        _ships = ships;
         _byId = _ships.ToDictionary(s => s.Id);
         _initialShips = _ships.Count;
         _checkpointInterval = checkpointInterval;
         _writeCheckpoints = writeCheckpoints;
         _output = output;
 
+        var sensorByShip = sensorCadenceCheckpoints?.ToDictionary(s => s.Id);
         foreach (var ship in _ships)
         {
             var agent = ShipAgentFactory.Create(ship);
             _world.Add(agent);
             _agents[ship.Id] = agent;
             _shipToAgentId[ship.Id] = agent.Id.Value;
-            _sensorCadence[ship.Id] = new SensorCadenceState
-            {
-                CurrentSensorCadenceTicks = _minSensorCadenceTicks,
-                LastObservedIntegrity = ship.Hull + ship.ShieldOrCarapace
-            };
+
+            ShipCheckpoint? shipCheckpoint = null;
+            if (sensorByShip is not null)
+                sensorByShip.TryGetValue(ship.Id, out shipCheckpoint);
+
+            var cadence = CreateSensorCadenceState(ship, shipCheckpoint);
+            _sensorCadence[ship.Id] = cadence;
+            RestoreAgentBlackboard(agent, ship, cadence, shipCheckpoint?.FocusTargetId ?? -1);
+            if (shipCheckpoint?.ActiveStatePath is { Count: > 0 } activePath)
+                agent.Brain.RestoreActivePath(_world, agent, activePath.ToArray());
         }
+
+        if (metricsCheckpoint is not null)
+            _metrics.RestoreDeterministicCheckpoint(metricsCheckpoint);
+        if (checkpointLines is not null)
+            _checkpoints.AddRange(checkpointLines);
 
         if (_sensorMode == RtsSensorMode.SpatialGrid)
             _spatialGrid = new SpatialShipGrid(_spatialCellSize, _ships);
@@ -77,10 +143,33 @@ public sealed class BattleSimulation
     public BenchmarkMetrics Metrics => _metrics;
     public IReadOnlyList<string> Checkpoints => _checkpoints;
 
-    public void RunTicks(int ticks)
+    public void RunTicks(int ticks, int completedTicks = 0)
     {
-        for (var tick = 1; tick <= ticks; tick++)
+        if (ticks < 0) throw new ArgumentOutOfRangeException(nameof(ticks));
+        for (var tick = completedTicks + 1; tick <= completedTicks + ticks; tick++)
             RunTick(tick);
+    }
+
+    public RtsBenchmarkCheckpoint CreateCheckpoint(RtsBenchmarkOptions options, int completedTicks)
+    {
+        if (completedTicks < 0) throw new ArgumentOutOfRangeException(nameof(completedTicks));
+        return new RtsBenchmarkCheckpoint
+        {
+            Options = options,
+            CompletedTicks = completedTicks,
+            Ships = _ships.Select(CreateShipCheckpoint).OrderBy(s => s.Id).ToArray(),
+            Metrics = _metrics.CaptureDeterministicCheckpoint(),
+            Checkpoints = _checkpoints.ToArray(),
+            Diagnostics = new RtsBenchmarkDiagnosticsCheckpoint
+            {
+                SensorMode = _sensorMode,
+                SpatialCellSize = _spatialCellSize,
+                DynamicSensorCadenceEnabled = _dynamicSensorCadenceEnabled,
+                MinSensorCadenceTicks = _minSensorCadenceTicks,
+                MaxSensorCadenceTicks = _maxSensorCadenceTicks,
+                Boundary = "tick-complete/action-buffer-cleared/event-delivery-complete"
+            }
+        };
     }
 
     public int MinSensorCadenceTicks => _minSensorCadenceTicks;
@@ -120,6 +209,137 @@ public sealed class BattleSimulation
             WriteCheckpoint(tick);
             _metrics.AddPhaseTicks(BenchmarkMetrics.CheckpointPhase, Stopwatch.GetTimestamp() - phaseStart);
         }
+    }
+
+    private static ShipState ToShipState(ShipCheckpoint checkpoint) => new()
+    {
+        Id = checkpoint.Id,
+        Faction = checkpoint.Faction,
+        Class = checkpoint.Class,
+        X = checkpoint.X,
+        Y = checkpoint.Y,
+        Hull = checkpoint.Hull,
+        ShieldOrCarapace = checkpoint.ShieldOrCarapace,
+        CooldownRemaining = checkpoint.CooldownRemaining,
+        Alive = checkpoint.Alive,
+        TargetId = checkpoint.TargetId,
+        CurrentAction = checkpoint.CurrentAction
+    };
+
+    private ShipCheckpoint CreateShipCheckpoint(ShipState ship)
+    {
+        var cadence = _sensorCadence[ship.Id];
+        return new ShipCheckpoint
+        {
+            Id = ship.Id,
+            Faction = ship.Faction,
+            Class = ship.Class,
+            X = ship.X,
+            Y = ship.Y,
+            Hull = ship.Hull,
+            ShieldOrCarapace = ship.ShieldOrCarapace,
+            CooldownRemaining = ship.CooldownRemaining,
+            Alive = ship.Alive,
+            TargetId = ship.TargetId,
+            CurrentAction = ship.CurrentAction,
+            FocusTargetId = _agents.TryGetValue(ship.Id, out var agent) ? agent.Bb.GetOrDefault(BenchmarkBlackboardKeys.FocusTargetId, -1) : -1,
+            ActiveStatePath = _agents.TryGetValue(ship.Id, out agent) ? agent.Brain.GetActivePath().Select(state => state.ToString()).ToArray() : [],
+            LastTacticalSummary = cadence.LastTacticalSummary is null ? null : ToCheckpoint(cadence.LastTacticalSummary),
+            NextSensorRefreshTick = cadence.NextSensorRefreshTick,
+            LastSensorRefreshTick = cadence.LastSensorRefreshTick,
+            CurrentSensorCadenceTicks = cadence.CurrentSensorCadenceTicks,
+            ForceSensorRefresh = cadence.ForceSensorRefresh,
+            LastDamageIntegrity = cadence.LastObservedIntegrity
+        };
+    }
+
+    private static TacticalSummaryCheckpoint ToCheckpoint(TacticalSummary summary) => new()
+    {
+        ImmediateThreatId = summary.ImmediateThreatId,
+        BestAttackTargetId = summary.BestAttackTargetId,
+        BestRepairTargetId = summary.BestRepairTargetId,
+        HighestValueVisibleEnemyId = summary.HighestValueVisibleEnemyId,
+        LocalThreatScore = summary.LocalThreatScore,
+        LocalSupportScore = summary.LocalSupportScore,
+        RelevantEnemyContacts = summary.RelevantEnemyContacts,
+        RelevantAllyContacts = summary.RelevantAllyContacts,
+        BestAttackTargetBand = summary.BestAttackTargetBand,
+        BestAttackPriorityScore = summary.BestAttackPriorityScore
+    };
+
+    private static TacticalSummary ToTacticalSummary(TacticalSummaryCheckpoint checkpoint) => new()
+    {
+        ImmediateThreatId = checkpoint.ImmediateThreatId,
+        BestAttackTargetId = checkpoint.BestAttackTargetId,
+        BestRepairTargetId = checkpoint.BestRepairTargetId,
+        HighestValueVisibleEnemyId = checkpoint.HighestValueVisibleEnemyId,
+        LocalThreatScore = checkpoint.LocalThreatScore,
+        LocalSupportScore = checkpoint.LocalSupportScore,
+        RelevantEnemyContacts = checkpoint.RelevantEnemyContacts,
+        RelevantAllyContacts = checkpoint.RelevantAllyContacts,
+        BestAttackTargetBand = checkpoint.BestAttackTargetBand,
+        BestAttackPriorityScore = checkpoint.BestAttackPriorityScore
+    };
+
+    private SensorCadenceState CreateSensorCadenceState(ShipState ship, ShipCheckpoint? checkpoint)
+    {
+        if (checkpoint is null)
+        {
+            return new SensorCadenceState
+            {
+                CurrentSensorCadenceTicks = _minSensorCadenceTicks,
+                LastObservedIntegrity = ship.Hull + ship.ShieldOrCarapace
+            };
+        }
+
+        return new SensorCadenceState
+        {
+            NextSensorRefreshTick = checkpoint.NextSensorRefreshTick,
+            LastSensorRefreshTick = checkpoint.LastSensorRefreshTick,
+            CurrentSensorCadenceTicks = checkpoint.CurrentSensorCadenceTicks,
+            ForceSensorRefresh = checkpoint.ForceSensorRefresh,
+            LastTacticalSummary = checkpoint.LastTacticalSummary is null ? null : ToTacticalSummary(checkpoint.LastTacticalSummary),
+            LastObservedIntegrity = checkpoint.LastDamageIntegrity
+        };
+    }
+
+    private static void RestoreAgentBlackboard(AiAgent agent, ShipState ship, SensorCadenceState cadence, int focusTargetId)
+    {
+        var def = ShipClassDefinition.Get(ship.Class);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.CurrentAction.Name, ship.CurrentAction);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.FocusTargetId.Name, focusTargetId);
+        if (cadence.LastTacticalSummary is { } summary)
+        {
+            var ownHullFraction = Math.Clamp(ship.Hull / Math.Max(1f, def.Hull), 0f, 1f);
+            SetTacticalSummaryRaw(agent, ownHullFraction, ship.CooldownRemaining <= 0, summary);
+        }
+    }
+
+    private static void SetTacticalSummaryRaw(AiAgent agent, float ownHullFraction, bool cooldownReady, TacticalSummary summary)
+    {
+        var immediateThreatId = summary.ImmediateThreatId ?? -1;
+        var bestAttackTargetId = summary.BestAttackTargetId ?? -1;
+        var bestRepairTargetId = summary.BestRepairTargetId ?? -1;
+        var highestValueVisibleEnemyId = summary.HighestValueVisibleEnemyId ?? -1;
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.OwnHullFraction.Name, ownHullFraction);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.ThreatScore.Name, summary.LocalThreatScore);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.LocalThreatScore.Name, summary.LocalThreatScore);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.LocalSupportScore.Name, summary.LocalSupportScore);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.ImmediateThreatId.Name, immediateThreatId);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.BestAttackTargetId.Name, bestAttackTargetId);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.BestRepairTargetId.Name, bestRepairTargetId);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.HighestValueVisibleEnemyId.Name, highestValueVisibleEnemyId);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.NearestVisibleEnemyId.Name, bestAttackTargetId);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.VulnerableAllyId.Name, bestRepairTargetId);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.TargetValue.Name, summary.BestAttackPriorityScore);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.RelevantEnemyContacts.Name, summary.RelevantEnemyContacts);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.RelevantAllyContacts.Name, summary.RelevantAllyContacts);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.HasImmediateThreat.Name, immediateThreatId > 0);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.HasRepairTarget.Name, bestRepairTargetId > 0);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.BestAttackTargetBand.Name, (int)summary.BestAttackTargetBand);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.BestAttackPriorityScore.Name, summary.BestAttackPriorityScore);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.CooldownReady.Name, cooldownReady);
+        agent.Bb.SetRaw(BenchmarkBlackboardKeys.EnemyInWeaponRange.Name, summary.BestAttackTargetBand == TacticalDistanceBand.Immediate);
     }
 
     private void DecrementCooldowns()

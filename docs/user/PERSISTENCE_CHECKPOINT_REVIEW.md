@@ -294,3 +294,9 @@ RTSBenchmark is a good fit for this model because the authoritative simulation s
 - No generic all-world snapshot guarantee beyond the existing bounded Core surface.
 - No runtime feature work in M0.
 
+
+## M8 follow-up: RTSBenchmark proof implemented
+
+RTSBenchmark M8 implements the app-level tick-boundary checkpoint/resume proof described in this review. The sample stores an app-specific chunk through the existing Dominatus `SaveFile`/`SaveChunk` and `DominatusSave`/`ISaveChunkContributor` pipeline using chunk id `rtsbenchmark.state`, format `application/vnd.dominatus.rtsbenchmark.checkpoint+json`, and payload version `1`.
+
+The implementation keeps the M0 doctrine: it checkpoints only after a completed tick, persists deterministic app truth rather than compiler-generated iterator objects, and reconstructs ships, agents, blackboards, HFSM active paths, metrics, tactical summaries, and dynamic sensor cadence state on resume. The proof tests compare deterministic hashes/counters/final fleet state across straight and checkpoint/resume runs and intentionally do not require timing, GC, or allocation equivalence.
