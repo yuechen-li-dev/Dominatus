@@ -1247,3 +1247,159 @@ dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.cspro
 ```
 
 This implements the app-level proof anticipated by `docs/user/PERSISTENCE_CHECKPOINT_REVIEW.md`: Core's generic full-runtime snapshot remains intentionally bounded, while RTSBenchmark demonstrates deterministic tick-boundary resume by persisting app-owned truth and reconstructing runtime objects.
+
+## M9: Release/NativeAOT reporting and public benchmark claims
+
+M9 polishes `Dominatus.RTSBenchmark` as a quotable, shareable CPU benchmark report format. The benchmark remains a pure behavioral-AI workload: ships run deterministic utility decisions, tactical sensing, event exchange, action emission/resolution, phase timing, diagnostics, and determinism hashing. The measured loop does **not** include rendering, GPU work, windowing, network calls, or live model/LLM inference.
+
+### Build configuration guidance
+
+Use the build mode as part of every benchmark claim:
+
+- **Debug `dotnet run`** is useful for development and diagnostics only. Do not use Debug results for public performance claims.
+- **Release `dotnet run -c Release`** is the recommended local baseline for ad-hoc benchmark results.
+- **NativeAOT published executable** is preferred for public benchmark claims when the target platform can publish the sample successfully.
+
+Release single-run example with machine-readable exports:
+
+```bash
+dotnet run -c Release --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --mode Skirmish \
+  --no-checkpoints \
+  --json artifacts/rts-skirmish.json \
+  --csv artifacts/rts-skirmish.csv
+```
+
+Sequential comparison example for public comparison material:
+
+```bash
+dotnet run -c Release --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --compare-sensor-cadence \
+  --mode Skirmish \
+  --trials 5 \
+  --no-broadscan-baseline \
+  --trial-details \
+  --json artifacts/rts-skirmish-compare.json \
+  --csv artifacts/rts-skirmish-compare.csv
+```
+
+### NativeAOT publish guidance
+
+Do not enable `PublishAot` globally in the project file because normal build/test workflows should stay fast and portable. Instead publish explicitly for the current platform and runtime identifier.
+
+Linux x64 example:
+
+```bash
+dotnet publish samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj \
+  -c Release \
+  -r linux-x64 \
+  -p:PublishAot=true \
+  --self-contained true \
+  -o artifacts/rtsbenchmark-native
+
+./artifacts/rtsbenchmark-native/Dominatus.RTSBenchmark \
+  --mode Skirmish \
+  --no-checkpoints \
+  --json artifacts/rts-skirmish-native.json \
+  --csv artifacts/rts-skirmish-native.csv
+```
+
+Windows x64 example:
+
+```powershell
+dotnet publish samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj `
+  -c Release `
+  -r win-x64 `
+  -p:PublishAot=true `
+  --self-contained true `
+  -o artifacts/rtsbenchmark-native
+
+.\artifacts\rtsbenchmark-native\Dominatus.RTSBenchmark.exe `
+  --mode Skirmish `
+  --no-checkpoints `
+  --json artifacts/rts-skirmish-native.json `
+  --csv artifacts/rts-skirmish-native.csv
+```
+
+NativeAOT support can vary by SDK, OS, architecture, and installed native toolchain. The report includes an `isNativeAot` indicator inferred from `RuntimeFeature.IsDynamicCodeSupported`; treat this as a practical indicator, not a formal proof of how the executable was produced.
+
+### JSON and CSV export
+
+`--json PATH` writes the full report object using `System.Text.Json` with camel-case property names and string enum values.
+
+- Single-run JSON exports `RtsBenchmarkResult`.
+- Comparison JSON exports `RtsBenchmarkComparisonResult`.
+- Reports include benchmark options, scores/rates, phase timings, diagnostics, determinism hashes, and environment metadata.
+- Reports do not include raw per-ship state.
+
+`--csv PATH` writes a compact summary for spreadsheet and README use.
+
+- Single-run CSV writes one row with mode, sensor mode, dynamic cadence state, score/rates, elapsed/measured milliseconds, selected phase timings, allocation summary, and determinism hash.
+- Comparison CSV writes one row per configuration summary with mean/median rates, phase timings, allocation summary, skip-rate summary, and hash stability.
+
+The CLI creates parent directories for export paths when possible. The special path `-` is intentionally not supported for exports; use a file path so reports can be attached and cited directly.
+
+### Long-run progress output
+
+Comparison mode defaults to trial progress output so long Battle runs are not silent:
+
+```text
+[comparison] starting SpatialGrid + cadence trial 1/5
+[comparison] completed SpatialGrid + cadence trial 1/5: 123456.78 agent-ticks/sec, hash ...
+```
+
+Use `--progress-interval-seconds N` to request comparison trial start/completion progress explicitly, or `--progress-interval-seconds 0` to suppress the default comparison progress unless `--trial-details` is also used. For single long runs, keep checkpoint output enabled or choose an explicit checkpoint cadence, for example `--checkpoint-interval 250`.
+
+### Environment metadata in reports
+
+Every single-run and comparison result includes:
+
+- OS description;
+- process architecture;
+- framework description;
+- runtime identifier;
+- processor count;
+- NativeAOT indicator;
+- configuration hint.
+
+These fields are intended to make reports self-describing enough to quote without scraping console text.
+
+### Battle-friendly comparison workflow
+
+For public comparisons, prefer repeated sequential trials:
+
+```bash
+dotnet run -c Release --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --compare-sensor-cadence \
+  --mode Battle \
+  --trials 5 \
+  --no-broadscan-baseline \
+  --progress-interval-seconds 10 \
+  --json artifacts/rts-battle-compare.json \
+  --csv artifacts/rts-battle-compare.csv
+```
+
+Avoid mixing sequential single-thread scores with `--parallel-trials` throughput results. Parallel comparison mode is useful for stress testing independent benchmark instances, but CPU contention changes what the numbers mean.
+
+### Benchmark claim template
+
+Use a concise claim that includes mode, build, hardware/OS, trial count, rates, sensor settings, hash stability, and exclusions:
+
+```text
+Dominatus.RTSBenchmark Skirmish, Release/NativeAOT, {CPU/OS}, {date}:
+{median agent-ticks/sec} median over {n} sequential trials,
+{median decisions/sec} decisions/sec,
+{sensor mode}, dynamic cadence {enabled/disabled},
+stable hash {yes/no},
+no rendering/GPU/network/model inference in measured loop.
+Command: {exact command line}
+Report: {JSON/CSV artifact path or URL}
+```
+
+### Avoid misleading claims
+
+- Do not compare Debug runs to Release or NativeAOT runs.
+- Do not compare parallel-trial throughput to sequential single-thread scores without labeling it clearly.
+- Always document hardware, OS, SDK/runtime, command line, mode, sensor mode, cadence mode, and trial count.
+- Use repeated sequential trials for public comparisons.
+- Keep the JSON/CSV artifacts with the public claim so readers can inspect phase timings, diagnostics, environment metadata, and determinism hashes.

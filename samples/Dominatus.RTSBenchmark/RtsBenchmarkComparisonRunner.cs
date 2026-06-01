@@ -36,6 +36,8 @@ public sealed record RtsBenchmarkSummaryStats
 
 public sealed record RtsBenchmarkComparisonResult
 {
+    public required RtsBenchmarkEnvironmentInfo EnvironmentInfo { get; init; }
+    public required RtsBenchmarkComparisonOptions Options { get; init; }
     public required IReadOnlyList<RtsBenchmarkTrialResult> Trials { get; init; }
     public required IReadOnlyList<RtsBenchmarkSummaryStats> Summaries { get; init; }
     public required bool RanInParallel { get; init; }
@@ -52,6 +54,7 @@ public sealed record RtsBenchmarkComparisonOptions
     public bool IncludeBroadScanBaseline { get; init; } = true;
     public bool WriteTrialDetails { get; init; }
     public bool AllowArmada { get; init; }
+    public int ProgressIntervalSeconds { get; init; }
 }
 
 public static class RtsBenchmarkComparisonRunner
@@ -84,8 +87,8 @@ public static class RtsBenchmarkComparisonRunner
         maxDegree = Math.Max(1, maxDegree);
 
         var trials = options.Parallel
-            ? RunParallel(configurations, options.Trials, maxDegree, options.WriteTrialDetails, output)
-            : RunSequential(configurations, options.Trials, options.WriteTrialDetails, output);
+            ? RunParallel(configurations, options.Trials, maxDegree, options.WriteTrialDetails, options.ProgressIntervalSeconds, output)
+            : RunSequential(configurations, options.Trials, options.WriteTrialDetails, options.ProgressIntervalSeconds, output);
 
         var summaries = configurations
             .Select(configuration => Summarize(configuration.Label, trials.Where(t => t.Label == configuration.Label).ToArray()))
@@ -94,6 +97,8 @@ public static class RtsBenchmarkComparisonRunner
         var comparisonSummary = BuildComparisonSummary(options, summaries, maxDegree);
         var result = new RtsBenchmarkComparisonResult
         {
+            EnvironmentInfo = RtsBenchmarkEnvironmentInfo.Capture(),
+            Options = options,
             Trials = trials,
             Summaries = summaries,
             RanInParallel = options.Parallel,
@@ -111,6 +116,8 @@ public static class RtsBenchmarkComparisonRunner
             throw new ArgumentOutOfRangeException(nameof(options.Trials), "Trials must be greater than or equal to one.");
         if (options.MaxDegreeOfParallelism is < 1)
             throw new ArgumentOutOfRangeException(nameof(options.MaxDegreeOfParallelism), "MaxDegreeOfParallelism must be greater than or equal to one when set.");
+        if (options.ProgressIntervalSeconds < 0)
+            throw new ArgumentOutOfRangeException(nameof(options.ProgressIntervalSeconds), "ProgressIntervalSeconds must be greater than or equal to zero.");
         if (options.Mode == BenchmarkMode.Armada && !options.AllowArmada)
             throw new ArgumentOutOfRangeException(nameof(options.Mode), "Armada comparison is rejected by default. Set AllowArmada to true for an explicit manual run.");
     }
@@ -149,15 +156,19 @@ public static class RtsBenchmarkComparisonRunner
         IReadOnlyList<ComparisonConfiguration> configurations,
         int trials,
         bool writeTrialDetails,
+        int progressIntervalSeconds,
         TextWriter? output)
     {
         var results = new List<RtsBenchmarkTrialResult>(configurations.Count * trials);
+        var writeProgress = ShouldWriteProgress(writeTrialDetails, progressIntervalSeconds);
         foreach (var configuration in configurations)
         {
             for (var trialIndex = 1; trialIndex <= trials; trialIndex++)
             {
+                WriteTrialStarting(output, writeProgress, configuration.Label, trialIndex, trials);
                 var trial = RunTrial(configuration, trialIndex);
                 results.Add(trial);
+                WriteTrialCompleted(output, writeProgress, trial, trials);
                 WriteTrialDetail(output, writeTrialDetails, trial);
             }
         }
@@ -170,6 +181,7 @@ public static class RtsBenchmarkComparisonRunner
         int trials,
         int maxDegreeOfParallelism,
         bool writeTrialDetails,
+        int progressIntervalSeconds,
         TextWriter? output)
     {
         var plannedTrials = configurations
@@ -177,15 +189,19 @@ public static class RtsBenchmarkComparisonRunner
                 .Select(trialIndex => new PlannedTrial(configurationIndex, configuration, trialIndex)))
             .ToArray();
         var results = new ConcurrentBag<(int ConfigurationIndex, RtsBenchmarkTrialResult Trial)>();
+        var outputGate = new object();
+        var writeProgress = ShouldWriteProgress(writeTrialDetails, progressIntervalSeconds);
         using var gate = new SemaphoreSlim(maxDegreeOfParallelism);
         var tasks = plannedTrials.Select(async planned =>
         {
             await gate.WaitAsync().ConfigureAwait(false);
             try
             {
+                WriteTrialStarting(output, writeProgress, planned.Configuration.Label, planned.TrialIndex, trials, outputGate);
                 var trial = await Task.Run(() => RunTrial(planned.Configuration, planned.TrialIndex)).ConfigureAwait(false);
                 results.Add((planned.ConfigurationIndex, trial));
-                WriteTrialDetail(output, writeTrialDetails, trial);
+                WriteTrialCompleted(output, writeProgress, trial, trials, outputGate);
+                WriteTrialDetail(output, writeTrialDetails, trial, outputGate);
             }
             finally
             {
@@ -289,6 +305,11 @@ public static class RtsBenchmarkComparisonRunner
         output.WriteLine("Type: Sensor cadence");
         output.WriteLine($"Mode: {options.Mode}");
         output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Trials: {options.Trials}"));
+        output.WriteLine($"Runtime: {result.EnvironmentInfo.FrameworkDescription}, {result.EnvironmentInfo.ProcessArchitecture}, {result.EnvironmentInfo.RuntimeIdentifier}");
+        output.WriteLine($"OS: {result.EnvironmentInfo.OSDescription}");
+        output.WriteLine($"Processors: {result.EnvironmentInfo.ProcessorCount}");
+        output.WriteLine($"NativeAOT indicator: {(result.EnvironmentInfo.IsNativeAot ? "yes" : "no")}");
+        output.WriteLine("Measured loop excludes rendering/GPU/windowing, network, and live model inference.");
         output.WriteLine(options.Parallel
             ? string.Create(CultureInfo.InvariantCulture, $"Execution: Parallel (max degree {result.MaxDegreeOfParallelism})")
             : "Execution: Sequential");
@@ -316,11 +337,40 @@ public static class RtsBenchmarkComparisonRunner
         output.WriteLine(result.ComparisonSummary);
     }
 
-    private static void WriteTrialDetail(TextWriter? output, bool writeTrialDetails, RtsBenchmarkTrialResult trial)
+    private static bool ShouldWriteProgress(bool writeTrialDetails, int progressIntervalSeconds) => writeTrialDetails || progressIntervalSeconds > 0;
+
+    private static void WriteTrialStarting(TextWriter? output, bool writeProgress, string label, int trialIndex, int trialCount, object? outputGate = null)
+    {
+        if (!writeProgress || output is null) return;
+        WriteLine(output, string.Create(CultureInfo.InvariantCulture, $"[comparison] starting {label} trial {trialIndex}/{trialCount}"), outputGate);
+    }
+
+    private static void WriteTrialCompleted(TextWriter? output, bool writeProgress, RtsBenchmarkTrialResult trial, int trialCount, object? outputGate = null)
+    {
+        if (!writeProgress || output is null) return;
+        WriteLine(output, string.Create(CultureInfo.InvariantCulture,
+            $"[comparison] completed {trial.Label} trial {trial.TrialIndex}/{trialCount}: {trial.Result.AgentTicksPerSecond:0.00} agent-ticks/sec, hash {trial.Result.DeterminismHash}"), outputGate);
+    }
+
+    private static void WriteTrialDetail(TextWriter? output, bool writeTrialDetails, RtsBenchmarkTrialResult trial, object? outputGate = null)
     {
         if (!writeTrialDetails || output is null) return;
-        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"Trial {trial.TrialIndex} {trial.Label}: {trial.Result.AgentTicksPerSecond:0.00} agent-ticks/sec, {trial.Result.DecisionsPerSecond:0.00} decisions/sec, hash {trial.Result.DeterminismHash}"));
+        WriteLine(output, string.Create(CultureInfo.InvariantCulture,
+            $"Trial {trial.TrialIndex} {trial.Label}: {trial.Result.AgentTicksPerSecond:0.00} agent-ticks/sec, {trial.Result.DecisionsPerSecond:0.00} decisions/sec, hash {trial.Result.DeterminismHash}"), outputGate);
+    }
+
+    private static void WriteLine(TextWriter output, string line, object? outputGate)
+    {
+        if (outputGate is null)
+        {
+            output.WriteLine(line);
+            return;
+        }
+
+        lock (outputGate)
+        {
+            output.WriteLine(line);
+        }
     }
 
     private static string FormatThousands(double value) => value switch
