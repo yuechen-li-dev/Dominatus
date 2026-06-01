@@ -9,7 +9,7 @@ public static class Program
         try
         {
             var options = Parse(args);
-            if (options.CompareSensorCadence)
+            if (options.CompareSensorCadence || options.CompareAgentParallelism)
             {
                 var result = RtsBenchmarkComparisonRunner.Run(new RtsBenchmarkComparisonOptions
                 {
@@ -19,7 +19,9 @@ public static class Program
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelism,
                     IncludeBroadScanBaseline = options.IncludeBroadScanBaseline,
                     WriteTrialDetails = options.TrialDetails,
-                    ProgressIntervalSeconds = options.ProgressIntervalSeconds ?? 10
+                    ProgressIntervalSeconds = options.ProgressIntervalSeconds ?? 10,
+                    CompareAgentParallelism = options.CompareAgentParallelism,
+                    AgentMaxDegreeOfParallelism = options.BenchmarkOptions.MaxDegreeOfParallelism
                 }, Console.Out);
                 WriteExports(result, options);
             }
@@ -105,11 +107,20 @@ public static class Program
                 case "--compare-sensor-cadence":
                     options = options with { CompareSensorCadence = true };
                     break;
+                case "--compare-agent-parallelism":
+                    options = options with { CompareAgentParallelism = true };
+                    break;
                 case "--trials" when i + 1 < args.Length:
                     options = options with { Trials = int.Parse(args[++i], CultureInfo.InvariantCulture) };
                     break;
                 case "--parallel-trials":
                     options = options with { ParallelTrials = true };
+                    break;
+                case "--parallel-agents":
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { ParallelAgents = true } };
+                    break;
+                case "--max-degree" when i + 1 < args.Length:
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { MaxDegreeOfParallelism = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
                 case "--max-degree-of-parallelism" when i + 1 < args.Length:
                     options = options with { MaxDegreeOfParallelism = int.Parse(args[++i], CultureInfo.InvariantCulture) };
@@ -178,6 +189,7 @@ public static class Program
     {
         public RtsBenchmarkOptions BenchmarkOptions { get; init; } = new();
         public bool CompareSensorCadence { get; init; }
+        public bool CompareAgentParallelism { get; init; }
         public int Trials { get; init; } = 5;
         public bool ParallelTrials { get; init; }
         public int? MaxDegreeOfParallelism { get; init; }

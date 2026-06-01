@@ -14,6 +14,7 @@ public static class BattleReport
         output.WriteLine($"Processors: {result.EnvironmentInfo.ProcessorCount}");
         output.WriteLine($"NativeAOT indicator: {(result.EnvironmentInfo.IsNativeAot ? "yes" : "no")}");
         output.WriteLine("Measured loop excludes rendering/GPU/windowing, network, and live model inference.");
+        output.WriteLine($"Execution mode: {result.ExecutionMode} (parallel agents: {(result.ParallelAgents ? "yes" : "no")}, max degree {result.MaxDegreeOfParallelism}, workers used {result.ParallelWorkersUsed})");
         output.WriteLine($"Ticks simulated: {result.TicksSimulated}");
         output.WriteLine($"Ships: initial {result.InitialShips}, final {result.FinalShips}, destroyed {result.DestroyedShips}");
         output.WriteLine($"Winner: {result.Winner?.ToString() ?? "Draw"}");
@@ -62,6 +63,7 @@ public static class BattleReport
         output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Decisions / agent tick: {result.DecisionsPerAgentTick:0.00}"));
         output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Actions / agent tick: {result.ActionsPerAgentTick:0.00}"));
         output.WriteLine($"  Blackboard reads/writes: {result.DecisionBlackboardReads}/{result.DecisionBlackboardWrites}");
+        output.WriteLine($"  Parallel agent ticks/tasks/faults/staged: {result.ParallelAgentTicks}/{result.ParallelDecisionTasksScheduled}/{result.ParallelDecisionFaults}/{result.ParallelLocalActionsStaged}");
         output.WriteLine($"  Action states entered: {result.ActionStatesEntered}");
         output.WriteLine("  Action distribution:");
         output.WriteLine($"    FocusFire: {result.FocusFireActionsEmitted}");

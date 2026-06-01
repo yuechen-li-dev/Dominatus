@@ -61,7 +61,10 @@ public sealed class RtsBenchmarkReportingTests
 
         var lines = File.ReadAllLines(path);
         Assert.Equal(2, lines.Length);
-        Assert.Contains("mode,sensorMode,dynamicSensorCadenceEnabled,ticksSimulated", lines[0], StringComparison.Ordinal);
+        Assert.Contains("mode,sensorMode,dynamicSensorCadenceEnabled", lines[0], StringComparison.Ordinal);
+        Assert.Contains("parallelAgents", lines[0], StringComparison.Ordinal);
+        Assert.Contains("executionMode", lines[0], StringComparison.Ordinal);
+        Assert.Contains("ticksSimulated", lines[0], StringComparison.Ordinal);
         Assert.Contains("agentTicksPerSecond", lines[0], StringComparison.Ordinal);
         Assert.Contains("determinismHash", lines[0], StringComparison.Ordinal);
     }

@@ -27,9 +27,12 @@ public sealed class BattleSimulation
     private readonly Dictionary<int, SensorCadenceState> _sensorCadence = new();
     private readonly SpatialShipGrid? _spatialGrid;
     private readonly List<ShipState> _spatialCandidates = new();
+    private readonly bool _parallelAgents;
+    private readonly int _maxDegreeOfParallelism;
+    private readonly ParallelOptions _parallelDecisionOptions;
 
     public BattleSimulation(int shipCount, int checkpointInterval, bool writeCheckpoints, TextWriter? output, RtsSensorMode sensorMode, float spatialCellSize)
-        : this(shipCount, checkpointInterval, writeCheckpoints, output, sensorMode, spatialCellSize, enableDynamicSensorCadence: false, minSensorCadenceTicks: 1, maxSensorCadenceTicks: 12)
+        : this(shipCount, checkpointInterval, writeCheckpoints, output, sensorMode, spatialCellSize, enableDynamicSensorCadence: false, minSensorCadenceTicks: 1, maxSensorCadenceTicks: 12, parallelAgents: false, maxDegreeOfParallelism: Environment.ProcessorCount)
     {
     }
 
@@ -42,7 +45,9 @@ public sealed class BattleSimulation
         float spatialCellSize,
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
-        int maxSensorCadenceTicks)
+        int maxSensorCadenceTicks,
+        bool parallelAgents = false,
+        int maxDegreeOfParallelism = 1)
         : this(
             FleetFactory.CreateFleets(shipCount),
             checkpointInterval,
@@ -53,6 +58,8 @@ public sealed class BattleSimulation
             enableDynamicSensorCadence,
             minSensorCadenceTicks,
             maxSensorCadenceTicks,
+            parallelAgents,
+            maxDegreeOfParallelism,
             metricsCheckpoint: null,
             checkpointLines: null,
             sensorCadenceCheckpoints: null)
@@ -68,7 +75,9 @@ public sealed class BattleSimulation
         float spatialCellSize,
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
-        int maxSensorCadenceTicks)
+        int maxSensorCadenceTicks,
+        bool parallelAgents = false,
+        int maxDegreeOfParallelism = 1)
         : this(
             checkpoint.Ships.Select(ToShipState).ToList(),
             checkpointInterval,
@@ -79,6 +88,8 @@ public sealed class BattleSimulation
             enableDynamicSensorCadence,
             minSensorCadenceTicks,
             maxSensorCadenceTicks,
+            parallelAgents,
+            maxDegreeOfParallelism,
             checkpoint.Metrics,
             checkpoint.Checkpoints,
             checkpoint.Ships)
@@ -95,6 +106,8 @@ public sealed class BattleSimulation
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
         int maxSensorCadenceTicks,
+        bool parallelAgents,
+        int maxDegreeOfParallelism,
         RtsBenchmarkMetricsCheckpoint? metricsCheckpoint,
         IReadOnlyList<string>? checkpointLines,
         IReadOnlyList<ShipCheckpoint>? sensorCadenceCheckpoints)
@@ -104,6 +117,9 @@ public sealed class BattleSimulation
         _dynamicSensorCadenceEnabled = enableDynamicSensorCadence;
         _minSensorCadenceTicks = minSensorCadenceTicks;
         _maxSensorCadenceTicks = maxSensorCadenceTicks;
+        _parallelAgents = parallelAgents;
+        _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism);
+        _parallelDecisionOptions = new ParallelOptions { MaxDegreeOfParallelism = _maxDegreeOfParallelism };
         _ships = ships;
         _byId = _ships.ToDictionary(s => s.Id);
         _initialShips = _ships.Count;
@@ -174,6 +190,8 @@ public sealed class BattleSimulation
 
     public int MinSensorCadenceTicks => _minSensorCadenceTicks;
     public int MaxSensorCadenceTicks => _maxSensorCadenceTicks;
+    public bool ParallelAgents => _parallelAgents;
+    public int MaxDegreeOfParallelism => _maxDegreeOfParallelism;
 
     public void RunTick(int tick)
     {
@@ -558,35 +576,97 @@ public sealed class BattleSimulation
 
     private void DecisionPhase(int tick)
     {
+        if (_parallelAgents)
+        {
+            ParallelDecisionPhase(tick);
+            return;
+        }
+
         foreach (var ship in _ships)
         {
             if (!ship.Alive) continue;
-            var agent = _agents[ship.Id];
-            UtilityDiagnostics.BeginDecision(_metrics);
-            try
-            {
-                agent.Tick(_world);
-            }
-            finally
-            {
-                UtilityDiagnostics.EndDecision();
-            }
-
-            _metrics.AgentTicks++;
-            _metrics.AgentTickCalls++;
-            _metrics.HfsmTicks++;
-            _metrics.DecideSteps++;
-            _metrics.DecisionsEvaluated += ShipAgentFactory.UtilityOptionCount;
-            _metrics.UtilityOptionsEvaluated += ShipAgentFactory.UtilityOptionCount;
-            _metrics.UtilityOptionsSelected++;
-            var selected = BbGetDecision(agent, BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
-            var type = Enum.TryParse<ShipActionType>(selected, out var parsed) ? parsed : ShipActionType.Idle;
-            ship.CurrentAction = type.ToString();
-            ship.TargetId = ChooseTargetForAction(ship, type);
-            _actions.Add(new ShipAction(tick, ship.Id, ship.Faction, type, ship.TargetId, PriorityFor(type)));
-            CountActionEmission(type);
-            if (ship.Faction == Faction.Dominion) _metrics.DominionActions++; else _metrics.CollectiveActions++;
+            var result = TickAgentForDecision(ship);
+            AddDecisionWorkMetrics(result, parallel: false);
+            StageAction(tick, ship, result.Type);
         }
+    }
+
+    private void ParallelDecisionPhase(int tick)
+    {
+        var workItems = _ships
+            .Where(ship => ship.Alive)
+            .OrderBy(ship => ship.Id)
+            .ToArray();
+        var results = new DecisionWorkResult[workItems.Length];
+
+        if (workItems.Length == 0)
+            return;
+
+        _metrics.ParallelDecisionTasksScheduled += workItems.Length;
+        try
+        {
+            Parallel.For(0, workItems.Length, _parallelDecisionOptions, i =>
+            {
+                results[i] = TickAgentForDecision(workItems[i]);
+            });
+        }
+        catch
+        {
+            _metrics.ParallelDecisionFaults++;
+            throw;
+        }
+
+        for (var i = 0; i < workItems.Length; i++)
+        {
+            var result = results[i];
+            AddDecisionWorkMetrics(result, parallel: true);
+            StageAction(tick, workItems[i], result.Type);
+            _metrics.ParallelLocalActionsStaged++;
+        }
+    }
+
+    private DecisionWorkResult TickAgentForDecision(ShipState ship)
+    {
+        var agent = _agents[ship.Id];
+        long decisionReads;
+        UtilityDiagnostics.BeginDecision();
+        try
+        {
+            agent.Tick(_world);
+        }
+        finally
+        {
+            decisionReads = UtilityDiagnostics.EndDecision();
+        }
+
+        var selected = agent.Bb.GetOrDefault(BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
+        decisionReads++;
+        var type = Enum.TryParse<ShipActionType>(selected, out var parsed) ? parsed : ShipActionType.Idle;
+        return new DecisionWorkResult(ship.Id, type, decisionReads);
+    }
+
+    private void AddDecisionWorkMetrics(DecisionWorkResult result, bool parallel)
+    {
+        _metrics.AgentTicks++;
+        _metrics.AgentTickCalls++;
+        _metrics.HfsmTicks++;
+        _metrics.DecideSteps++;
+        _metrics.DecisionsEvaluated += ShipAgentFactory.UtilityOptionCount;
+        _metrics.UtilityOptionsEvaluated += ShipAgentFactory.UtilityOptionCount;
+        _metrics.UtilityOptionsSelected++;
+        _metrics.BlackboardReads += result.DecisionBlackboardReads;
+        _metrics.DecisionBlackboardReads += result.DecisionBlackboardReads;
+        if (parallel)
+            _metrics.ParallelAgentTicks++;
+    }
+
+    private void StageAction(int tick, ShipState ship, ShipActionType type)
+    {
+        ship.CurrentAction = type.ToString();
+        ship.TargetId = ChooseTargetForAction(ship, type);
+        _actions.Add(new ShipAction(tick, ship.Id, ship.Faction, type, ship.TargetId, PriorityFor(type)));
+        CountActionEmission(type);
+        if (ship.Faction == Faction.Dominion) _metrics.DominionActions++; else _metrics.CollectiveActions++;
     }
 
     private void SortActions()
@@ -977,6 +1057,8 @@ public sealed class BattleSimulation
     }
 
     private static Faction Opposing(Faction faction) => faction == Faction.Dominion ? Faction.Collective : Faction.Dominion;
+
+    private readonly record struct DecisionWorkResult(int ShipId, ShipActionType Type, long DecisionBlackboardReads);
 
     private sealed class SensorCadenceState
     {
