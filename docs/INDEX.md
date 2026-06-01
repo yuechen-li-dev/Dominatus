@@ -8,6 +8,7 @@ This index separates user-facing documentation from release prep, development lo
 - [Architecture](user/ARCHITECTURE.md) — runtime concepts, blackboards, HFSMs, utility decisions, steps, persistence, actuators, server inspection, and LLM boundaries.
 - [Authoring guide](user/AUTHORING_GUIDE.md) — how to write Dominatus nodes and blackboard-driven workflows.
 - [Persistence checkpoint review](user/PERSISTENCE_CHECKPOINT_REVIEW.md) — M0 review of existing chunk/checkpoint infrastructure for RTSBenchmark tick-boundary checkpoint/resume.
+- [Parallel tick review](user/PARALLEL_TICK_REVIEW.md) — M0 design review for deterministic staged parallel agent ticks and RTSBenchmark integration.
 - [Orchestration ladder](user/ORCHESTRATION_LADDER.md) — direct code, dispatch tables, HFSM/utility, `Llm.Call`, `Llm.Decide`, `MagiDecide`, human approval, and capability surfaces.
 - [Actuation policy](user/ACTUATION_POLICY.md) — policy-gated typed side effects and approval boundaries.
 - [Team coordination](user/TEAM_COORDINATION.md) — shared/team blackboard coordination patterns.
