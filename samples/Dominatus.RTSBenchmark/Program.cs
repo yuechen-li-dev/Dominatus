@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace Dominatus.RTSBenchmark;
 
-internal static class Program
+public static class Program
 {
     public static int Main(string[] args)
     {
@@ -11,21 +11,24 @@ internal static class Program
             var options = Parse(args);
             if (options.CompareSensorCadence)
             {
-                RtsBenchmarkComparisonRunner.Run(new RtsBenchmarkComparisonOptions
+                var result = RtsBenchmarkComparisonRunner.Run(new RtsBenchmarkComparisonOptions
                 {
                     Mode = options.BenchmarkOptions.Mode,
                     Trials = options.Trials,
                     Parallel = options.ParallelTrials,
                     MaxDegreeOfParallelism = options.MaxDegreeOfParallelism,
                     IncludeBroadScanBaseline = options.IncludeBroadScanBaseline,
-                    WriteTrialDetails = options.TrialDetails
+                    WriteTrialDetails = options.TrialDetails,
+                    ProgressIntervalSeconds = options.ProgressIntervalSeconds ?? 10
                 }, Console.Out);
+                WriteExports(result, options);
             }
             else if (!string.IsNullOrWhiteSpace(options.ResumeFrom))
             {
                 var checkpoint = RtsBenchmarkCheckpointStore.LoadFromFile(options.ResumeFrom);
                 var resumeTicks = options.ResumeTicks ?? Math.Max(0, (checkpoint.Options.OverrideTicks ?? checkpoint.CompletedTicks) - checkpoint.CompletedTicks);
-                RtsBenchmarkRunner.ResumeFromCheckpoint(checkpoint, resumeTicks, Console.Out);
+                var result = RtsBenchmarkRunner.ResumeFromCheckpoint(checkpoint, resumeTicks, Console.Out);
+                WriteExports(result, options);
             }
             else if (options.CheckpointAt is int checkpointAt)
             {
@@ -37,7 +40,8 @@ internal static class Program
             }
             else
             {
-                RtsBenchmarkRunner.Run(options.BenchmarkOptions, Console.Out);
+                var result = RtsBenchmarkRunner.Run(options.BenchmarkOptions, Console.Out);
+                WriteExports(result, options);
             }
 
             return 0;
@@ -119,9 +123,18 @@ internal static class Program
                 case "--trial-details":
                     options = options with { TrialDetails = true };
                     break;
+                case "--json" when i + 1 < args.Length:
+                    options = options with { JsonPath = args[++i] };
+                    break;
+                case "--csv" when i + 1 < args.Length:
+                    options = options with { CsvPath = args[++i] };
+                    break;
+                case "--progress-interval-seconds" when i + 1 < args.Length:
+                    options = options with { ProgressIntervalSeconds = int.Parse(args[++i], CultureInfo.InvariantCulture) };
+                    break;
                 case "--help":
                 case "-h":
-                    PrintHelp(Console.Out);
+                    RtsBenchmarkCliHelp.Print(Console.Out);
                     Environment.Exit(0);
                     break;
                 default:
@@ -131,31 +144,34 @@ internal static class Program
         return options;
     }
 
-    private static void PrintHelp(TextWriter output)
+    private static void WriteExports(RtsBenchmarkResult result, CliOptions options)
     {
-        output.WriteLine("Dominatus.RTSBenchmark");
-        output.WriteLine("  --mode Smoke|Skirmish|Battle|Armada   Default: Smoke");
-        output.WriteLine("  --ships N                             Override ship count");
-        output.WriteLine("  --ticks N                             Override tick count");
-        output.WriteLine("  --checkpoint-interval N               Default: 500");
-        output.WriteLine("  --checkpoint-at N                     Save an app checkpoint after N completed ticks");
-        output.WriteLine("  --checkpoint-file PATH                Path used with --checkpoint-at");
-        output.WriteLine("  --resume-from PATH                    Resume from an RTSBenchmark checkpoint file");
-        output.WriteLine("  --resume-ticks N                      Ticks to simulate after --resume-from");
-        output.WriteLine("  --no-checkpoints                      Disable checkpoint lines");
-        output.WriteLine("  --sensor BroadScan|SpatialGrid        Default: SpatialGrid");
-        output.WriteLine("  --spatial-cell-size N                 Default: max ship sensor range");
-        output.WriteLine("  --disable-sensor-cadence              Refresh every ship every tick");
-        output.WriteLine("  --min-sensor-cadence N                Default: 1");
-        output.WriteLine("  --max-sensor-cadence N                Default: 12");
-        output.WriteLine("  --compare-sensor-cadence              Run repeated comparison trials instead of one benchmark");
-        output.WriteLine("  --trials N                            Comparison trial count. Default: 5");
-        output.WriteLine("  --parallel-trials                     Run comparison trials concurrently");
-        output.WriteLine("  --max-degree-of-parallelism N         Limit concurrent comparison trials");
-        output.WriteLine("  --include-broadscan-baseline          Include BroadScan no-cadence baseline (default)");
-        output.WriteLine("  --no-broadscan-baseline               Omit BroadScan no-cadence baseline");
-        output.WriteLine("  --trial-details                       Print compact per-trial comparison lines");
-        output.WriteLine("Armada is a manual benchmarking mode and is not used by tests or comparison runs by default.");
+        if (!string.IsNullOrWhiteSpace(options.JsonPath))
+        {
+            RtsBenchmarkReportWriter.WriteJson(result, options.JsonPath);
+            Console.Out.WriteLine($"Wrote JSON report: {options.JsonPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.CsvPath))
+        {
+            RtsBenchmarkReportWriter.WriteCsv(result, options.CsvPath);
+            Console.Out.WriteLine($"Wrote CSV report: {options.CsvPath}");
+        }
+    }
+
+    private static void WriteExports(RtsBenchmarkComparisonResult result, CliOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.JsonPath))
+        {
+            RtsBenchmarkReportWriter.WriteJson(result, options.JsonPath);
+            Console.Out.WriteLine($"Wrote JSON report: {options.JsonPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.CsvPath))
+        {
+            RtsBenchmarkReportWriter.WriteCsv(result, options.CsvPath);
+            Console.Out.WriteLine($"Wrote CSV report: {options.CsvPath}");
+        }
     }
 
     private sealed record CliOptions
@@ -171,5 +187,8 @@ internal static class Program
         public string? CheckpointFile { get; init; }
         public string? ResumeFrom { get; init; }
         public int? ResumeTicks { get; init; }
+        public string? JsonPath { get; init; }
+        public string? CsvPath { get; init; }
+        public int? ProgressIntervalSeconds { get; init; }
     }
 }

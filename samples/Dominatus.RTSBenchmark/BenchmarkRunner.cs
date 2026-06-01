@@ -66,6 +66,7 @@ public static class RtsBenchmarkRunner
         var phaseTimings = metrics.CreatePhaseTimings();
         var result = new RtsBenchmarkResult
         {
+            EnvironmentInfo = RtsBenchmarkEnvironmentInfo.Capture(),
             Mode = options.Mode,
             TicksSimulated = totalTicks,
             InitialShips = initialShips,
@@ -167,7 +168,8 @@ public static class RtsBenchmarkRunner
             DominionActions = metrics.DominionActions,
             CollectiveActions = metrics.CollectiveActions,
             DominionEvents = metrics.DominionEvents,
-            CollectiveEvents = metrics.CollectiveEvents
+            CollectiveEvents = metrics.CollectiveEvents,
+            Options = options
         };
 
         BattleReport.Write(output ?? TextWriter.Null, result);

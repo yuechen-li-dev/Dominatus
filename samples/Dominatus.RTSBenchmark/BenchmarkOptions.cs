@@ -26,6 +26,7 @@ public sealed record RtsBenchmarkPhaseTiming
 
 public sealed record RtsBenchmarkResult
 {
+    public required RtsBenchmarkEnvironmentInfo EnvironmentInfo { get; init; }
     public required BenchmarkMode Mode { get; init; }
     public required int TicksSimulated { get; init; }
     public required int InitialShips { get; init; }
@@ -128,4 +129,5 @@ public sealed record RtsBenchmarkResult
     public required long CollectiveActions { get; init; }
     public required long DominionEvents { get; init; }
     public required long CollectiveEvents { get; init; }
+    public required RtsBenchmarkOptions Options { get; init; }
 }

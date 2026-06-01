@@ -9,6 +9,11 @@ public static class BattleReport
     {
         output.WriteLine("Dominatus.RTSBenchmark");
         output.WriteLine($"Mode: {result.Mode}");
+        output.WriteLine($"Runtime: {result.EnvironmentInfo.FrameworkDescription}, {result.EnvironmentInfo.ProcessArchitecture}, {result.EnvironmentInfo.RuntimeIdentifier}");
+        output.WriteLine($"OS: {result.EnvironmentInfo.OSDescription}");
+        output.WriteLine($"Processors: {result.EnvironmentInfo.ProcessorCount}");
+        output.WriteLine($"NativeAOT indicator: {(result.EnvironmentInfo.IsNativeAot ? "yes" : "no")}");
+        output.WriteLine("Measured loop excludes rendering/GPU/windowing, network, and live model inference.");
         output.WriteLine($"Ticks simulated: {result.TicksSimulated}");
         output.WriteLine($"Ships: initial {result.InitialShips}, final {result.FinalShips}, destroyed {result.DestroyedShips}");
         output.WriteLine($"Winner: {result.Winner?.ToString() ?? "Draw"}");
