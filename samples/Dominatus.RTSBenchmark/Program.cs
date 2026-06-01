@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Dominatus.RTSBenchmark;
 
 internal static class Program
@@ -7,7 +9,23 @@ internal static class Program
         try
         {
             var options = Parse(args);
-            RtsBenchmarkRunner.Run(options, Console.Out);
+            if (options.CompareSensorCadence)
+            {
+                RtsBenchmarkComparisonRunner.Run(new RtsBenchmarkComparisonOptions
+                {
+                    Mode = options.BenchmarkOptions.Mode,
+                    Trials = options.Trials,
+                    Parallel = options.ParallelTrials,
+                    MaxDegreeOfParallelism = options.MaxDegreeOfParallelism,
+                    IncludeBroadScanBaseline = options.IncludeBroadScanBaseline,
+                    WriteTrialDetails = options.TrialDetails
+                }, Console.Out);
+            }
+            else
+            {
+                RtsBenchmarkRunner.Run(options.BenchmarkOptions, Console.Out);
+            }
+
             return 0;
         }
         catch (Exception ex)
@@ -17,42 +35,63 @@ internal static class Program
         }
     }
 
-    private static RtsBenchmarkOptions Parse(string[] args)
+    private static CliOptions Parse(string[] args)
     {
-        var options = new RtsBenchmarkOptions();
+        var options = new CliOptions();
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
                 case "--mode" when i + 1 < args.Length:
-                    options = options with { Mode = Enum.Parse<BenchmarkMode>(args[++i], ignoreCase: true) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { Mode = Enum.Parse<BenchmarkMode>(args[++i], ignoreCase: true) } };
                     break;
                 case "--ships" when i + 1 < args.Length:
-                    options = options with { OverrideShips = int.Parse(args[++i]) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { OverrideShips = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
                 case "--ticks" when i + 1 < args.Length:
-                    options = options with { OverrideTicks = int.Parse(args[++i]) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { OverrideTicks = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
                 case "--no-checkpoints":
-                    options = options with { WriteCheckpoints = false };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { WriteCheckpoints = false } };
                     break;
                 case "--sensor" when i + 1 < args.Length:
-                    options = options with { SensorMode = Enum.Parse<RtsSensorMode>(args[++i], ignoreCase: true) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { SensorMode = Enum.Parse<RtsSensorMode>(args[++i], ignoreCase: true) } };
                     break;
                 case "--spatial-cell-size" when i + 1 < args.Length:
-                    options = options with { SpatialCellSize = float.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { SpatialCellSize = float.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
                 case "--disable-sensor-cadence":
-                    options = options with { EnableDynamicSensorCadence = false };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { EnableDynamicSensorCadence = false } };
                     break;
                 case "--min-sensor-cadence" when i + 1 < args.Length:
-                    options = options with { MinSensorCadenceTicks = int.Parse(args[++i]) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { MinSensorCadenceTicks = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
                 case "--max-sensor-cadence" when i + 1 < args.Length:
-                    options = options with { MaxSensorCadenceTicks = int.Parse(args[++i]) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { MaxSensorCadenceTicks = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
                     break;
                 case "--checkpoint-interval" when i + 1 < args.Length:
-                    options = options with { CheckpointInterval = int.Parse(args[++i]) };
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { CheckpointInterval = int.Parse(args[++i], CultureInfo.InvariantCulture) } };
+                    break;
+                case "--compare-sensor-cadence":
+                    options = options with { CompareSensorCadence = true };
+                    break;
+                case "--trials" when i + 1 < args.Length:
+                    options = options with { Trials = int.Parse(args[++i], CultureInfo.InvariantCulture) };
+                    break;
+                case "--parallel-trials":
+                    options = options with { ParallelTrials = true };
+                    break;
+                case "--max-degree-of-parallelism" when i + 1 < args.Length:
+                    options = options with { MaxDegreeOfParallelism = int.Parse(args[++i], CultureInfo.InvariantCulture) };
+                    break;
+                case "--include-broadscan-baseline":
+                    options = options with { IncludeBroadScanBaseline = true };
+                    break;
+                case "--no-broadscan-baseline":
+                    options = options with { IncludeBroadScanBaseline = false };
+                    break;
+                case "--trial-details":
+                    options = options with { TrialDetails = true };
                     break;
                 case "--help":
                 case "-h":
@@ -76,9 +115,27 @@ internal static class Program
         output.WriteLine("  --no-checkpoints                      Disable checkpoint lines");
         output.WriteLine("  --sensor BroadScan|SpatialGrid        Default: SpatialGrid");
         output.WriteLine("  --spatial-cell-size N                 Default: max ship sensor range");
-        output.WriteLine("  --disable-sensor-cadence             Refresh every ship every tick");
-        output.WriteLine("  --min-sensor-cadence N               Default: 1");
-        output.WriteLine("  --max-sensor-cadence N               Default: 12");
-        output.WriteLine("Armada is a manual benchmarking mode and is not used by tests.");
+        output.WriteLine("  --disable-sensor-cadence              Refresh every ship every tick");
+        output.WriteLine("  --min-sensor-cadence N                Default: 1");
+        output.WriteLine("  --max-sensor-cadence N                Default: 12");
+        output.WriteLine("  --compare-sensor-cadence              Run repeated comparison trials instead of one benchmark");
+        output.WriteLine("  --trials N                            Comparison trial count. Default: 5");
+        output.WriteLine("  --parallel-trials                     Run comparison trials concurrently");
+        output.WriteLine("  --max-degree-of-parallelism N         Limit concurrent comparison trials");
+        output.WriteLine("  --include-broadscan-baseline          Include BroadScan no-cadence baseline (default)");
+        output.WriteLine("  --no-broadscan-baseline               Omit BroadScan no-cadence baseline");
+        output.WriteLine("  --trial-details                       Print compact per-trial comparison lines");
+        output.WriteLine("Armada is a manual benchmarking mode and is not used by tests or comparison runs by default.");
+    }
+
+    private sealed record CliOptions
+    {
+        public RtsBenchmarkOptions BenchmarkOptions { get; init; } = new();
+        public bool CompareSensorCadence { get; init; }
+        public int Trials { get; init; } = 5;
+        public bool ParallelTrials { get; init; }
+        public int? MaxDegreeOfParallelism { get; init; }
+        public bool IncludeBroadScanBaseline { get; init; } = true;
+        public bool TrialDetails { get; init; }
     }
 }

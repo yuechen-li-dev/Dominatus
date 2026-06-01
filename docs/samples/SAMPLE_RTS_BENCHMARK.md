@@ -1055,3 +1055,75 @@ Use the dynamic and disabled runs together to compare score, top phases, sensor 
 - Expose a per-class cadence table instead of hard-coded benchmark defaults.
 - Integrate event-driven refresh queues if the benchmark later gets a broader event scheduler.
 - Revisit cadence interaction with a future parallel scheduler.
+
+## M7 repeated trial comparison tooling
+
+M7 adds an in-process comparison runner for reducing single-run timing noise before deciding whether a benchmark configuration is materially better or worse. A single RTSBenchmark report remains useful for inspecting phases, diagnostics, and deterministic outcomes, but wall-clock rates can move between runs because of JIT warmup, CPU scheduling, background work, garbage collection, and cache state. The comparison runner executes repeated independent trials, keeps checkpoint output suppressed by default, and summarizes stable descriptive statistics without enforcing CI performance thresholds.
+
+### Sensor cadence comparison
+
+The built-in comparison is the sensor cadence comparison. It runs the same mode across multiple configurations:
+
+1. `SpatialGrid + cadence` — SpatialGrid broad-phase sensors with dynamic sensor cadence enabled.
+2. `SpatialGrid no cadence` — SpatialGrid broad-phase sensors with every ship refreshed every tick.
+3. `BroadScan no cadence` — optional BroadScan baseline without dynamic cadence.
+
+The comparison reports median, mean, min, and max agent-ticks/sec, plus median sensor phase time, median decision phase time, mean allocated bytes, median sensor refresh skip rate, and determinism hash stability for each configuration. Median is usually the first number to inspect because it is less sensitive to a single unusually slow or fast trial than the mean.
+
+The runner does not claim statistical significance and does not assert exact speedups. It only describes the observed trial set so a human can decide whether more investigation is warranted.
+
+### Sequential versus parallel trials
+
+Sequential comparison is the primary single-thread benchmark comparison mode. It runs each trial one after another in the current process and is the mode to use when comparing per-trial `AgentTicksPerSecond` between configurations.
+
+Parallel comparison is optional and launches independent benchmark instances concurrently with a configurable maximum degree of parallelism. It measures batch/multicore throughput behavior for independent benchmark trials, not the primary single-thread score. Parallel mode intentionally introduces CPU contention and can reduce individual trial rates, so its output is labeled with a note and should be interpreted separately from sequential results.
+
+### Determinism hash stability
+
+Each trial still produces the deterministic benchmark hash. M7 summaries list the distinct hashes observed for a configuration and report whether they are stable. Repeated deterministic trials for the same configuration should produce one hash. If a summary reports unstable hashes, treat that as a correctness or determinism investigation before interpreting performance differences.
+
+### CLI examples
+
+Run a five-trial sequential Smoke comparison:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Smoke --trials 5
+```
+
+Run a three-trial Skirmish comparison with parallel trial batches:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Skirmish --trials 3 --parallel-trials
+```
+
+Limit parallel trial concurrency explicitly:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Smoke --trials 3 --parallel-trials --max-degree-of-parallelism 2
+```
+
+Print compact per-trial lines before the summaries:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Smoke --trials 5 --trial-details
+```
+
+Omit the BroadScan baseline when you only want the two SpatialGrid cadence configurations:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- --compare-sensor-cadence --mode Smoke --trials 5 --no-broadscan-baseline
+```
+
+### Output shape
+
+Comparison output begins with a clearly labeled header:
+
+```text
+=== Dominatus.RTSBenchmark Comparison ===
+Type: Sensor cadence
+Mode: Smoke
+Trials: 5
+Execution: Sequential
+```
+
+Each configuration then receives a summary block containing the primary rate distribution, key phase medians, allocation mean, skip-rate median, and hash stability. The final `Best median` line names the configuration with the highest median `AgentTicksPerSecond` within that observed trial set and gives its margin over the next best median. This line is descriptive only; it is not a performance threshold and does not imply statistical significance.
