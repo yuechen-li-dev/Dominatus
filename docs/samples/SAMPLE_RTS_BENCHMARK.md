@@ -1403,3 +1403,80 @@ Report: {JSON/CSV artifact path or URL}
 - Always document hardware, OS, SDK/runtime, command line, mode, sensor mode, cadence mode, and trial count.
 - Use repeated sequential trials for public comparisons.
 - Keep the JSON/CSV artifacts with the public claim so readers can inspect phase timings, diagnostics, environment metadata, and determinism hashes.
+
+## M10 benchmark-local parallel decision phase
+
+M10 adds an optional, benchmark-local parallel fast path for the RTSBenchmark **decision phase only**. It deliberately does not add a generic Core `ParallelAiWorldRunner`, staged Core context injection, parallel sensors, parallel mailbox delivery, parallel action resolution, or any Core semantic changes.
+
+The safe subset is narrow:
+
+- one `AiAgent` owns one ship;
+- the sensor phase has already mirrored each ship's tactical summary into that agent's local blackboard;
+- RTS utility scorers read agent-local blackboard values;
+- decision work does not write `WorldBb`, send mailbox messages, or dispatch actuations;
+- each worker ticks one ship/agent and stages one local action result;
+- actions are merged back in deterministic ship-id order;
+- the existing action sort and action resolution remain single-threaded and deterministic.
+
+Enable it for a single run with:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --mode Skirmish \
+  --parallel-agents \
+  --max-degree 8 \
+  --no-checkpoints
+```
+
+`--max-degree N` bounds the decision-phase worker degree. If `--parallel-agents` is supplied without `--max-degree`, the benchmark uses `Environment.ProcessorCount`. A supplied `--max-degree` must be at least one.
+
+### `--parallel-agents` vs `--parallel-trials`
+
+These flags measure different things:
+
+- `--parallel-agents` runs one benchmark trial whose ship-agent decision phase is parallelized internally.
+- `--parallel-trials` runs multiple independent comparison trials concurrently.
+
+They can both increase CPU use, but they answer different questions. Do not report `--parallel-trials` throughput as a single-trial decision-phase speedup.
+
+### Comparing sequential and parallel agents
+
+M10 includes an agent-parallelism comparison command:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --compare-agent-parallelism \
+  --mode Skirmish \
+  --trials 3 \
+  --max-degree 8
+```
+
+The comparison runs sequential agents and parallel decision agents with the same mode and sensor/cadence settings. It reports median agent-ticks/sec for both configurations, a speedup ratio, per-configuration hash stability, and whether the sequential and parallel deterministic hashes match.
+
+### Determinism contract
+
+Sequential and parallel decision runs should produce the same deterministic hash and deterministic counters for the same options except `ParallelAgents`. Timing, allocations, elapsed milliseconds, and parallel diagnostics may differ and should not be used for equivalence.
+
+The following phases remain single-threaded in M10:
+
+- cooldown;
+- sensor and sensor cadence;
+- mailbox/event delivery;
+- action sort;
+- action resolution;
+- checkpoint/save/load;
+- hashing;
+- final metrics/reporting.
+
+Single-run JSON and CSV exports include parallel-agent metadata such as `parallelAgents`, `maxDegreeOfParallelism`, and `executionMode`. Console reports include parallel decision counters for agent ticks, tasks scheduled, faults, and staged local actions.
+
+### Why this is benchmark-local
+
+The RTSBenchmark can take this fast path because its current decision nodes and scorers already fit the safe subset. Core still exposes direct `ctx.WorldBb`, `ctx.Mail`, and `ctx.Act` surfaces, so a general Core parallel runner needs staged/facade context surfaces before it can be safe for arbitrary authored graphs.
+
+Future work remains:
+
+- Core staged `ParallelAiWorldRunner`;
+- staged `WorldBb`, mailbox, and actuation surfaces;
+- parallel sensor phase over immutable snapshots;
+- deterministic parallel action-resolution partitions.

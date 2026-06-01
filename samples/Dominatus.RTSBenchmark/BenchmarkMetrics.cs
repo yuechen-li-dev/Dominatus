@@ -94,6 +94,10 @@ public sealed class BenchmarkMetrics
     public long SynapseLostEvents;
     public long AllyUnderFireEvents;
     public long CheckpointsWritten;
+    public long ParallelAgentTicks;
+    public long ParallelDecisionTasksScheduled;
+    public long ParallelDecisionFaults;
+    public long ParallelLocalActionsStaged;
 
     internal void AddPhaseTicks(int phase, long elapsedTicks) => _phaseElapsedTicks[phase] += elapsedTicks;
 

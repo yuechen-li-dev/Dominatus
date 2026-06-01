@@ -377,3 +377,13 @@ Unsafe today without staging or locks:
 ## Outcome
 
 **A — success.** The current runtime was inspected, shared mutation risks are documented, all primary questions are answered, staged parallel tick semantics are specified, conflict/mailbox/actuation merge policies are recommended, the smallest safe M1 is identified, and RTSBenchmark integration is planned. M0 makes no runtime behavior changes.
+
+## Follow-up: RTSBenchmark M10 fast path
+
+RTSBenchmark M10 implements the Tier 0 fast path identified by this review: a benchmark-local parallel decision phase over independent ship agents.
+
+M10 parallelizes only the RTSBenchmark decision loop. It does not introduce a Core `ParallelAiWorldRunner`, does not change Core semantics, and does not add staged Core context injection. Cooldown, sensors, mailbox/event delivery, action sorting, action resolution, checkpointing, hashing, and metrics finalization remain single-threaded.
+
+The implementation relies on the audited safe subset: one ship per agent, tactical summaries mirrored into agent-local blackboards before decision work, utility scorers that read only local blackboard data, no decision-phase `WorldBb` writes, no mailbox sends, and no actuation dispatch. Worker results are staged per ship and merged in deterministic ship-id order before the existing deterministic action sort/resolution path runs.
+
+Use `--parallel-agents` for the benchmark-local decision fast path and `--max-degree N` to bound worker degree. Use `--compare-agent-parallelism` to compare sequential agents against the parallel decision configuration while checking hash stability and sequential/parallel hash equivalence. This remains separate from `--parallel-trials`, which runs independent benchmark trials concurrently.

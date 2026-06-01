@@ -55,6 +55,8 @@ public sealed record RtsBenchmarkComparisonOptions
     public bool WriteTrialDetails { get; init; }
     public bool AllowArmada { get; init; }
     public int ProgressIntervalSeconds { get; init; }
+    public bool CompareAgentParallelism { get; init; }
+    public int? AgentMaxDegreeOfParallelism { get; init; }
 }
 
 public static class RtsBenchmarkComparisonRunner
@@ -116,6 +118,8 @@ public static class RtsBenchmarkComparisonRunner
             throw new ArgumentOutOfRangeException(nameof(options.Trials), "Trials must be greater than or equal to one.");
         if (options.MaxDegreeOfParallelism is < 1)
             throw new ArgumentOutOfRangeException(nameof(options.MaxDegreeOfParallelism), "MaxDegreeOfParallelism must be greater than or equal to one when set.");
+        if (options.AgentMaxDegreeOfParallelism is < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.AgentMaxDegreeOfParallelism), "AgentMaxDegreeOfParallelism must be greater than or equal to one when set.");
         if (options.ProgressIntervalSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(options.ProgressIntervalSeconds), "ProgressIntervalSeconds must be greater than or equal to zero.");
         if (options.Mode == BenchmarkMode.Armada && !options.AllowArmada)
@@ -124,6 +128,29 @@ public static class RtsBenchmarkComparisonRunner
 
     private static IEnumerable<ComparisonConfiguration> BuildConfigurations(RtsBenchmarkComparisonOptions options)
     {
+        if (options.CompareAgentParallelism)
+        {
+            yield return new ComparisonConfiguration("Sequential agents", new RtsBenchmarkOptions
+            {
+                Mode = options.Mode,
+                WriteCheckpoints = false,
+                SensorMode = RtsSensorMode.SpatialGrid,
+                EnableDynamicSensorCadence = true,
+                ParallelAgents = false
+            });
+
+            yield return new ComparisonConfiguration("Parallel decision agents", new RtsBenchmarkOptions
+            {
+                Mode = options.Mode,
+                WriteCheckpoints = false,
+                SensorMode = RtsSensorMode.SpatialGrid,
+                EnableDynamicSensorCadence = true,
+                ParallelAgents = true,
+                MaxDegreeOfParallelism = options.AgentMaxDegreeOfParallelism
+            });
+            yield break;
+        }
+
         yield return new ComparisonConfiguration("SpatialGrid + cadence", new RtsBenchmarkOptions
         {
             Mode = options.Mode,
@@ -284,6 +311,24 @@ public static class RtsBenchmarkComparisonRunner
             builder.AppendLine();
         }
 
+        if (options.CompareAgentParallelism)
+        {
+            var sequential = summaries.FirstOrDefault(s => s.Label == "Sequential agents");
+            var parallel = summaries.FirstOrDefault(s => s.Label == "Parallel decision agents");
+            if (sequential is not null && parallel is not null && sequential.MedianAgentTicksPerSecond > 0d)
+            {
+                var speedup = parallel.MedianAgentTicksPerSecond / sequential.MedianAgentTicksPerSecond;
+                var equivalent = sequential.DeterminismHashes.Count > 0
+                    && parallel.DeterminismHashes.Count > 0
+                    && sequential.HashesStable
+                    && parallel.HashesStable
+                    && sequential.DeterminismHashes[0] == parallel.DeterminismHashes[0];
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"Agent parallelism: sequential median {sequential.MedianAgentTicksPerSecond:0.00}, parallel median {parallel.MedianAgentTicksPerSecond:0.00}, speedup {speedup:0.00}x, hash equivalent {(equivalent ? "yes" : "no")}");
+                return builder.ToString();
+            }
+        }
+
         builder.Append(BuildBestMedianLine(summaries));
         return builder.ToString();
     }
@@ -302,7 +347,7 @@ public static class RtsBenchmarkComparisonRunner
     private static void WriteComparisonReport(TextWriter output, RtsBenchmarkComparisonOptions options, RtsBenchmarkComparisonResult result)
     {
         output.WriteLine("=== Dominatus.RTSBenchmark Comparison ===");
-        output.WriteLine("Type: Sensor cadence");
+        output.WriteLine(options.CompareAgentParallelism ? "Type: Agent parallelism" : "Type: Sensor cadence");
         output.WriteLine($"Mode: {options.Mode}");
         output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Trials: {options.Trials}"));
         output.WriteLine($"Runtime: {result.EnvironmentInfo.FrameworkDescription}, {result.EnvironmentInfo.ProcessArchitecture}, {result.EnvironmentInfo.RuntimeIdentifier}");
@@ -314,7 +359,9 @@ public static class RtsBenchmarkComparisonRunner
             ? string.Create(CultureInfo.InvariantCulture, $"Execution: Parallel (max degree {result.MaxDegreeOfParallelism})")
             : "Execution: Sequential");
         if (options.Parallel)
-            output.WriteLine("Note: parallel mode measures throughput for independent benchmark instances, not the primary single-thread score; CPU contention can reduce per-trial scores.");
+            output.WriteLine("Note: --parallel-trials measures throughput for independent benchmark instances, not agent decision parallelism; CPU contention can reduce per-trial scores.");
+        if (options.CompareAgentParallelism)
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Agent decision max degree: {options.AgentMaxDegreeOfParallelism?.ToString(CultureInfo.InvariantCulture) ?? "processor count"}"));
         output.WriteLine();
 
         foreach (var summary in result.Summaries)

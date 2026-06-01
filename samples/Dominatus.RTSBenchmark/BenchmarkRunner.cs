@@ -121,6 +121,14 @@ public static class RtsBenchmarkRunner
             IdleCadenceSelections = metrics.IdleCadenceSelections,
             SensorRefreshSkipRate = metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped == 0 ? 0d : metrics.SensorRefreshesSkipped / (double)(metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped),
             AverageSensorCadenceTicks = metrics.SensorRefreshesPerformed == 0 ? 0d : metrics.TotalSelectedSensorCadenceTicks / (double)metrics.SensorRefreshesPerformed,
+            ParallelAgents = options.ParallelAgents,
+            MaxDegreeOfParallelism = options.ParallelAgents ? ResolveMaxDegreeOfParallelism(options) : 1,
+            ParallelWorkersUsed = options.ParallelAgents ? (int)Math.Min(Math.Max(1, ResolveMaxDegreeOfParallelism(options)), Math.Max(1L, metrics.ParallelDecisionTasksScheduled)) : 1,
+            ExecutionMode = options.ParallelAgents ? "ParallelDecision" : "Sequential",
+            ParallelAgentTicks = metrics.ParallelAgentTicks,
+            ParallelDecisionTasksScheduled = metrics.ParallelDecisionTasksScheduled,
+            ParallelDecisionFaults = metrics.ParallelDecisionFaults,
+            ParallelLocalActionsStaged = metrics.ParallelLocalActionsStaged,
             SensorMode = options.SensorMode,
             SpatialCellSize = ResolveSpatialCellSize(options),
             SpatialMaxCellsUsed = metrics.SpatialMaxCellsUsed,
@@ -240,7 +248,9 @@ public static class RtsBenchmarkRunner
             spatialCellSize,
             options.EnableDynamicSensorCadence,
             minSensorCadenceTicks,
-            maxSensorCadenceTicks);
+            maxSensorCadenceTicks,
+            options.ParallelAgents,
+            ResolveMaxDegreeOfParallelism(options));
     }
 
     private static BattleSimulation CreateSimulationFromCheckpoint(RtsBenchmarkCheckpoint checkpoint, RtsBenchmarkOptions options, TextWriter? output)
@@ -257,7 +267,9 @@ public static class RtsBenchmarkRunner
             spatialCellSize,
             options.EnableDynamicSensorCadence,
             minSensorCadenceTicks,
-            maxSensorCadenceTicks);
+            maxSensorCadenceTicks,
+            options.ParallelAgents,
+            ResolveMaxDegreeOfParallelism(options));
     }
 
     public static (int Ships, int Ticks) DefaultsFor(BenchmarkMode mode) => mode switch
@@ -279,11 +291,15 @@ public static class RtsBenchmarkRunner
         if (options.MaxSensorCadenceTicks is <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxSensorCadenceTicks), "MaxSensorCadenceTicks must be greater than or equal to one when set.");
         if (options.MinSensorCadenceTicks is int min && options.MaxSensorCadenceTicks is int max && max < min)
             throw new ArgumentOutOfRangeException(nameof(options.MaxSensorCadenceTicks), "MaxSensorCadenceTicks must be greater than or equal to MinSensorCadenceTicks.");
+        if (options.MaxDegreeOfParallelism is < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.MaxDegreeOfParallelism), "MaxDegreeOfParallelism must be greater than or equal to one when set.");
     }
 
     public static float DefaultSpatialCellSize() => ShipClassDefinition.All.Values.Max(def => def.SensorRange);
 
     private static float ResolveSpatialCellSize(RtsBenchmarkOptions options) => options.SpatialCellSize ?? DefaultSpatialCellSize();
+
+    private static int ResolveMaxDegreeOfParallelism(RtsBenchmarkOptions options) => options.MaxDegreeOfParallelism ?? Environment.ProcessorCount;
 
     private static string BuildHotPathSummary(IReadOnlyList<RtsBenchmarkPhaseTiming> phaseTimings)
     {

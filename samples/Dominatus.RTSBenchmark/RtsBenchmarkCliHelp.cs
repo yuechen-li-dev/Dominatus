@@ -20,8 +20,11 @@ public static class RtsBenchmarkCliHelp
         output.WriteLine("  --min-sensor-cadence N                Default: 1");
         output.WriteLine("  --max-sensor-cadence N                Default: 12");
         output.WriteLine("  --compare-sensor-cadence              Run repeated comparison trials instead of one benchmark");
+        output.WriteLine("  --compare-agent-parallelism           Compare sequential agents vs parallel decision agents");
         output.WriteLine("  --trials N                            Comparison trial count. Default: 5");
         output.WriteLine("  --parallel-trials                     Run comparison trials concurrently");
+        output.WriteLine("  --parallel-agents                     Parallelize the benchmark-local ship decision phase");
+        output.WriteLine("  --max-degree N                        Bound --parallel-agents worker degree (default: processor count)");
         output.WriteLine("  --max-degree-of-parallelism N         Limit concurrent comparison trials");
         output.WriteLine("  --include-broadscan-baseline          Include BroadScan no-cadence baseline (default)");
         output.WriteLine("  --no-broadscan-baseline               Omit BroadScan no-cadence baseline");
