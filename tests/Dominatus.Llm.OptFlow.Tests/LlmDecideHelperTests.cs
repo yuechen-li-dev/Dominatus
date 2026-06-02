@@ -116,7 +116,7 @@ public sealed class LlmDecideHelperTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         var ex = Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(), ctx));
         Assert.Contains("stableId", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -134,7 +134,7 @@ public sealed class LlmDecideHelperTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(), ctx));
         Assert.Equal(0, client.CallCount);
@@ -478,7 +478,7 @@ public sealed class LlmDecideHelperTests
         graph.Add(new HfsmStateDef { Id = "Root", Node = RootNode });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         var step = Llm.Decide("guard.response.intent.v1","decide how the shrine guard responds to Mira","Fearful shrine guard. Loyal, superstitious, not eager to die.",AddDefaultContext,CreateOptions(),ChosenKey,RationaleKey,ResultJsonKey,approval: new LlmDecisionApprovalPolicy(),refusal: new LlmDecisionRefusalPolicy(StoreRefusalReasonAs: new BbKey<string>("decision.refusalReason")));
 
         ExecuteStep(step, ctx);
@@ -643,7 +643,7 @@ public sealed class LlmDecideHelperTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         return (world, ctx);
     }
 

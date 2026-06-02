@@ -162,7 +162,7 @@ public sealed class LlmMagiRefusalApprovalTests
         graph.Add(new HfsmStateDef { Id = "Root", Node = _ => Empty() });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         return (a,b,j,approval,ctx);
     }
 

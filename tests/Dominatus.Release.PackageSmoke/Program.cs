@@ -31,7 +31,7 @@ try
     graph.Add(new HfsmStateDef { Id = StateId.Of("Root"), Node = static _ => Idle() });
     var agent = new AiAgent(new HfsmInstance(graph));
     world.Add(agent);
-    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
     _ = Ai.Steady("compile-path");
     _ = Ai.Event<string>(cursorStart: EventCursorStart.IncludeExisting);

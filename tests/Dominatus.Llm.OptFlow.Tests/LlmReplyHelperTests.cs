@@ -80,7 +80,7 @@ public sealed class LlmReplyHelperTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         var step = CreateStep();
 
         var wait = Assert.IsAssignableFrom<IWaitEvent>(step);
@@ -105,7 +105,7 @@ public sealed class LlmReplyHelperTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         var step = CreateStep();
 
         var wait = Assert.IsAssignableFrom<IWaitEvent>(step);
@@ -416,7 +416,7 @@ public sealed class LlmReplyHelperTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         return (world, ctx);
     }
 

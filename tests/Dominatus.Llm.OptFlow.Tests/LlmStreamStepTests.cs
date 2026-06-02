@@ -216,7 +216,7 @@ public sealed class LlmStreamStepTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
         var ct = cancelAfterMs is null ? CancellationToken.None : new CancellationTokenSource(cancelAfterMs.Value).Token;
-        var ctx = new AiCtx(world, agent, agent.Events, ct, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, ct, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         return (world, ctx);
     }
 

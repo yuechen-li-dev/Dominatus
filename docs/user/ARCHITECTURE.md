@@ -88,16 +88,18 @@ public readonly record struct AiCtx(
     CancellationToken Cancel,
     IAiWorldView View,
     IAiMailbox Mail,
-    IAiActuator Act)
+    IAiActuator Act,
+    IAiWorldBb WorldBb)
 {
     public Blackboard Bb => Agent.Bb;
-    public Blackboard WorldBb => World.Bb;
 }
 ```
 
 `ctx` is the one thing every node receives. Nodes use explicit blackboard
 surfaces: `ctx.Bb` for agent-local state and `ctx.WorldBb` for shared
-world/session state.
+world/session state. Sequential runtime contexts inject `LiveWorldBb`, which
+delegates to `world.Bb`; future staged runners can inject a different
+`IAiWorldBb` implementation.
 
 ---
 
@@ -776,7 +778,7 @@ Its goal is narrower and more practical:
 
 The persistence model can be summarized like this:
 
-* **World Blackboard** (`ctx.WorldBb` / `world.Bb`) stores shared durable memory
+* **World Blackboard** (`ctx.WorldBb` through `IAiWorldBb` / `world.Bb`) stores shared durable memory
 * **Agent Blackboard** (`ctx.Bb` / `agent.Bb`) stores per-agent durable memory
 * **HFSM path** stores durable control position
 * **Replay** restores post-checkpoint causality

@@ -35,7 +35,7 @@ public sealed class NodeRunner(AiNode node)
     private EventCursor _waitEventCursor;
     private float _waitEventStartTime;
     private static AiCtx MakeCtx(AiWorld world, AiAgent agent, CancellationToken cancel)
-    => new(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator);
+    => new(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
     public void Enter(AiWorld world, AiAgent agent)
     {

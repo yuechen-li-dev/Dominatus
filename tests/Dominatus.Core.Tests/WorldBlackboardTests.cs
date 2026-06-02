@@ -29,14 +29,16 @@ public sealed class WorldBlackboardTests
     }
 
     [Fact]
-    public void AiCtx_WorldBb_ReturnsWorldBlackboard()
+    public void AiCtx_WorldBb_UsesLiveWorldBlackboardSurface()
     {
         var world = new AiWorld();
         var agent = new AiAgent(BuildNoopBrain());
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
-        Assert.Same(world.Bb, ctx.WorldBb);
+        ctx.WorldBb.Set(WeatherKey, "rain");
+
+        Assert.Equal("rain", world.Bb.GetOrDefault(WeatherKey, "missing"));
     }
 
     [Fact]
@@ -49,7 +51,7 @@ public sealed class WorldBlackboardTests
         world.Add(b);
 
         world.Bb.Set(WeatherKey, "rain");
-        var ctxB = new AiCtx(world, b, b.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctxB = new AiCtx(world, b, b.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         Assert.Equal("rain", ctxB.WorldBb.GetOrDefault(WeatherKey, "clear"));
     }

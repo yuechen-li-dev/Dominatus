@@ -141,7 +141,7 @@ public static class ParallelModuleWorkflowDemo
         graph.Add(new HfsmStateDef { Id = "Root", Node = EmptyNode });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, cancellationToken, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, cancellationToken, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         var step = LlmApi.Call(
             stableId,

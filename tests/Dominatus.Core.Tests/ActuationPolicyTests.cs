@@ -17,7 +17,7 @@ public sealed class ActuationPolicyTests
         var world = new AiWorld(host);
         var agent = new AiAgent(TestGraphs.MakeBareBrain());
         world.Add(agent);
-        return new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        return new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
     }
 
     [Fact]

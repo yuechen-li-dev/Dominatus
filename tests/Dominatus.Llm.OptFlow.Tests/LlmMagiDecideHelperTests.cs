@@ -75,7 +75,7 @@ public sealed class LlmMagiDecideHelperTests
         graph.Add(new HfsmStateDef { Id = "Root", Node = RootNode });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         var ex = Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(), ctx));
         Assert.Contains("stableId", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -95,7 +95,7 @@ public sealed class LlmMagiDecideHelperTests
         graph.Add(new HfsmStateDef { Id = "Root", Node = RootNode });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         Assert.Throws<InvalidOperationException>(() => ExecuteStep(CreateStep(), ctx));
         Assert.Equal(0, aClient.CallCount);
@@ -353,7 +353,7 @@ public sealed class LlmMagiDecideHelperTests
         graph.Add(new HfsmStateDef { Id = "Root", Node = RootNode });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         return (aClient, bClient, jClient, ctx);
     }

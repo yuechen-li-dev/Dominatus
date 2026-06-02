@@ -246,7 +246,7 @@ public sealed class JsonLlmDecisionCassetteTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         var dispatch = host.Dispatch(ctx, request);
 
         Assert.True(dispatch.Accepted);
