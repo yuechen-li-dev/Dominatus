@@ -64,6 +64,7 @@ public static class BattleReport
         output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  Actions / agent tick: {result.ActionsPerAgentTick:0.00}"));
         output.WriteLine($"  Blackboard reads/writes: {result.DecisionBlackboardReads}/{result.DecisionBlackboardWrites}");
         output.WriteLine($"  Parallel agent ticks/tasks/faults/staged: {result.ParallelAgentTicks}/{result.ParallelDecisionTasksScheduled}/{result.ParallelDecisionFaults}/{result.ParallelLocalActionsStaged}");
+        output.WriteLine($"  Core parallel agents/world/mailbox/actuations/conflicts: {result.CoreParallelAgentsTicked}/{result.CoreParallelWorldWritesStaged}/{result.CoreParallelMailboxMessagesStaged}/{result.CoreParallelActuationsStaged}/{result.CoreParallelConflicts}");
         output.WriteLine($"  Action states entered: {result.ActionStatesEntered}");
         output.WriteLine("  Action distribution:");
         output.WriteLine($"    FocusFire: {result.FocusFireActionsEmitted}");

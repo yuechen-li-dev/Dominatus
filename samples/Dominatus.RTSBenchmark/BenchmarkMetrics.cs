@@ -98,6 +98,11 @@ public sealed class BenchmarkMetrics
     public long ParallelDecisionTasksScheduled;
     public long ParallelDecisionFaults;
     public long ParallelLocalActionsStaged;
+    public long CoreParallelAgentsTicked;
+    public long CoreParallelWorldWritesStaged;
+    public long CoreParallelMailboxMessagesStaged;
+    public long CoreParallelActuationsStaged;
+    public long CoreParallelConflicts;
 
     internal void AddPhaseTicks(int phase, long elapsedTicks) => _phaseElapsedTicks[phase] += elapsedTicks;
 

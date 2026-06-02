@@ -121,14 +121,20 @@ public static class RtsBenchmarkRunner
             IdleCadenceSelections = metrics.IdleCadenceSelections,
             SensorRefreshSkipRate = metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped == 0 ? 0d : metrics.SensorRefreshesSkipped / (double)(metrics.SensorRefreshesPerformed + metrics.SensorRefreshesSkipped),
             AverageSensorCadenceTicks = metrics.SensorRefreshesPerformed == 0 ? 0d : metrics.TotalSelectedSensorCadenceTicks / (double)metrics.SensorRefreshesPerformed,
-            ParallelAgents = options.ParallelAgents,
-            MaxDegreeOfParallelism = options.ParallelAgents ? ResolveMaxDegreeOfParallelism(options) : 1,
-            ParallelWorkersUsed = options.ParallelAgents ? (int)Math.Min(Math.Max(1, ResolveMaxDegreeOfParallelism(options)), Math.Max(1L, metrics.ParallelDecisionTasksScheduled)) : 1,
-            ExecutionMode = options.ParallelAgents ? "ParallelDecision" : "Sequential",
+            AgentExecutionMode = ResolveAgentExecutionMode(options),
+            ParallelAgents = ResolveAgentExecutionMode(options) != RtsAgentExecutionMode.Sequential,
+            MaxDegreeOfParallelism = ResolveAgentExecutionMode(options) != RtsAgentExecutionMode.Sequential ? ResolveMaxDegreeOfParallelism(options) : 1,
+            ParallelWorkersUsed = ResolveAgentExecutionMode(options) != RtsAgentExecutionMode.Sequential ? (int)Math.Min(Math.Max(1, ResolveMaxDegreeOfParallelism(options)), Math.Max(1L, metrics.ParallelDecisionTasksScheduled)) : 1,
+            ExecutionMode = ExecutionModeLabel(ResolveAgentExecutionMode(options)),
             ParallelAgentTicks = metrics.ParallelAgentTicks,
             ParallelDecisionTasksScheduled = metrics.ParallelDecisionTasksScheduled,
             ParallelDecisionFaults = metrics.ParallelDecisionFaults,
             ParallelLocalActionsStaged = metrics.ParallelLocalActionsStaged,
+            CoreParallelAgentsTicked = metrics.CoreParallelAgentsTicked,
+            CoreParallelWorldWritesStaged = metrics.CoreParallelWorldWritesStaged,
+            CoreParallelMailboxMessagesStaged = metrics.CoreParallelMailboxMessagesStaged,
+            CoreParallelActuationsStaged = metrics.CoreParallelActuationsStaged,
+            CoreParallelConflicts = metrics.CoreParallelConflicts,
             SensorMode = options.SensorMode,
             SpatialCellSize = ResolveSpatialCellSize(options),
             SpatialMaxCellsUsed = metrics.SpatialMaxCellsUsed,
@@ -249,7 +255,7 @@ public static class RtsBenchmarkRunner
             options.EnableDynamicSensorCadence,
             minSensorCadenceTicks,
             maxSensorCadenceTicks,
-            options.ParallelAgents,
+            ResolveAgentExecutionMode(options),
             ResolveMaxDegreeOfParallelism(options));
     }
 
@@ -268,7 +274,7 @@ public static class RtsBenchmarkRunner
             options.EnableDynamicSensorCadence,
             minSensorCadenceTicks,
             maxSensorCadenceTicks,
-            options.ParallelAgents,
+            ResolveAgentExecutionMode(options),
             ResolveMaxDegreeOfParallelism(options));
     }
 
@@ -293,9 +299,24 @@ public static class RtsBenchmarkRunner
             throw new ArgumentOutOfRangeException(nameof(options.MaxSensorCadenceTicks), "MaxSensorCadenceTicks must be greater than or equal to MinSensorCadenceTicks.");
         if (options.MaxDegreeOfParallelism is < 1)
             throw new ArgumentOutOfRangeException(nameof(options.MaxDegreeOfParallelism), "MaxDegreeOfParallelism must be greater than or equal to one when set.");
+        if (options.ParallelAgents && options.AgentExecutionMode == RtsAgentExecutionMode.CoreParallelRunner)
+            throw new ArgumentException("--parallel-agents and --core-parallel-agents cannot be combined.");
     }
 
+    private static RtsAgentExecutionMode ResolveAgentExecutionMode(RtsBenchmarkOptions options)
+        => options.ParallelAgents && options.AgentExecutionMode == RtsAgentExecutionMode.Sequential
+            ? RtsAgentExecutionMode.LocalParallelDecision
+            : options.AgentExecutionMode;
+
     public static float DefaultSpatialCellSize() => ShipClassDefinition.All.Values.Max(def => def.SensorRange);
+
+    private static string ExecutionModeLabel(RtsAgentExecutionMode mode) => mode switch
+    {
+        RtsAgentExecutionMode.Sequential => "Sequential",
+        RtsAgentExecutionMode.LocalParallelDecision => "ParallelDecision",
+        RtsAgentExecutionMode.CoreParallelRunner => "CoreParallelRunner",
+        _ => mode.ToString()
+    };
 
     private static float ResolveSpatialCellSize(RtsBenchmarkOptions options) => options.SpatialCellSize ?? DefaultSpatialCellSize();
 

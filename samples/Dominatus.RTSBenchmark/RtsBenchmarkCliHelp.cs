@@ -24,7 +24,8 @@ public static class RtsBenchmarkCliHelp
         output.WriteLine("  --trials N                            Comparison trial count. Default: 5");
         output.WriteLine("  --parallel-trials                     Run comparison trials concurrently");
         output.WriteLine("  --parallel-agents                     Parallelize the benchmark-local ship decision phase");
-        output.WriteLine("  --max-degree N                        Bound --parallel-agents worker degree (default: processor count)");
+        output.WriteLine("  --core-parallel-agents                Use Core ParallelAiWorldRunner for ship decision phase");
+        output.WriteLine("  --max-degree N                        Bound either agent parallel mode worker degree (default: processor count)");
         output.WriteLine("  --max-degree-of-parallelism N         Limit concurrent comparison trials");
         output.WriteLine("  --include-broadscan-baseline          Include BroadScan no-cadence baseline (default)");
         output.WriteLine("  --no-broadscan-baseline               Omit BroadScan no-cadence baseline");

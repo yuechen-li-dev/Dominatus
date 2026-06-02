@@ -239,6 +239,43 @@ public sealed class ParallelAiWorldRunnerTests
         Assert.Equal("missing", world.Bb.GetOrDefault(KeyA, "missing"));
     }
 
+    [Fact]
+    public void ParallelAiWorldRunner_PrepareFlags_DefaultPreservesBehavior()
+    {
+        var actuator = new CountingTickableActuator();
+        var world = new AiWorld(actuator);
+        world.Bb.SetUntil(KeyA, "expires", 0.5f);
+        AddAgent(world, _ => WaitForever());
+
+        new ParallelAiWorldRunner().Tick(world, 1f);
+
+        Assert.Equal(1f, world.Clock.Time);
+        Assert.Equal(1f, world.Clock.DeltaTime);
+        Assert.Equal(1, actuator.Ticks);
+        Assert.Equal("missing", world.Bb.GetOrDefault(KeyA, "missing"));
+    }
+
+    [Fact]
+    public void ParallelAiWorldRunner_PrepareFlags_CanDisablePrepareSteps()
+    {
+        var actuator = new CountingTickableActuator();
+        var world = new AiWorld(actuator);
+        world.Bb.SetUntil(KeyA, "kept", 0.5f);
+        AddAgent(world, _ => WaitForever());
+
+        new ParallelAiWorldRunner().Tick(world, 1f, new ParallelTickOptions
+        {
+            AdvanceWorldClock = false,
+            ExpireWorldBlackboard = false,
+            TickActuator = false
+        });
+
+        Assert.Equal(0f, world.Clock.Time);
+        Assert.Equal(0f, world.Clock.DeltaTime);
+        Assert.Equal(0, actuator.Ticks);
+        Assert.Equal("kept", world.Bb.GetOrDefault(KeyA, "missing"));
+    }
+
     private static AiWorld NewConflictWorld()
     {
         var world = new AiWorld();
@@ -305,6 +342,16 @@ public sealed class ParallelAiWorldRunnerTests
     {
         yield return Ai.Act(new TestCommand("go"), ActIdKey);
         yield return Ai.Wait(999f);
+    }
+
+    private sealed class CountingTickableActuator : IAiActuator, ITickableActuator
+    {
+        public int Ticks { get; private set; }
+
+        public ActuationDispatchResult Dispatch(AiCtx ctx, IActuationCommand command)
+            => new(new ActuationId(1), Accepted: true, Completed: true, Ok: true);
+
+        public void Tick(AiWorld world) => Ticks++;
     }
 
     private sealed class RecordingHandler : IActuationHandler<TestCommand>
