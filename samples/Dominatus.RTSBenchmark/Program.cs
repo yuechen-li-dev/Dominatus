@@ -117,7 +117,14 @@ public static class Program
                     options = options with { ParallelTrials = true };
                     break;
                 case "--parallel-agents":
-                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { ParallelAgents = true } };
+                    if (options.BenchmarkOptions.AgentExecutionMode == RtsAgentExecutionMode.CoreParallelRunner)
+                        throw new ArgumentException("--parallel-agents and --core-parallel-agents cannot be combined.");
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { ParallelAgents = true, AgentExecutionMode = RtsAgentExecutionMode.LocalParallelDecision } };
+                    break;
+                case "--core-parallel-agents":
+                    if (options.BenchmarkOptions.ParallelAgents || options.BenchmarkOptions.AgentExecutionMode == RtsAgentExecutionMode.LocalParallelDecision)
+                        throw new ArgumentException("--parallel-agents and --core-parallel-agents cannot be combined.");
+                    options = options with { BenchmarkOptions = options.BenchmarkOptions with { AgentExecutionMode = RtsAgentExecutionMode.CoreParallelRunner } };
                     break;
                 case "--max-degree" when i + 1 < args.Length:
                     options = options with { BenchmarkOptions = options.BenchmarkOptions with { MaxDegreeOfParallelism = int.Parse(args[++i], CultureInfo.InvariantCulture) } };

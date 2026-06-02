@@ -14,6 +14,12 @@ public sealed record ParallelTickOptions
 {
     public int MaxDegreeOfParallelism { get; init; } = Environment.ProcessorCount;
     public ParallelWorldWriteConflictPolicy WorldWriteConflictPolicy { get; init; } = ParallelWorldWriteConflictPolicy.Fail;
+    public bool AdvanceWorldClock { get; init; } = true;
+    public bool ExpireWorldBlackboard { get; init; } = true;
+    public bool TickActuator { get; init; } = true;
+    public Func<AiAgent, bool>? AgentFilter { get; init; }
+    public Action<AiAgent>? AgentTickStarting { get; init; }
+    public Action<AiAgent>? AgentTickCompleted { get; init; }
 
     internal void Validate()
     {
@@ -80,9 +86,10 @@ public sealed class ParallelAiWorldRunner
         effectiveOptions.Validate();
         cancellationToken.ThrowIfCancellationRequested();
 
-        Prepare(world, dt);
+        Prepare(world, dt, effectiveOptions);
 
         var agents = world.Agents
+            .Where(agent => effectiveOptions.AgentFilter?.Invoke(agent) ?? true)
             .OrderBy(agent => agent.Id.Value)
             .ToArray();
         var agentLookup = agents.ToDictionary(agent => agent.Id);
@@ -121,7 +128,9 @@ public sealed class ParallelAiWorldRunner
                     agent.Brain.ContextFactory = factory;
                     try
                     {
+                        effectiveOptions.AgentTickStarting?.Invoke(agent);
                         agent.Tick(world);
+                        effectiveOptions.AgentTickCompleted?.Invoke(agent);
                     }
                     catch (Exception ex)
                     {
@@ -177,12 +186,14 @@ public sealed class ParallelAiWorldRunner
         };
     }
 
-    private static void Prepare(AiWorld world, float dt)
+    private static void Prepare(AiWorld world, float dt, ParallelTickOptions options)
     {
-        world.Clock.Advance(dt);
-        world.Bb.Expire(world.Clock.Time);
+        if (options.AdvanceWorldClock)
+            world.Clock.Advance(dt);
+        if (options.ExpireWorldBlackboard)
+            world.Bb.Expire(world.Clock.Time);
 
-        if (world.Actuator is ITickableActuator tickable)
+        if (options.TickActuator && world.Actuator is ITickableActuator tickable)
             tickable.Tick(world);
     }
 

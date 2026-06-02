@@ -2,6 +2,13 @@ using Dominatus.RTSBenchmark.Simulation;
 
 namespace Dominatus.RTSBenchmark;
 
+public enum RtsAgentExecutionMode
+{
+    Sequential,
+    LocalParallelDecision,
+    CoreParallelRunner
+}
+
 public sealed record RtsBenchmarkOptions
 {
     public BenchmarkMode Mode { get; init; } = BenchmarkMode.Smoke;
@@ -14,9 +21,11 @@ public sealed record RtsBenchmarkOptions
     public bool EnableDynamicSensorCadence { get; init; } = true;
     public int? MinSensorCadenceTicks { get; init; }
     public int? MaxSensorCadenceTicks { get; init; }
+    public RtsAgentExecutionMode AgentExecutionMode { get; init; } = RtsAgentExecutionMode.Sequential;
     public bool ParallelAgents { get; init; } = false;
     public int? MaxDegreeOfParallelism { get; init; }
 }
+
 
 public sealed record RtsBenchmarkPhaseTiming
 {
@@ -83,6 +92,7 @@ public sealed record RtsBenchmarkResult
     public required long IdleCadenceSelections { get; init; }
     public required double SensorRefreshSkipRate { get; init; }
     public required double AverageSensorCadenceTicks { get; init; }
+    public required RtsAgentExecutionMode AgentExecutionMode { get; init; }
     public required bool ParallelAgents { get; init; }
     public required int MaxDegreeOfParallelism { get; init; }
     public required int ParallelWorkersUsed { get; init; }
@@ -91,6 +101,11 @@ public sealed record RtsBenchmarkResult
     public required long ParallelDecisionTasksScheduled { get; init; }
     public required long ParallelDecisionFaults { get; init; }
     public required long ParallelLocalActionsStaged { get; init; }
+    public required long CoreParallelAgentsTicked { get; init; }
+    public required long CoreParallelWorldWritesStaged { get; init; }
+    public required long CoreParallelMailboxMessagesStaged { get; init; }
+    public required long CoreParallelActuationsStaged { get; init; }
+    public required long CoreParallelConflicts { get; init; }
     public required RtsSensorMode SensorMode { get; init; }
     public required float SpatialCellSize { get; init; }
     public required long SpatialMaxCellsUsed { get; init; }

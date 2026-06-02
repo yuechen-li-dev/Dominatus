@@ -62,6 +62,7 @@ public static class RtsBenchmarkReportWriter
         "dynamicSensorCadenceEnabled",
         "parallelAgents",
         "maxDegreeOfParallelism",
+        "agentExecutionMode",
         "executionMode",
         "ticksSimulated",
         "initialShips",
@@ -88,6 +89,7 @@ public static class RtsBenchmarkReportWriter
         "ranInParallel",
         "maxDegreeOfParallelism",
         "comparisonType",
+        "agentExecutionMode",
         "meanAgentTicksPerSecond",
         "medianAgentTicksPerSecond",
         "minAgentTicksPerSecond",
@@ -113,6 +115,7 @@ public static class RtsBenchmarkReportWriter
         yield return Format(result.DynamicSensorCadenceEnabled);
         yield return Format(result.ParallelAgents);
         yield return Format(result.MaxDegreeOfParallelism);
+        yield return result.AgentExecutionMode.ToString();
         yield return result.ExecutionMode;
         yield return Format(result.TicksSimulated);
         yield return Format(result.InitialShips);
@@ -139,6 +142,7 @@ public static class RtsBenchmarkReportWriter
         yield return Format(result.RanInParallel);
         yield return Format(result.MaxDegreeOfParallelism);
         yield return result.Options.CompareAgentParallelism ? "AgentParallelism" : "SensorCadence";
+        yield return summary.AgentExecutionMode.ToString();
         yield return Format(summary.MeanAgentTicksPerSecond);
         yield return Format(summary.MedianAgentTicksPerSecond);
         yield return Format(summary.MinAgentTicksPerSecond);

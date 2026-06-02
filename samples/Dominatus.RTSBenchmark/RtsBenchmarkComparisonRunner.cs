@@ -15,6 +15,7 @@ public sealed record RtsBenchmarkTrialResult
 public sealed record RtsBenchmarkSummaryStats
 {
     public required string Label { get; init; }
+    public required RtsAgentExecutionMode AgentExecutionMode { get; init; }
     public required int Trials { get; init; }
     public required double MeanAgentTicksPerSecond { get; init; }
     public required double MedianAgentTicksPerSecond { get; init; }
@@ -136,7 +137,7 @@ public static class RtsBenchmarkComparisonRunner
                 WriteCheckpoints = false,
                 SensorMode = RtsSensorMode.SpatialGrid,
                 EnableDynamicSensorCadence = true,
-                ParallelAgents = false
+                AgentExecutionMode = RtsAgentExecutionMode.Sequential
             });
 
             yield return new ComparisonConfiguration("Parallel decision agents", new RtsBenchmarkOptions
@@ -145,7 +146,17 @@ public static class RtsBenchmarkComparisonRunner
                 WriteCheckpoints = false,
                 SensorMode = RtsSensorMode.SpatialGrid,
                 EnableDynamicSensorCadence = true,
-                ParallelAgents = true,
+                AgentExecutionMode = RtsAgentExecutionMode.LocalParallelDecision,
+                MaxDegreeOfParallelism = options.AgentMaxDegreeOfParallelism
+            });
+
+            yield return new ComparisonConfiguration("Core parallel runner agents", new RtsBenchmarkOptions
+            {
+                Mode = options.Mode,
+                WriteCheckpoints = false,
+                SensorMode = RtsSensorMode.SpatialGrid,
+                EnableDynamicSensorCadence = true,
+                AgentExecutionMode = RtsAgentExecutionMode.CoreParallelRunner,
                 MaxDegreeOfParallelism = options.AgentMaxDegreeOfParallelism
             });
             yield break;
@@ -259,6 +270,7 @@ public static class RtsBenchmarkComparisonRunner
         return new RtsBenchmarkSummaryStats
         {
             Label = label,
+            AgentExecutionMode = trials.FirstOrDefault()?.Result.AgentExecutionMode ?? RtsAgentExecutionMode.Sequential,
             Trials = trials.Count,
             MeanAgentTicksPerSecond = Mean(trials.Select(t => t.Result.AgentTicksPerSecond)),
             MedianAgentTicksPerSecond = Median(trials.Select(t => t.Result.AgentTicksPerSecond)),
@@ -307,24 +319,26 @@ public static class RtsBenchmarkComparisonRunner
 
         foreach (var summary in summaries)
         {
-            builder.Append(CultureInfo.InvariantCulture, $"{summary.Label}: median {FormatThousands(summary.MedianAgentTicksPerSecond)} agent-ticks/sec, skip rate {FormatPercent(summary.MedianSensorRefreshSkipRate)}, hash stable {(summary.HashesStable ? "yes" : "no")}");
+            builder.Append(CultureInfo.InvariantCulture, $"{summary.Label}: mode {summary.AgentExecutionMode}, median {FormatThousands(summary.MedianAgentTicksPerSecond)} agent-ticks/sec, skip rate {FormatPercent(summary.MedianSensorRefreshSkipRate)}, hash stable {(summary.HashesStable ? "yes" : "no")}");
             builder.AppendLine();
         }
 
         if (options.CompareAgentParallelism)
         {
             var sequential = summaries.FirstOrDefault(s => s.Label == "Sequential agents");
-            var parallel = summaries.FirstOrDefault(s => s.Label == "Parallel decision agents");
-            if (sequential is not null && parallel is not null && sequential.MedianAgentTicksPerSecond > 0d)
+            if (sequential is not null && sequential.MedianAgentTicksPerSecond > 0d)
             {
-                var speedup = parallel.MedianAgentTicksPerSecond / sequential.MedianAgentTicksPerSecond;
-                var equivalent = sequential.DeterminismHashes.Count > 0
-                    && parallel.DeterminismHashes.Count > 0
-                    && sequential.HashesStable
-                    && parallel.HashesStable
-                    && sequential.DeterminismHashes[0] == parallel.DeterminismHashes[0];
-                builder.Append(CultureInfo.InvariantCulture,
-                    $"Agent parallelism: sequential median {sequential.MedianAgentTicksPerSecond:0.00}, parallel median {parallel.MedianAgentTicksPerSecond:0.00}, speedup {speedup:0.00}x, hash equivalent {(equivalent ? "yes" : "no")}");
+                foreach (var candidate in summaries.Where(s => s != sequential))
+                {
+                    var speedup = candidate.MedianAgentTicksPerSecond / sequential.MedianAgentTicksPerSecond;
+                    var equivalent = sequential.DeterminismHashes.Count > 0
+                        && candidate.DeterminismHashes.Count > 0
+                        && sequential.HashesStable
+                        && candidate.HashesStable
+                        && sequential.DeterminismHashes[0] == candidate.DeterminismHashes[0];
+                    builder.AppendLine(CultureInfo.InvariantCulture,
+                        $"Agent parallelism: {candidate.Label} mode {candidate.AgentExecutionMode}, sequential median {sequential.MedianAgentTicksPerSecond:0.00}, candidate median {candidate.MedianAgentTicksPerSecond:0.00}, speedup {speedup:0.00}x, hash equivalent {(equivalent ? "yes" : "no")}");
+                }
                 return builder.ToString();
             }
         }
@@ -367,6 +381,7 @@ public static class RtsBenchmarkComparisonRunner
         foreach (var summary in result.Summaries)
         {
             output.WriteLine($"{summary.Label}:");
+            output.WriteLine($"  Execution mode: {summary.AgentExecutionMode}");
             output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  AgentTicks/sec median: {summary.MedianAgentTicksPerSecond:0.00}"));
             output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  AgentTicks/sec mean: {summary.MeanAgentTicksPerSecond:0.00}"));
             output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  min/max: {summary.MinAgentTicksPerSecond:0.00} / {summary.MaxAgentTicksPerSecond:0.00}"));

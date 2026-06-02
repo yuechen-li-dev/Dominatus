@@ -1480,3 +1480,44 @@ Future work remains:
 - staged `WorldBb`, mailbox, and actuation surfaces;
 - parallel sensor phase over immutable snapshots;
 - deterministic parallel action-resolution partitions.
+
+## M11 Core ParallelAiWorldRunner decision mode
+
+M11 integrates the generic Core `ParallelAiWorldRunner` into RTSBenchmark as a third agent execution mode. The benchmark now has three decision-phase modes:
+
+- `Sequential`: the default, single-threaded ship-agent decision loop.
+- `--parallel-agents`: the M10 benchmark-local parallel decision fast path. It is lower overhead because it only computes ship actions into deterministic slots and then merges those slots in ship-id order.
+- `--core-parallel-agents`: the M11 Core runner path. It uses `ParallelAiWorldRunner` and the generic staged Core surfaces, then reads each alive ship agent's selected local action in deterministic ship-id order.
+
+Enable the Core runner mode with:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --mode Skirmish \
+  --core-parallel-agents \
+  --max-degree 8 \
+  --no-checkpoints
+```
+
+`--parallel-agents` and `--core-parallel-agents` are mutually exclusive. `--max-degree N` applies to either parallel mode and defaults to `Environment.ProcessorCount` when omitted.
+
+RTSBenchmark embeds the Core runner only for the decision phase. The outer benchmark still owns cooldowns, sensors, action sorting, action resolution, event delivery, checkpoints, and hashing. For that embedded use, the Core runner is called with prepare steps disabled so it does not advance the world clock, expire the world blackboard, or tick the actuator a second time during the benchmark tick.
+
+### Core runner safe-subset enforcement
+
+The current RTS decision subset is expected to use only agent-local blackboards during decision compute. In `--core-parallel-agents` mode, RTSBenchmark treats staged Core shared effects as a contract violation. If the Core runner reports staged world blackboard writes, staged mailbox messages, staged actuations, or conflicts during a benchmark decision phase, the benchmark throws instead of silently accepting a semantic change.
+
+### Comparing all three modes
+
+`--compare-agent-parallelism` now compares all three decision modes:
+
+```bash
+dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj --framework net10.0 -- \
+  --compare-agent-parallelism \
+  --mode Skirmish \
+  --trials 3 \
+  --max-degree 2 \
+  --progress-interval-seconds 0
+```
+
+The comparison report includes the execution mode, median agent-ticks/sec, speedup versus sequential, hash stability, and deterministic-hash equivalence versus sequential. The Core runner can be slower than the benchmark-local mode because it pays the generic staged-runtime overhead for snapshots, staged surfaces, merge accounting, and safety diagnostics. The primary M11 correctness proof is deterministic equivalence: sequential, benchmark-local parallel, and Core runner modes should produce the same deterministic hash and deterministic counters for the same benchmark options except agent execution mode.

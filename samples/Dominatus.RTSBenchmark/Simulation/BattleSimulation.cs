@@ -27,12 +27,13 @@ public sealed class BattleSimulation
     private readonly Dictionary<int, SensorCadenceState> _sensorCadence = new();
     private readonly SpatialShipGrid? _spatialGrid;
     private readonly List<ShipState> _spatialCandidates = new();
-    private readonly bool _parallelAgents;
+    private readonly RtsAgentExecutionMode _agentExecutionMode;
     private readonly int _maxDegreeOfParallelism;
     private readonly ParallelOptions _parallelDecisionOptions;
+    private readonly ParallelAiWorldRunner _coreParallelRunner = new();
 
     public BattleSimulation(int shipCount, int checkpointInterval, bool writeCheckpoints, TextWriter? output, RtsSensorMode sensorMode, float spatialCellSize)
-        : this(shipCount, checkpointInterval, writeCheckpoints, output, sensorMode, spatialCellSize, enableDynamicSensorCadence: false, minSensorCadenceTicks: 1, maxSensorCadenceTicks: 12, parallelAgents: false, maxDegreeOfParallelism: Environment.ProcessorCount)
+        : this(shipCount, checkpointInterval, writeCheckpoints, output, sensorMode, spatialCellSize, enableDynamicSensorCadence: false, minSensorCadenceTicks: 1, maxSensorCadenceTicks: 12, agentExecutionMode: RtsAgentExecutionMode.Sequential, maxDegreeOfParallelism: Environment.ProcessorCount)
     {
     }
 
@@ -46,7 +47,7 @@ public sealed class BattleSimulation
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
         int maxSensorCadenceTicks,
-        bool parallelAgents = false,
+        RtsAgentExecutionMode agentExecutionMode = RtsAgentExecutionMode.Sequential,
         int maxDegreeOfParallelism = 1)
         : this(
             FleetFactory.CreateFleets(shipCount),
@@ -58,7 +59,7 @@ public sealed class BattleSimulation
             enableDynamicSensorCadence,
             minSensorCadenceTicks,
             maxSensorCadenceTicks,
-            parallelAgents,
+            agentExecutionMode,
             maxDegreeOfParallelism,
             metricsCheckpoint: null,
             checkpointLines: null,
@@ -76,7 +77,7 @@ public sealed class BattleSimulation
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
         int maxSensorCadenceTicks,
-        bool parallelAgents = false,
+        RtsAgentExecutionMode agentExecutionMode = RtsAgentExecutionMode.Sequential,
         int maxDegreeOfParallelism = 1)
         : this(
             checkpoint.Ships.Select(ToShipState).ToList(),
@@ -88,7 +89,7 @@ public sealed class BattleSimulation
             enableDynamicSensorCadence,
             minSensorCadenceTicks,
             maxSensorCadenceTicks,
-            parallelAgents,
+            agentExecutionMode,
             maxDegreeOfParallelism,
             checkpoint.Metrics,
             checkpoint.Checkpoints,
@@ -106,7 +107,7 @@ public sealed class BattleSimulation
         bool enableDynamicSensorCadence,
         int minSensorCadenceTicks,
         int maxSensorCadenceTicks,
-        bool parallelAgents,
+        RtsAgentExecutionMode agentExecutionMode,
         int maxDegreeOfParallelism,
         RtsBenchmarkMetricsCheckpoint? metricsCheckpoint,
         IReadOnlyList<string>? checkpointLines,
@@ -117,7 +118,7 @@ public sealed class BattleSimulation
         _dynamicSensorCadenceEnabled = enableDynamicSensorCadence;
         _minSensorCadenceTicks = minSensorCadenceTicks;
         _maxSensorCadenceTicks = maxSensorCadenceTicks;
-        _parallelAgents = parallelAgents;
+        _agentExecutionMode = agentExecutionMode;
         _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism);
         _parallelDecisionOptions = new ParallelOptions { MaxDegreeOfParallelism = _maxDegreeOfParallelism };
         _ships = ships;
@@ -190,7 +191,8 @@ public sealed class BattleSimulation
 
     public int MinSensorCadenceTicks => _minSensorCadenceTicks;
     public int MaxSensorCadenceTicks => _maxSensorCadenceTicks;
-    public bool ParallelAgents => _parallelAgents;
+    public RtsAgentExecutionMode AgentExecutionMode => _agentExecutionMode;
+    public bool ParallelAgents => _agentExecutionMode != RtsAgentExecutionMode.Sequential;
     public int MaxDegreeOfParallelism => _maxDegreeOfParallelism;
 
     public void RunTick(int tick)
@@ -576,10 +578,14 @@ public sealed class BattleSimulation
 
     private void DecisionPhase(int tick)
     {
-        if (_parallelAgents)
+        switch (_agentExecutionMode)
         {
-            ParallelDecisionPhase(tick);
-            return;
+            case RtsAgentExecutionMode.LocalParallelDecision:
+                ParallelDecisionPhase(tick);
+                return;
+            case RtsAgentExecutionMode.CoreParallelRunner:
+                CoreParallelDecisionPhase(tick);
+                return;
         }
 
         foreach (var ship in _ships)
@@ -622,6 +628,64 @@ public sealed class BattleSimulation
             AddDecisionWorkMetrics(result, parallel: true);
             StageAction(tick, workItems[i], result.Type);
             _metrics.ParallelLocalActionsStaged++;
+        }
+    }
+
+    private void CoreParallelDecisionPhase(int tick)
+    {
+        var workItems = _ships
+            .Where(ship => ship.Alive)
+            .OrderBy(ship => ship.Id)
+            .ToArray();
+
+        if (workItems.Length == 0)
+            return;
+
+        var aliveAgentIds = workItems
+            .Select(ship => _shipToAgentId[ship.Id])
+            .ToHashSet();
+        var decisionReads = new System.Collections.Concurrent.ConcurrentQueue<long>();
+
+        _metrics.ParallelDecisionTasksScheduled += workItems.Length;
+        ParallelTickResult result;
+        try
+        {
+            result = _coreParallelRunner.Tick(_world, 0f, new ParallelTickOptions
+            {
+                MaxDegreeOfParallelism = _maxDegreeOfParallelism,
+                AdvanceWorldClock = false,
+                ExpireWorldBlackboard = false,
+                TickActuator = false,
+                AgentFilter = agent => aliveAgentIds.Contains(agent.Id.Value),
+                AgentTickStarting = _ => UtilityDiagnostics.BeginDecision(),
+                AgentTickCompleted = _ => decisionReads.Enqueue(UtilityDiagnostics.EndDecision())
+            });
+        }
+        catch
+        {
+            _metrics.ParallelDecisionFaults++;
+            throw;
+        }
+
+        _metrics.CoreParallelAgentsTicked += result.AgentsTicked;
+        _metrics.CoreParallelWorldWritesStaged += result.WorldWritesStaged;
+        _metrics.CoreParallelMailboxMessagesStaged += result.MailboxMessagesStaged;
+        _metrics.CoreParallelActuationsStaged += result.ActuationsStaged;
+        _metrics.CoreParallelConflicts += result.Conflicts.Count;
+
+        if (result.WorldWritesStaged != 0 || result.MailboxMessagesStaged != 0 || result.ActuationsStaged != 0 || result.Conflicts.Count != 0)
+            throw new InvalidOperationException("Core parallel RTSBenchmark decision phase staged shared effects; the RTS safe subset was violated.");
+
+        var totalDecisionReads = decisionReads.Sum() + workItems.Length;
+        for (var i = 0; i < workItems.Length; i++)
+        {
+            var ship = workItems[i];
+            var agent = _agents[ship.Id];
+            var selected = agent.Bb.GetOrDefault(BenchmarkBlackboardKeys.CurrentAction, nameof(ShipActionType.Idle));
+            var type = Enum.TryParse<ShipActionType>(selected, out var parsed) ? parsed : ShipActionType.Idle;
+            var reads = totalDecisionReads / workItems.Length + (i < totalDecisionReads % workItems.Length ? 1 : 0);
+            AddDecisionWorkMetrics(new DecisionWorkResult(ship.Id, type, reads), parallel: true);
+            StageAction(tick, ship, type);
         }
     }
 

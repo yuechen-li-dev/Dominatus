@@ -432,14 +432,14 @@ var result = runner.Tick(
     new ParallelTickOptions { MaxDegreeOfParallelism = 4 });
 ```
 
-`ParallelTickOptions` defaults to `Environment.ProcessorCount` and `ParallelWorldWriteConflictPolicy.Fail`. `MaxDegreeOfParallelism` must be at least 1.
+`ParallelTickOptions` defaults to `Environment.ProcessorCount`, `ParallelWorldWriteConflictPolicy.Fail`, and enabled prepare steps (`AdvanceWorldClock`, `ExpireWorldBlackboard`, and `TickActuator`). `MaxDegreeOfParallelism` must be at least 1.
 
 ### M4 public API
 
 M4 adds:
 
 - `ParallelWorldWriteConflictPolicy` with `Fail`, `LastWriterByAgentId`, and `FirstWriterByAgentId`;
-- `ParallelTickOptions` for maximum parallelism and world-write conflict policy;
+- `ParallelTickOptions` for maximum parallelism, world-write conflict policy, optional agent filtering/callbacks, and prepare-step toggles;
 - `ParallelTickConflict` and `ParallelTickConflictException` for same-key world blackboard writer conflicts;
 - `ParallelTickResult` with staged/committed/delivered/dispatched counts;
 - `ParallelAiWorldRunner.Tick(AiWorld world, float dt, ParallelTickOptions? options = null, CancellationToken cancellationToken = default)`.
@@ -486,3 +486,18 @@ Parallel-unsafe authored code can still escape through:
 - transition or utility delegates that inspect or mutate live world state.
 
 M4 documents these limitations rather than attempting broad hardening. Future milestones can add stronger context hardening, reducer policies, sensor/action parallel phases, or broader thread-safety only where the design continues to converge.
+
+## Core Parallel M5 / RTSBenchmark M11 follow-up
+
+RTSBenchmark M11 integrated the Core `ParallelAiWorldRunner` as a benchmark agent execution mode and compares it against both the sequential decision loop and the M10 benchmark-local parallel decision loop.
+
+The single-run CLI now distinguishes the two parallel decision implementations:
+
+- `--parallel-agents` selects the benchmark-local M10 parallel decision path.
+- `--core-parallel-agents` selects the generic Core staged runner path.
+
+The two flags are mutually exclusive, and `--max-degree` applies to either parallel mode. `--compare-agent-parallelism` now includes sequential agents, local parallel decision agents, and Core parallel runner agents in the same comparison report.
+
+For embedded RTSBenchmark use, `ParallelTickOptions` gained prepare-step toggles: `AdvanceWorldClock`, `ExpireWorldBlackboard`, and `TickActuator`, all defaulting to `true` so standalone Core runner behavior remains unchanged. RTSBenchmark disables those toggles and calls the Core runner with `dt: 0f` because the benchmark's outer tick already owns clock advancement, TTL expiry boundaries, and actuator ticking.
+
+M11 also records Core runner diagnostics in `RtsBenchmarkResult`: agents ticked, staged world writes, staged mailbox messages, staged actuations, and conflict count. The RTS safe subset expects all staged shared-effect counts and conflicts to be zero during decision compute; nonzero counts are treated as a benchmark contract violation. This keeps the M11 proof focused on deterministic equivalence rather than broadening gameplay or Core safety semantics.
