@@ -41,6 +41,7 @@ This index separates user-facing documentation from release prep, development lo
 ## Benchmark reports
 
 - [RTS Benchmark Report](benchmarks/RTS_BENCHMARK_REPORT.md) — fresh Release `net10.0` RTSBenchmark results for sensor cadence, deterministic hashes, checkpoint/resume, benchmark-local parallel decision equivalence, and measured-loop exclusions.
+- [LLM Orchestrator Baseline Report](benchmarks/LLM_ORCHESTRATOR_BASELINE_REPORT.md) — M10.2 live/manual Codex self-measurement for one RTS-style action decision compared with local CPU utility orchestration.
 
 ## Samples
 
