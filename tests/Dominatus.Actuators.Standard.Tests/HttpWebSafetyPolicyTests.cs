@@ -489,7 +489,7 @@ public sealed class HttpWebSafetyPolicyTests
 
         var agent = new AiAgent(new HfsmInstance(graph));
         world.Add(agent);
-        return new AiCtx(world, agent, agent.Events, cancellationToken, world.View, world.Mail, world.Actuator);
+        return new AiCtx(world, agent, agent.Events, cancellationToken, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
 
         static IEnumerator<AiStep> Idle()
         {

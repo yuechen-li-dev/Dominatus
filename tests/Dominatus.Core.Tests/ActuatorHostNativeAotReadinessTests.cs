@@ -113,7 +113,7 @@ public sealed class ActuatorHostNativeAotReadinessTests
         var world = new AiWorld(host);
         var agent = new AiAgent(TestGraphs.MakeBareBrain());
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
         return (world, agent, ctx);
     }
 

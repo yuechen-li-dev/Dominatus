@@ -207,7 +207,7 @@ public sealed class LlmDecisionScoringHandlerTests
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
 
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         return (world, ctx);
     }
 

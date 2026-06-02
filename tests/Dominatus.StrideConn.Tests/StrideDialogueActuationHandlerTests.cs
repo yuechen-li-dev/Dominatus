@@ -17,7 +17,7 @@ public sealed class StrideDialogueActuationHandlerTests
         var world = new AiWorld(host);
         var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = handler.Handle(host, ctx, new ActuationId(7), new DiagLineCommand("hello", "narrator"));
 
@@ -41,7 +41,7 @@ public sealed class StrideDialogueActuationHandlerTests
         var world = new AiWorld(host);
         var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = handler.Handle(host, ctx, new ActuationId(8), new DiagChooseCommand("pick", [new DiagChoice("a", "A")]));
 
@@ -64,7 +64,7 @@ public sealed class StrideDialogueActuationHandlerTests
         var world = new AiWorld(host);
         var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = handler.Handle(host, ctx, new ActuationId(9), new DiagAskCommand("ask"));
 
@@ -88,7 +88,7 @@ public sealed class StrideDialogueActuationHandlerTests
         var world = new AiWorld(host);
         var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = handler.Handle(host, ctx, new ActuationId(10), new DiagLineCommand("hello", "narrator"));
 
@@ -108,7 +108,7 @@ public sealed class StrideDialogueActuationHandlerTests
         var world = new AiWorld(host);
         var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = handler.Handle(host, ctx, new ActuationId(11), new DiagChooseCommand("pick", [new DiagChoice("a", "A")]));
 
@@ -128,7 +128,7 @@ public sealed class StrideDialogueActuationHandlerTests
         var world = new AiWorld(host);
         var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "Root" }));
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = handler.Handle(host, ctx, new ActuationId(12), new DiagAskCommand("ask"));
 

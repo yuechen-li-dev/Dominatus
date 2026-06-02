@@ -29,7 +29,7 @@ public sealed class ActuatorHostPolicyTests
         var world = new AiWorld(host);
         var agent = new AiAgent(TestGraphs.MakeBareBrain());
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = host.Dispatch(ctx, new PingCommand("ok"));
 
@@ -48,7 +48,7 @@ public sealed class ActuatorHostPolicyTests
         var world = new AiWorld(host);
         var agent = new AiAgent(TestGraphs.MakeBareBrain());
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = host.Dispatch(ctx, new PingCommand("x"));
 
@@ -67,7 +67,7 @@ public sealed class ActuatorHostPolicyTests
         var world = new AiWorld(host);
         var agent = new AiAgent(TestGraphs.MakeBareBrain());
         world.Add(agent);
-        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
 
         var result = host.Dispatch(ctx, new PingCommand("x"));
 

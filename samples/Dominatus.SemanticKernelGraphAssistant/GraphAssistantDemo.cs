@@ -283,7 +283,7 @@ public static class GraphAssistantDemo
         var brain = new HfsmInstance(graph);
         var agent = new AiAgent(brain);
         world.Add(agent);
-        return new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        return new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb));
     }
 
     private static IEnumerator<AiStep> Empty() { yield break; }

@@ -248,7 +248,7 @@ static (AiWorld World, AiCtx Ctx) CreateTextWorldAndCtx(ILlmClient client, LlmCa
     var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
     world.Add(agent);
 
-    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
     return (world, ctx);
 }
 
@@ -265,7 +265,7 @@ static (AiWorld World, AiCtx Ctx) CreateDecisionWorldAndCtx(ILlmDecisionClient c
     var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
     world.Add(agent);
 
-    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator);
+    var ctx = new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
     return (world, ctx);
 }
 

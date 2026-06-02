@@ -2,7 +2,12 @@
 
 ## Purpose
 
-This review evaluates the current Dominatus Core/OptFlow runtime semantics and proposes the first safe model for deterministic parallel agent ticks. M0 is intentionally documentation-only: it does not implement a scheduler, change Core runtime behavior, add dependencies, or alter tick semantics.
+This review evaluates the current Dominatus Core/OptFlow runtime semantics and proposes the first safe model for deterministic parallel agent ticks. M0 was intentionally documentation-only: it did not implement a scheduler, change Core runtime behavior, add dependencies, or alter tick semantics.
+
+
+## Core Parallel M1 follow-up
+
+Core Parallel M1 added `IAiWorldBb` and `LiveWorldBb`, making `AiCtx.WorldBb` an injected surface instead of a computed alias for `World.Bb`. `LiveWorldBb` preserves the sequential runtime path by delegating to the existing world blackboard. This closes the first world-blackboard injection gap needed for a future stable read/staged-write surface. `ctx.World` still exposes the live `AiWorld` and remains a live-world escape hatch for a later staged-context/hardening milestone.
 
 The target model is MMO/RTS/server-simulation style:
 
@@ -116,16 +121,16 @@ Implication: checkpoints should be captured only at quiescent tick boundaries. A
    Conditionally yes for that narrow subset: one worker per agent, no shared `WorldBb` mutation, no mailbox sends, no actuation dispatch, no public snapshot mutation, no direct reads of other agents' local blackboards, and no shared trace sink or metrics mutation. The agent-local blackboard, HFSM stack, node runner, decision memory, and wait state are per-agent. However, the live `AiCtx` still exposes shared mutation surfaces, so Core cannot assume arbitrary authored nodes stay inside that subset.
 
 2. **Can an agent currently write `WorldBb` directly during `Tick`?**  
-   Yes. `AiCtx.WorldBb` returns `World.Bb`, and `ctx.World.Bb` is also reachable. A node can call `Set`, `SetUntil`, `Remove`, or `ClearTtl` on the live world blackboard during its tick.
+   Yes. In the sequential runtime, `AiCtx.WorldBb` is a `LiveWorldBb` injected by context construction and delegates to `World.Bb`; `ctx.World.Bb` is also reachable. A node can call the injected world-blackboard surface methods during its tick, or bypass the seam through `ctx.World.Bb`.
 
 3. **Can an agent read `WorldBb` directly during `Tick`?**  
-   Yes. `AiCtx.WorldBb`, `ctx.World.Bb`, transition predicates, and utility considerations can read the live world blackboard during a tick. Existing tests and samples rely on this.
+   Yes. In the sequential runtime, `AiCtx.WorldBb` reads through the injected `LiveWorldBb`; `ctx.World.Bb`, transition predicates, and utility considerations can still read the live world blackboard during a tick. Existing tests and samples rely on this.
 
 4. **Are `WorldBb` and agent blackboards thread-safe?**  
    No. `Blackboard` is backed by ordinary dictionaries and a hash set with no locks or concurrent collections. Agent blackboards are safe only by ownership discipline: exactly one worker mutates exactly one agent's blackboard during compute.
 
 5. **Does `AiCtx` expose mutable shared state that would break parallel ticks?**  
-   Yes. It exposes the live world, live world blackboard, live mailbox, live actuator, live public view, and live agent list. A parallel runner must provide staged/read-only replacements or enforce a narrow authoring contract.
+   Yes. It still exposes the live world, live mailbox, live actuator, live public view, and live agent list. `AiCtx.WorldBb` is now injectable through `IAiWorldBb`, but the sequential runner supplies `LiveWorldBb`, and `ctx.World.Bb` remains a bypass. A parallel runner must provide staged/read-only replacements or enforce a narrow authoring contract.
 
 6. **Does `AiWorld.Mail.Send/Broadcast` immediately mutate target agent event buses?**  
    Yes. `Send` directly calls `target.Events.Publish(message)`. `Broadcast` enumerates live public snapshots and repeatedly calls `Send`.

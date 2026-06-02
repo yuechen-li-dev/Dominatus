@@ -131,7 +131,7 @@ public sealed class LlmMagiRefusalRuntimeTests
         graph.Add(new HfsmStateDef { Id = "Root", Node = _ => Empty() });
         var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions()));
         world.Add(agent);
-        return (a, b, j, new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator));
+        return (a, b, j, new AiCtx(world, agent, agent.Events, CancellationToken.None, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb)));
     }
 
     private static void AssertNoOutputs(AiCtx ctx)

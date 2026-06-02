@@ -535,7 +535,7 @@ public static class TinyTownDemo
             },
             storeTextAs: DialogueTextKey);
 
-        var ctx = new AiCtx(world, speakerAgent, speakerAgent.Events, default, world.View, world.Mail, world.Actuator);
+        var ctx = new AiCtx(world, speakerAgent, speakerAgent.Events, default, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
         var wait = (IWaitEvent)step;
         var cursor = default(EventCursor);
         if (!wait.TryConsume(ctx, ref cursor)) wait.TryConsume(ctx, ref cursor);
