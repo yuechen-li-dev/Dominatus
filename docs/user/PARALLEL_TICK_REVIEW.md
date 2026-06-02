@@ -392,3 +392,9 @@ M10 parallelizes only the RTSBenchmark decision loop. It does not introduce a Co
 The implementation relies on the audited safe subset: one ship per agent, tactical summaries mirrored into agent-local blackboards before decision work, utility scorers that read only local blackboard data, no decision-phase `WorldBb` writes, no mailbox sends, and no actuation dispatch. Worker results are staged per ship and merged in deterministic ship-id order before the existing deterministic action sort/resolution path runs.
 
 Use `--parallel-agents` for the benchmark-local decision fast path and `--max-degree N` to bound worker degree. Use `--compare-agent-parallelism` to compare sequential agents against the parallel decision configuration while checking hash stability and sequential/parallel hash equivalence. This remains separate from `--parallel-trials`, which runs independent benchmark trials concurrently.
+
+## Follow-up: Core Parallel M2 context factory seam
+
+Core Parallel M2 adds a node/HFSM context factory seam for execution-time `AiCtx` construction. `HfsmInstance.ContextFactory` can be set by advanced runtime code before an agent tick and cleared afterward; `NodeRunner.Enter` and `NodeRunner.Tick` both route context creation through that current factory. The default factory remains the live sequential context: `View = world.View`, `Mail = world.Mail`, `Act = world.Actuator`, and `WorldBb = new LiveWorldBb(world.Bb)`.
+
+This seam lets a future staged parallel runner inject a stable world view, staged world blackboard, staged mailbox, and staged actuator without introducing the scheduler, staged implementations, conflict detection, or merge barrier in M2. `ctx.World` intentionally remains a live escape hatch and is still unsafe for arbitrary parallel node authoring until a later hardening milestone.
