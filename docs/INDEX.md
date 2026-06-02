@@ -38,6 +38,10 @@ This index separates user-facing documentation from release prep, development lo
 - [Streams M1](server/DOMINATUS_SERVER_M1_STREAMS.md) — durable LLM stream read/reconnect model.
 - [Streams SSE M2](server/DOMINATUS_SERVER_M2_STREAM_SSE.md) — server-sent event live tailing for stream events.
 
+## Benchmark reports
+
+- [RTS Benchmark Report](benchmarks/RTS_BENCHMARK_REPORT.md) — fresh Release `net10.0` RTSBenchmark results for sensor cadence, deterministic hashes, checkpoint/resume, benchmark-local parallel decision equivalence, and measured-loop exclusions.
+
 ## Samples
 
 - [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation with blackboard needs, `Ai.Decide`, mailbox social events, and fake `Llm.Call` dialogue only.
