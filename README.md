@@ -4,13 +4,30 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 
-**Dominatus is a .NET agent runtime kernel for deterministic, stateful AI.**
+**Dominatus is a deterministic .NET agent runtime kernel for systems where agents need state, speed, policy, events, persistence, replay, and optional LLM intelligence.**
 
-It lets you build agents whose behavior is ordinary C# control flow — hierarchical finite state machines, utility decisions, blackboards, mailboxes, typed actuators, policies, persistence, replay, and optional LLM calls — instead of live prompt-chain orchestration.
+It lets you build agents whose behavior is ordinary C# control flow — hierarchical finite state machines, utility decisions, blackboards, mailboxes, typed actuators, policies, persistence, replay, and optional LLM calls — instead of live prompt-chain orchestration. Dominatus is not “game AI” and not “LLM prompt chaining”; it is a deterministic agent orchestration/control runtime.
 
 Core does not depend on LLMs. LLM integration is available through `Dominatus.Llm.OptFlow` and `Dominatus.Llm.Context` when a workflow actually needs semantic judgment, text generation, streaming, context packets, cassettes, ranked providers, or OpenRouter access.
 
 If Dominatus saves you from writing another haunted agent loop, consider starring the repo — it helps people find the project.
+
+## Benchmark receipts
+
+The latest RTSBenchmark report records a headless behavioral-AI CPU workload running on the same Dominatus runtime primitives used by the rest of the repo: HFSMs, blackboards, mailboxes/events, `Ai.Decide`, deterministic action resolution, persistence, replay, and optional LLM boundaries. Results are local benchmark report numbers from [`docs/benchmarks/RTS_BENCHMARK_REPORT.md`](docs/benchmarks/RTS_BENCHMARK_REPORT.md); hardware/runtime and commands are documented there.
+
+Environment: Ubuntu 24.04.4 LTS, x64 / `linux-x64`, .NET runtime 10.0.8, .NET SDK 10.0.300, Release `net10.0`, with 2 processors reported by the benchmark. The measured loop excludes rendering, GPU work, network I/O, disk I/O, model inference, and provider calls; JSON/CSV export happens after the measured simulation loop.
+
+| Benchmark | Result | Notes |
+| --- | ---: | --- |
+| RTSBenchmark Skirmish | 130,862 median agent-ticks/sec | Release `net10.0`, 2 processors, SpatialGrid + dynamic cadence |
+| Utility option evaluations | 1,177,761/sec | Real `Ai.Decide` utility scoring |
+| Parallel decision mode | 142,049 median agent-ticks/sec | max degree 2, 1.13x speedup, same deterministic hash `535c9b8e5f5d01e1` |
+| Checkpoint/resume | matching hash | 100-tick checkpoint + 150-tick resume matched straight 250-tick run; hash `2ec6db6dd10db075` |
+
+What this proves: Dominatus can run deterministic behavioral-AI workloads at CPU speed, preserve deterministic hashes, checkpoint/resume simulation state, and parallelize a safe decision subset without changing the outcome. What this does not prove: it is not a GPU benchmark, not a model inference benchmark, not a formal cross-machine industry benchmark, and not a claim that every workload gets the same rate.
+
+Dominatus does not make prompt chains faster. It removes prompt chains from the hot path. Compared with model-mediated orchestration loops, Dominatus is in a different performance category because ordinary agent ticks run as local CPU runtime state instead of networked model calls.
 
 ## Why Dominatus?
 
@@ -21,6 +38,12 @@ Dominatus targets the layer below live prompt chaining: durable runtime behavior
 Live LLM calls are still first-class when they make sense: `Llm.Call` for text transforms, `Llm.Decide` for bounded semantic selection, `Llm.MagiDecide` for multi-participant review, `Llm.Stream` for streaming output, cassettes for replay, ranked clients for fallback, and explicit context packets for persistent LLM memory. But ordinary agent logic does not need to call a model every tick.
 
 Most agent work should not be live LLM orchestration. Most agent work should be deterministic orchestration authored by humans or LLMs and executed by a real runtime.
+
+## Same runtime, different domains
+
+Games and simulations use utility AI, HFSMs, blackboards, mailboxes, and tick loops. Enterprise/task automation uses typed actuators, policy gates, approval, and Graph/Semantic Kernel capabilities. LLM workflows use `Llm.Call`, `Llm.Stream`, `RankedLlmClient`, OpenRouter, context packets, and cassettes. All of them use the same runtime principle: deterministic orchestration first, LLM semantic calls only where needed.
+
+The same Dominatus utility loop that makes a damaged frigate retreat in RTSBenchmark can make an Outlook assistant draft instead of send, a TinyTown character eat instead of reflect, and a coding workflow split independent module work across LLM calls. The runtime owns state and control. LLMs are invoked for semantic work: summaries, analysis, dialogue, code generation, review, and decisions that actually require language understanding.
 
 ## How it differs from LangGraph, CrewAI, Semantic Kernel, and OpenRouter
 
@@ -33,7 +56,7 @@ LangGraph, CrewAI, Semantic Kernel, Microsoft Agent Framework, and OpenRouter ar
 | OpenRouter | Multi-model gateway | Model access, billing, provider aggregation, and provider choice | Can use OpenRouter as one `ILlmClient`; Dominatus owns routing/fallback policy, cassettes, approval, context, and runtime semantics. |
 | Dominatus | Deterministic orchestration kernel | Stateful agents, HFSMs, utility decisions, mailboxes, blackboards, policies, typed/fakeable actuators, persistence, replay, and optional LLM calls | Keeps high-frequency orchestration in deterministic .NET code and reserves LLMs for semantic transforms, bounded decisions, review, and workflow authoring. |
 
-Because the orchestration loop is C# code plus deterministic runtime state, Dominatus can run game, simulation, and service-agent loops at runtime speeds: 60 ticks per second, thousands of deterministic ticks without model calls, policy-gated side effects, replayable cassette-backed LLM use, persistent context packets, safe web/content ingestion, and typed fakeable actuators for tests.
+Because the orchestration loop is C# code plus deterministic runtime state, Dominatus can run game, simulation, enterprise automation, and LLM-assisted service-agent loops with the same control model: high-frequency local decisions stay in runtime state; semantic transforms, dialogue, review, and language-heavy decisions cross explicit LLM boundaries.
 
 ## Start here
 
@@ -82,10 +105,10 @@ static IEnumerator<AiStep> Review(AiCtx ctx)
 
 ## Featured samples
 
-- [`samples/Dominatus.TinyTown`](samples/Dominatus.TinyTown) — a deterministic utility-driven town simulation where C# record profiles, blackboard needs, `Ai.Decide`, HFSM execution, mailbox visit requests, and fake `Llm.Call` dialogue show that LLMs are actors while utility AI is the director. Design notes: [TinyTown sample](docs/samples/SAMPLE_TINYTOWN.md).
-- [`samples/Dominatus.ParallelModuleWorkflow`](samples/Dominatus.ParallelModuleWorkflow) — a no-live-LLM demo where a deterministic coordinator runs Auth first, then uses `Task.WhenAll` over independent Dominatus module workers for Api/Database/Frontend and merges results deterministically. Design notes: [Parallel module workflow sample](docs/samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md).
-- [`samples/Dominatus.RTSBenchmark`](samples/Dominatus.RTSBenchmark) — runnable headless RTS-like CPU benchmark for deterministic agent-orchestration throughput with phase timing, hotspot diagnostics, tactical threat/support banding, deterministic spatial-grid sensor acceleration, dynamic sensor refresh cadence, JSON/CSV export, and Release/NativeAOT reporting guidance: ships make utility decisions, exchange events, and emit actions over thousands of ticks without LLMs, network, rendering, or GPU work. Run/docs: [RTS benchmark sample](docs/samples/SAMPLE_RTS_BENCHMARK.md); fresh VC/technical results: [RTS benchmark report](docs/benchmarks/RTS_BENCHMARK_REPORT.md).
-- [`samples/Dominatus.SemanticKernelGraphAssistant`](samples/Dominatus.SemanticKernelGraphAssistant) — a safe fake Outlook assistant that uses a Graph-through-Semantic-Kernel capability profile, `Ai.Decide`, `Llm.Call` draft/proposal generation, and approval-gated send/create behavior. Design notes: [Graph assistant sample](docs/samples/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md).
+- [`samples/Dominatus.TinyTown`](samples/Dominatus.TinyTown) — a deterministic utility-driven town simulation where C# record profiles, blackboard needs, `Ai.Decide`, HFSM execution, and mailbox visit requests drive ordinary life; the LLM acts as a DM for dialogue and relationship outcomes instead of owning the tick loop. Design notes: [TinyTown sample](docs/samples/SAMPLE_TINYTOWN.md).
+- [`samples/Dominatus.ParallelModuleWorkflow`](samples/Dominatus.ParallelModuleWorkflow) — a deterministic coordinator runs Auth first, then uses `Task.WhenAll` over independent Dominatus module workers for Api/Database/Frontend and merges results deterministically: actual parallelizable LLM-style module work instead of racing multiple models on the same prompt. Design notes: [Parallel module workflow sample](docs/samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md).
+- [`samples/Dominatus.RTSBenchmark`](samples/Dominatus.RTSBenchmark) — runnable pure behavioral-AI CPU benchmark for deterministic agent-orchestration throughput with phase timing, hotspot diagnostics, tactical threat/support banding, deterministic spatial-grid sensors, dynamic sensor cadence, JSON/CSV exports, checkpoint/resume, parallel decision mode, and a published benchmark report: ships make utility decisions, exchange events, and emit actions over thousands of ticks without LLMs, network, rendering, GPU work, or disk I/O in the measured loop. Run/docs: [RTS benchmark sample](docs/samples/SAMPLE_RTS_BENCHMARK.md); benchmark results: [RTS benchmark report](docs/benchmarks/RTS_BENCHMARK_REPORT.md).
+- [`samples/Dominatus.SemanticKernelGraphAssistant`](samples/Dominatus.SemanticKernelGraphAssistant) — a safe fake Outlook assistant that uses the same runtime pattern for Graph-through-Semantic-Kernel automation: `Ai.Decide`, `Llm.Call` draft/proposal generation, typed actions, and approval-gated send/create behavior that drafts or proposes before it sends or creates. Design notes: [Graph assistant sample](docs/samples/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md).
 - [`samples/Dominatus.SemanticKernelOrchestration`](samples/Dominatus.SemanticKernelOrchestration) — a Microsoft-style ledger/orchestration loop implemented with Dominatus HFSM, utility decisions, mailbox coordination, and Semantic Kernel functions, without SK planners/agents owning the runtime loop. Design notes: [Semantic Kernel orchestration sample](docs/samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md).
 - [`samples/Dominatus.Llm.ContextDogfood`](samples/Dominatus.Llm.ContextDogfood) — explicit context stores, named loadouts, packet manifests, `PRIMER.context`, and dogfood review artifacts for LLM-assisted authoring. Start with [LLM Context M5](docs/llm/LLM_CONTEXT_M5_PRIMER_CONTEXT.md) and the [PrimerExamples source artifacts](docs/PrimerExamples/README.md).
 - [Standard HTTP WebSafety](docs/actuators/ACTUATORS_STANDARD_M5_HTTP_WEB_SAFETY.md) and [WebContentSafety](docs/actuators/ACTUATORS_STANDARD_M6_WEB_CONTENT_SAFETY.md) — safe web/content ingestion for LLM agents: destination policy before fetch, content safety after fetch.

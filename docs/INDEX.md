@@ -44,10 +44,10 @@ This index separates user-facing documentation from release prep, development lo
 
 ## Samples
 
-- [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation with blackboard needs, `Ai.Decide`, mailbox social events, and fake `Llm.Call` dialogue only.
-- [Parallel Module Workflow](samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md) — deterministic Auth-contract-first workflow with `Task.WhenAll` over independent fake-LLM Dominatus module workers.
-- [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — runnable headless CPU benchmark for deterministic agent-orchestration throughput with utility decisions, tactical threat/support banding, events, action records, and no LLM/GPU/network path.
-- [Semantic Kernel Graph Assistant](samples/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md) — fake Outlook/Graph assistant with Dominatus-owned state, SK capability profile, LLM proposals, and approval-gated actions.
+- [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation where runtime utility AI drives needs and actions while LLM-style calls act as DM support for dialogue/relationship outcomes.
+- [Parallel Module Workflow](samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md) — deterministic Auth-contract-first workflow with `Task.WhenAll` over independent Dominatus module workers, showing parallelizable LLM-style work instead of racing the same prompt.
+- [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — runnable pure behavioral-AI CPU benchmark for deterministic agent-orchestration throughput with utility decisions, tactical threat/support banding, events, action records, JSON/CSV exports, checkpoint/resume, parallel decision mode, a benchmark report, and no LLM/GPU/network path in the measured loop.
+- [Semantic Kernel Graph Assistant](samples/SAMPLE_SEMANTICKERNEL_GRAPH_ASSISTANT.md) — fake Outlook/Graph assistant with Dominatus-owned state, SK capability profile, LLM proposals, and approval-gated draft/propose-before-send actions.
 - [Semantic Kernel Orchestration](samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md) — Microsoft-style orchestration loop implemented with Dominatus HFSM/utility/mailbox plus SK functions.
 - [`samples/Dominatus.Llm.ContextDogfood`](../samples/Dominatus.Llm.ContextDogfood) — context packets, loadouts, manifests, and PRIMER.context dogfood.
 - [`samples/Dominatus.Llm.DemoConsole`](../samples/Dominatus.Llm.DemoConsole) — `Llm.Call`, `Llm.Decide`, cassettes, provider clients, and replayable LLM demos.
