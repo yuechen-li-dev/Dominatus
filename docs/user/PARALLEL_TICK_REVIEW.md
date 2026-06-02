@@ -398,3 +398,11 @@ Use `--parallel-agents` for the benchmark-local decision fast path and `--max-de
 Core Parallel M2 adds a node/HFSM context factory seam for execution-time `AiCtx` construction. `HfsmInstance.ContextFactory` can be set by advanced runtime code before an agent tick and cleared afterward; `NodeRunner.Enter` and `NodeRunner.Tick` both route context creation through that current factory. The default factory remains the live sequential context: `View = world.View`, `Mail = world.Mail`, `Act = world.Actuator`, and `WorldBb = new LiveWorldBb(world.Bb)`.
 
 This seam lets a future staged parallel runner inject a stable world view, staged world blackboard, staged mailbox, and staged actuator without introducing the scheduler, staged implementations, conflict detection, or merge barrier in M2. `ctx.World` intentionally remains a live escape hatch and is still unsafe for arbitrary parallel node authoring until a later hardening milestone.
+
+## Follow-up: Core Parallel M3 staged runtime surfaces
+
+Core Parallel M3 adds production staged surfaces for the M2 context factory seam: `StagedWorldBb`, `StagedMailbox`, `StagedActuator`, `AgentStageBuffer`, deterministic stage record models, and `SnapshotWorldView`. These let node execution record world blackboard writes, mailbox messages, and actuation commands into a per-agent buffer without mutating shared world state during compute.
+
+`StagedWorldBb` reads only from a stable tick snapshot and deliberately does not expose same-tick staged writes to reads; staged `SetFor` records the computed absolute expiry time so later merge can preserve the intended TTL boundary. `StagedMailbox` expands broadcasts against a stable public snapshot in deterministic `AgentId` order. `StagedActuator` records commands and returns an accepted, not-completed dispatch result without evaluating policies, invoking handlers, or publishing completion events.
+
+No `ParallelAiWorldRunner`, merge barrier, conflict resolution, staged event delivery merge, staged actuation dispatch merge, or parallel tick execution exists yet. Remaining known gaps are unchanged: `ctx.World` is still a live escape hatch, transition and utility delegates still receive `AiWorld`, and deterministic merge/conflict handling comes in a later milestone.
