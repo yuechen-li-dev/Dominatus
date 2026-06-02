@@ -11,6 +11,13 @@ public sealed class HfsmInstance
     public HfsmGraph Graph { get; }
     public IAiTraceSink? Trace { get; set; }
 
+    /// <summary>
+    /// Optional advanced seam for overriding node execution context construction.
+    /// Leave null for the default live sequential context. Future staged runners can set
+    /// this around an agent tick and clear it afterward to inject staged surfaces.
+    /// </summary>
+    public AiCtxFactory? ContextFactory { get; set; }
+
     public HfsmOptions Options { get; }
 
     private StateId RootId => Graph.Root;
@@ -147,7 +154,7 @@ public sealed class HfsmInstance
             int beforeCount = _stack.Count;
             StateId beforeLeafId = _stack[^1].Id;
 
-            var rootRes = root.Runner.Tick(world, agent);
+            var rootRes = root.Runner.Tick(world, agent, ContextFactory);
 
             if (rootRes.HasEmittedStep && rootRes.EmittedStep is not null)
             {
@@ -165,17 +172,17 @@ public sealed class HfsmInstance
             if (rootRes.CompletedStatus is NodeStatus.Succeeded)
             {
                 // Root should not naturally complete; re-enter it if it does
-                root.Runner.Enter(world, agent);
+                root.Runner.Enter(world, agent, ContextFactory);
             }
             else if (rootRes.CompletedStatus is NodeStatus.Failed)
             {
-                root.Runner.Enter(world, agent);
+                root.Runner.Enter(world, agent, ContextFactory);
             }
         }
 
         // 2) tick leaf
         var leaf = _stack[^1];
-        var res = leaf.Runner.Tick(world, agent);
+        var res = leaf.Runner.Tick(world, agent, ContextFactory);
 
         if (res.HasEmittedStep && res.EmittedStep is not null)
         {
@@ -566,7 +573,7 @@ public sealed class HfsmInstance
     {
         var def = Graph.Get(id);
         var runner = new NodeRunner(def.Node);
-        runner.Enter(world, agent);
+        runner.Enter(world, agent, ContextFactory);
 
         _stack.Add(new ActiveState(id, def, runner, world.Clock.Time));
         Trace?.OnEnter(id, world.Clock.Time, reason);

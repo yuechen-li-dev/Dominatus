@@ -31,18 +31,41 @@ public sealed class NodeRunner(AiNode node)
     private Steady? _steady;
 
     private CancellationTokenSource? _cts;
+    private AiCtxSurfaceRef? _surfaces;
     private IWaitEvent? _waitEvent;
     private EventCursor _waitEventCursor;
     private float _waitEventStartTime;
-    private static AiCtx MakeCtx(AiWorld world, AiAgent agent, CancellationToken cancel)
-    => new(world, agent, agent.Events, cancel, world.View, world.Mail, world.Actuator, new LiveWorldBb(world.Bb));
+    private static AiCtx MakeCtx(AiWorld world, AiAgent agent, CancellationToken cancel, AiCtxFactory? contextFactory)
+        => (contextFactory ?? AiCtxFactories.Live)(world, agent, cancel);
 
-    public void Enter(AiWorld world, AiAgent agent)
+    private AiCtx MakeLiveCtx(AiWorld world, AiAgent agent, CancellationToken cancel, AiCtxFactory? contextFactory)
+    {
+        var ctx = MakeCtx(world, agent, cancel, contextFactory);
+
+        if (_surfaces is null)
+        {
+            _surfaces = new AiCtxSurfaceRef
+            {
+                View = ctx.View,
+                Mail = ctx.Mail,
+                Act = ctx.Act,
+                WorldBb = ctx.WorldBb
+            };
+        }
+        else
+        {
+            _surfaces.UpdateFrom(ctx);
+        }
+
+        return new AiCtx(world, agent, agent.Events, cancel, _surfaces);
+    }
+
+    public void Enter(AiWorld world, AiAgent agent, AiCtxFactory? contextFactory = null)
     {
         Exit();
 
         _cts = new CancellationTokenSource();
-        var ctx = MakeCtx(world, agent, _cts.Token);
+        var ctx = MakeLiveCtx(world, agent, _cts.Token, contextFactory);
         _it = node(ctx);
     }
 
@@ -74,14 +97,14 @@ public sealed class NodeRunner(AiNode node)
         _cts = null;
     }
 
-    public NodeTickResult Tick(AiWorld world, AiAgent agent)
+    public NodeTickResult Tick(AiWorld world, AiAgent agent, AiCtxFactory? contextFactory = null)
     {
         if (_it is null)
             return NodeTickResult.Completed(NodeStatus.Failed);
 
         var cts = _cts;
         var cancel = cts?.Token ?? CancellationToken.None;
-        var ctx = MakeCtx(world, agent, cancel);
+        var ctx = MakeLiveCtx(world, agent, cancel, contextFactory);
 
         // If canceled, treat as failed completion so HFSM can pop/unwind.
         if (cancel.IsCancellationRequested)
