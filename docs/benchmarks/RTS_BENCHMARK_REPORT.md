@@ -11,6 +11,7 @@ _Run date: 2026-06-01. Benchmark configuration: Release `dotnet run` on `net10.0
 - **SpatialGrid + dynamic cadence improves throughput at Skirmish scale.** The best Skirmish median was `SpatialGrid + cadence`, **36.5% above BroadScan no cadence** and **46.5% above SpatialGrid no cadence** on this run set.
 - **Deterministic hashes were stable across repeated trials.** Each Skirmish sensor/cadence configuration produced one stable hash across all 5 trials.
 - **Parallel decision mode preserved deterministic equivalence.** Skirmish sequential agents and parallel decision agents both produced hash `535c9b8e5f5d01e1`; the parallel decision phase at max degree 2 reported **142,049.52 median agent-ticks/sec**, a **1.13x median speedup** over the sequential-agent comparison baseline.
+- **LLM-orchestrator baseline follow-up:** see [LLM Orchestrator Baseline Report](LLM_ORCHESTRATOR_BASELINE_REPORT.md) for the M10.2 live/manual Codex tick timing baseline.
 - **Checkpoint/resume matched the straight deterministic result.** A Smoke checkpoint at tick 100 resumed for 150 ticks to the same final deterministic hash, `2ec6db6dd10db075`, as the straight 250-tick Smoke run. Automated tests also verify deterministic counters and final-state fields.
 - **Battle completed as an additional one-trial scale point.** A 1,000-ship, 2,000-tick Battle run completed at **39,242.76 agent-ticks/sec**, **353,184.80 utility option evaluations/sec**, and hash `6cbe9adbdc6a37a2`. The repeated-trial public comparison mode remains Skirmish in this report.
 
