@@ -171,6 +171,74 @@ public sealed class Blackboard
         return expiredKeys.Count;
     }
 
+
+    /// <summary>
+    /// Copies current key/value entries for staged parallel read snapshots.
+    /// Callers must ensure no concurrent mutation during the copy.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> SnapshotValues()
+        => new Dictionary<string, object?>(_data, StringComparer.Ordinal);
+
+    internal void SetObject(string key, object? value)
+    {
+        _data.TryGetValue(key, out var existing);
+        var hadTtl = _expiresAt.ContainsKey(key);
+
+        if (Equals(existing, value))
+        {
+            if (!hadTtl)
+                return;
+
+            _expiresAt.Remove(key);
+            _dirtyKeys.Add(key);
+            _revision++;
+            return;
+        }
+
+        OnSet?.Invoke(key, existing, value);
+        _data[key] = value;
+        _expiresAt.Remove(key);
+        _dirtyKeys.Add(key);
+        _revision++;
+    }
+
+    internal void SetUntilObject(string key, object? value, float expiresAt)
+    {
+        ValidateFinite(expiresAt, nameof(expiresAt));
+        _data.TryGetValue(key, out var existing);
+        var sameValue = Equals(existing, value);
+        var hadTtl = _expiresAt.TryGetValue(key, out var existingExpiry);
+        var sameExpiry = hadTtl && existingExpiry == expiresAt;
+
+        if (sameValue && sameExpiry)
+            return;
+
+        if (!sameValue)
+        {
+            OnSet?.Invoke(key, existing, value);
+            _data[key] = value;
+        }
+
+        _expiresAt[key] = expiresAt;
+        _dirtyKeys.Add(key);
+        _revision++;
+    }
+
+    internal bool RemoveObject(string key)
+    {
+        var removedData = _data.Remove(key);
+        var removedTtl = _expiresAt.Remove(key);
+
+        if (removedData || removedTtl)
+        {
+            _dirtyKeys.Add(key);
+            _revision++;
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Enumerates all current entries as (keyName, value) pairs.
     /// Intended for snapshot serialization — do not mutate the blackboard during enumeration.

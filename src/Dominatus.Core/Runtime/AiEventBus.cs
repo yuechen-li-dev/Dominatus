@@ -27,11 +27,20 @@ public sealed class AiEventBus
 
     public void Publish<T>(T evt) where T : notnull
     {
-        var t = typeof(T);
-        if (!_buckets.TryGetValue(t, out var bucket))
+        PublishObject(evt, typeof(T));
+    }
+
+    internal void PublishObject(object evt, Type eventType)
+    {
+        if (evt is null) throw new ArgumentNullException(nameof(evt));
+        if (eventType is null) throw new ArgumentNullException(nameof(eventType));
+        if (!eventType.IsInstanceOfType(evt))
+            throw new ArgumentException("Event object must be assignable to eventType.", nameof(eventType));
+
+        if (!_buckets.TryGetValue(eventType, out var bucket))
         {
             bucket = new Bucket();
-            _buckets.Add(t, bucket);
+            _buckets.Add(eventType, bucket);
         }
 
         bucket.Events.Add(evt);

@@ -406,3 +406,83 @@ Core Parallel M3 adds production staged surfaces for the M2 context factory seam
 `StagedWorldBb` reads only from a stable tick snapshot and deliberately does not expose same-tick staged writes to reads; staged `SetFor` records the computed absolute expiry time so later merge can preserve the intended TTL boundary. `StagedMailbox` expands broadcasts against a stable public snapshot in deterministic `AgentId` order. `StagedActuator` records commands and returns an accepted, not-completed dispatch result without evaluating policies, invoking handlers, or publishing completion events.
 
 No `ParallelAiWorldRunner`, merge barrier, conflict resolution, staged event delivery merge, staged actuation dispatch merge, or parallel tick execution exists yet. Remaining known gaps are unchanged: `ctx.World` is still a live escape hatch, transition and utility delegates still receive `AiWorld`, and deterministic merge/conflict handling comes in a later milestone.
+
+## Core Parallel M4 follow-up
+
+Core Parallel M4 added the first real Core safe-subset staged parallel tick runner: `ParallelAiWorldRunner`. It is intentionally conservative: it does not make arbitrary authored Dominatus code parallel-safe, does not alter `AiWorld.Tick`, and does not remove live escape hatches such as `ctx.World` or transition/utility delegates that still receive the live `AiWorld`.
+
+The M4 tick shape is:
+
+1. single-threaded prepare matching the default world tick boundary: `Clock.Advance(dt)`, world blackboard expiry, and tickable actuator host update;
+2. stable public `SnapshotWorldView` capture;
+3. stable world blackboard value snapshot capture;
+4. deterministic agent-list snapshot by ascending `AgentId`;
+5. independent per-agent compute with staged `ctx.WorldBb`, `ctx.Mail`, `ctx.Act`/`Ai.Act`, and stable `ctx.View`;
+6. single-threaded deterministic merge for staged world blackboard writes, mailbox messages, and actuation commands.
+
+Hardware phrasing remains: compute in parallel, commit at the clock edge.
+
+### M4 usage
+
+```csharp
+var runner = new ParallelAiWorldRunner();
+var result = runner.Tick(
+    world,
+    dt: 1f,
+    new ParallelTickOptions { MaxDegreeOfParallelism = 4 });
+```
+
+`ParallelTickOptions` defaults to `Environment.ProcessorCount` and `ParallelWorldWriteConflictPolicy.Fail`. `MaxDegreeOfParallelism` must be at least 1.
+
+### M4 public API
+
+M4 adds:
+
+- `ParallelWorldWriteConflictPolicy` with `Fail`, `LastWriterByAgentId`, and `FirstWriterByAgentId`;
+- `ParallelTickOptions` for maximum parallelism and world-write conflict policy;
+- `ParallelTickConflict` and `ParallelTickConflictException` for same-key world blackboard writer conflicts;
+- `ParallelTickResult` with staged/committed/delivered/dispatched counts;
+- `ParallelAiWorldRunner.Tick(AiWorld world, float dt, ParallelTickOptions? options = null, CancellationToken cancellationToken = default)`.
+
+### World blackboard semantics
+
+During compute, `ctx.WorldBb` reads only from the stable world blackboard snapshot captured after prepare-time TTL expiry. Staged writes are not visible to the issuing agent or to other agents during the same compute phase. They become live only after the merge barrier and are observed by authored parallel-safe code on the next parallel tick.
+
+World write merge is deterministic:
+
+- writes are collected by source agent and per-agent sequence;
+- multiple writes from the same agent to the same key are allowed, with that agent's last staged write becoming its candidate;
+- writes from more than one agent to the same key are conflicts;
+- default `Fail` throws `ParallelTickConflictException` before committing any world writes;
+- `LastWriterByAgentId` selects the highest `AgentId` candidate;
+- `FirstWriterByAgentId` selects the lowest `AgentId` candidate.
+
+### Mailbox semantics
+
+During compute, `ctx.Mail.Send` and `ctx.Mail.Broadcast` record staged messages instead of publishing to live recipient event buses. Broadcast expands against the stable public snapshot in deterministic `AgentId` order. At merge, messages are delivered to target event buses by source `AgentId`, per-agent sequence, and target `AgentId`. Recipients observe these events after the barrier, normally on their next tick.
+
+### Actuation semantics
+
+During compute, staged actuation dispatch returns an accepted, non-completed result and records the command. The merge barrier dispatches staged commands through the live `ActuatorHost` in deterministic source-agent/sequence order using a live `AiCtx`. Immediate completions published by `ActuatorHost` are therefore merge-visible, not same-agent same-compute-step visible. M4 intentionally does not attempt exact same-agent same-tick `Act`/`Await` compatibility in parallel mode.
+
+### Safe-subset authoring guidance
+
+Parallel-safe authored code should use:
+
+- `ctx.Bb` for agent-local state;
+- `ctx.WorldBb` for staged world blackboard access;
+- `ctx.Mail` for staged mailbox sends/broadcasts;
+- `ctx.Act` or `Ai.Act` for staged actuations;
+- `ctx.View` for stable public snapshot reads.
+
+Parallel-unsafe authored code can still escape through:
+
+- `ctx.World`;
+- `ctx.World.Bb`;
+- `ctx.World.Mail`;
+- `ctx.World.Actuator`;
+- other agents' local blackboards;
+- shared mutable closure/static state;
+- transition or utility delegates that inspect or mutate live world state.
+
+M4 documents these limitations rather than attempting broad hardening. Future milestones can add stronger context hardening, reducer policies, sensor/action parallel phases, or broader thread-safety only where the design continues to converge.

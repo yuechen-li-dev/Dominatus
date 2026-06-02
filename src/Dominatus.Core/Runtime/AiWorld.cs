@@ -45,6 +45,9 @@ public sealed class AiWorld
 
     public bool TryGetPublic(AgentId id, out AgentSnapshot snap) => _public.TryGetValue(id, out snap);
 
+    internal IReadOnlyList<AgentSnapshot> SnapshotPublicAgents()
+        => _public.Values.OrderBy(snapshot => snapshot.Id.Value).ToArray();
+
     public void Tick(float dt)
     {
         Clock.Advance(dt);
