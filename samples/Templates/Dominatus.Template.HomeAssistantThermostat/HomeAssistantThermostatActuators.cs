@@ -1,11 +1,14 @@
 using System.Net.Http.Headers;
 using System.Text;
 using Dominatus.Actuators.HomeAssistant;
+using Dominatus.Core.Runtime;
 
 namespace Dominatus.Template.HomeAssistantThermostat;
 
 public interface IHomeAssistantThermostatActuator
 {
+    IReadOnlyList<HomeAssistantThermostatCommand> Commands { get; }
+
     Task SendAsync(HomeAssistantThermostatCommand command, CancellationToken cancellationToken = default);
 }
 
@@ -25,13 +28,35 @@ public sealed class FakeHomeAssistantThermostatActuator : IHomeAssistantThermost
 
 public sealed class DryRunHomeAssistantThermostatActuator : IHomeAssistantThermostatActuator
 {
-    public List<HomeAssistantThermostatCommand> Commands { get; } = [];
+    private readonly List<HomeAssistantThermostatCommand> _commands = [];
+
+    public IReadOnlyList<HomeAssistantThermostatCommand> Commands => _commands;
 
     public Task SendAsync(HomeAssistantThermostatCommand command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Commands.Add(command);
+        _commands.Add(command);
         return Task.CompletedTask;
+    }
+}
+
+public sealed class HomeAssistantThermostatActuationHandler(IHomeAssistantThermostatActuator actuator) : IActuationHandler<HomeAssistantThermostatCommand>
+{
+    private readonly IHomeAssistantThermostatActuator _actuator = actuator ?? throw new ArgumentNullException(nameof(actuator));
+
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, HomeAssistantThermostatCommand cmd)
+    {
+        ArgumentNullException.ThrowIfNull(cmd);
+
+        try
+        {
+            _actuator.SendAsync(cmd, ctx.Cancel).GetAwaiter().GetResult();
+            return ActuatorHost.HandlerResult.CompletedOk();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return ActuatorHost.HandlerResult.CompletedFailure(ex.Message);
+        }
     }
 }
 
@@ -40,12 +65,15 @@ public sealed class LiveHomeAssistantThermostatActuator(HttpClient httpClient, U
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly Uri _baseUri = NormalizeBaseUri(baseUri);
     private readonly string _token = !string.IsNullOrWhiteSpace(token) ? token : throw new ArgumentException("Token is required.", nameof(token));
+    private readonly List<HomeAssistantThermostatCommand> _commands = [];
+
+    public IReadOnlyList<HomeAssistantThermostatCommand> Commands => _commands;
 
     public async Task SendAsync(HomeAssistantThermostatCommand command, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        // Keep the typed command aligned with the package actuator contract even though this template avoids host setup.
+        // Keep the template's typed command aligned with the package actuator contract.
         var typedBoundary = new CallHomeAssistantServiceCommand("climate", "set_hvac_mode", command.ToJsonPayload());
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_baseUri, "services/climate/set_hvac_mode"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
@@ -54,6 +82,7 @@ public sealed class LiveHomeAssistantThermostatActuator(HttpClient httpClient, U
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+        _commands.Add(command);
     }
 
     private static Uri NormalizeBaseUri(Uri uri)

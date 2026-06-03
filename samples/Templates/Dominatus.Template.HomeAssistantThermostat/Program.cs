@@ -15,8 +15,7 @@ public static class ThermostatCli
             var options = ThermostatCliParser.Parse(args);
             var entity = ResolveEntity(options);
             var actuator = CreateActuator(options);
-            var controller = new ThermostatController(new ThermostatPolicy(options.Hysteresis, options.MinCommitTicks));
-            var workflow = new ThermostatWorkflow(controller, actuator, entity);
+            var workflow = new ThermostatWorkflow(actuator, entity, new ThermostatPolicy(options.Hysteresis, options.MinCommitTicks));
             var ticks = Enumerable.Range(0, options.Ticks)
                 .Select(i => new ThermostatTickInput(options.CurrentTemp + TickDrift(options, i), options.TargetTemp))
                 .ToList();

@@ -13,7 +13,7 @@ public static class ThermostatReportWriter
         writer.WriteLine($"Current: {options.CurrentTemp:0.0}°F");
         writer.WriteLine($"Target: {options.TargetTemp:0.0}°F");
         writer.WriteLine($"Deadband: {options.Deadband:0.0}°F");
-        writer.WriteLine($"min_commit: {options.MinCommitTicks} ticks");
+        writer.WriteLine($"min_commit: {options.MinCommitTicks} ticks (DecisionPolicy.MinCommitSeconds in this deterministic 1-second tick demo)");
         writer.WriteLine($"hysteresis: {options.Hysteresis:0.0}°F");
         writer.WriteLine();
 
@@ -21,6 +21,7 @@ public static class ThermostatReportWriter
         {
             var first = result.Decisions[0];
             writer.WriteLine($"Decision: {first.CommittedMode}");
+            writer.WriteLine($"Dominatus primitives: Ai.Decide={result.Metadata.UsedAiDecide}, DecisionPolicy={result.Metadata.UsedDecisionPolicy}, HFSM={result.Metadata.UsedHfsm}");
             writer.WriteLine($"Reason: {first.Reason}");
             writer.WriteLine($"Utility scores: Heat={first.HeatUtility:0.00}, Cool={first.CoolUtility:0.00}, Idle={first.IdleUtility:0.00}");
             writer.WriteLine($"Committed mode: {first.CommittedMode}");
