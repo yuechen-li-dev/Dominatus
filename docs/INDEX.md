@@ -9,6 +9,7 @@ This index separates user-facing documentation from release prep, development lo
 - [Authoring guide](user/AUTHORING_GUIDE.md) — how to write Dominatus nodes and blackboard-driven workflows.
 - [Persistence checkpoint review](user/PERSISTENCE_CHECKPOINT_REVIEW.md) — M0 review of existing chunk/checkpoint infrastructure for RTSBenchmark tick-boundary checkpoint/resume.
 - [Parallel tick review](user/PARALLEL_TICK_REVIEW.md) — M0 design review for deterministic staged parallel agent ticks and RTSBenchmark integration.
+- [Onboarding templates](user/ONBOARDING_TEMPLATES.md) — runnable starter workflows for LLM and non-LLM users with fake mode first and live configuration through environment variables.
 - [Orchestration ladder](user/ORCHESTRATION_LADDER.md) — direct code, dispatch tables, HFSM/utility, `Llm.Call`, `Llm.Decide`, `MagiDecide`, human approval, and capability surfaces.
 - [Actuation policy](user/ACTUATION_POLICY.md) — policy-gated typed side effects and approval boundaries.
 - [Team coordination](user/TEAM_COORDINATION.md) — shared/team blackboard coordination patterns.
@@ -45,6 +46,7 @@ This index separates user-facing documentation from release prep, development lo
 
 ## Samples
 
+- [Onboarding templates](user/ONBOARDING_TEMPLATES.md) — start here for copy/configure/run LLM PR review and Home Assistant thermostat templates.
 - [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation where runtime utility AI drives needs and actions while LLM-style calls act as DM support for dialogue/relationship outcomes.
 - [Parallel Module Workflow](samples/SAMPLE_PARALLEL_MODULE_WORKFLOW.md) — deterministic Auth-contract-first workflow with `Task.WhenAll` over independent Dominatus module workers, showing parallelizable LLM-style work instead of racing the same prompt.
 - [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — runnable pure behavioral-AI CPU benchmark for deterministic agent-orchestration throughput with utility decisions, tactical threat/support banding, events, action records, JSON/CSV exports, checkpoint/resume, parallel decision mode, a benchmark report, and no LLM/GPU/network path in the measured loop.

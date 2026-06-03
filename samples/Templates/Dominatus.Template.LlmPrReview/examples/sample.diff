@@ -1,0 +1,8 @@
+diff --git a/src/PaymentRouter.cs b/src/PaymentRouter.cs
+index 1111111..2222222 100644
+--- a/src/PaymentRouter.cs
++++ b/src/PaymentRouter.cs
+@@ -42,7 +42,8 @@ public sealed class PaymentRouter
+-        return route.Next(invoice.Id);
++        // BUG: possible null dereference after retry fallback.
++        return route!.Next(invoice.Id);

@@ -38,4 +38,8 @@
   <Project Path="tests/Dominatus.SemanticKernelGraphAssistant.Tests/Dominatus.SemanticKernelGraphAssistant.Tests.csproj" />
   <Project Path="tests/Dominatus.ParallelModuleWorkflow.Tests/Dominatus.ParallelModuleWorkflow.Tests.csproj" />
   <Project Path="tests/Dominatus.RTSBenchmark.Tests/Dominatus.RTSBenchmark.Tests.csproj" />
+  <Project Path="samples/Templates/Dominatus.Template.LlmPrReview/Dominatus.Template.LlmPrReview.csproj" />
+  <Project Path="samples/Templates/Dominatus.Template.HomeAssistantThermostat/Dominatus.Template.HomeAssistantThermostat.csproj" />
+  <Project Path="tests/Dominatus.Template.LlmPrReview.Tests/Dominatus.Template.LlmPrReview.Tests.csproj" />
+  <Project Path="tests/Dominatus.Template.HomeAssistantThermostat.Tests/Dominatus.Template.HomeAssistantThermostat.Tests.csproj" />
 </Solution>
