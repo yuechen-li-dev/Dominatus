@@ -1,6 +1,8 @@
 # Dominatus Template: LLM PR Review Gate
 
-This starter workflow uses Dominatus LLM boundaries for semantic review while keeping orchestration deterministic and inspectable.
+This template demonstrates the intended Dominatus authoring model for bounded semantic LLM work. Dominatus owns orchestration: an `AiWorld` hosts an `AiAgent` running an HFSM node; the node stores the diff on the blackboard, yields `Llm.Call` with a stable id, and stores the raw/result JSON back on blackboard before parsing a concise gate result.
+
+It does not call an LLM provider directly from workflow code. Provider clients are wired behind the existing LLM actuation/cassette/policy path, and fake mode is safe/no-network.
 
 It is not an "LLM code review as infinite comments" bot. It is a PR gate that asks for one concise verdict:
 
@@ -16,7 +18,7 @@ The prompt focuses on correctness, security, data loss, race conditions, API con
 dotnet run --project samples/Templates/Dominatus.Template.LlmPrReview/Dominatus.Template.LlmPrReview.csproj --framework net10.0 -- --diff samples/Templates/Dominatus.Template.LlmPrReview/examples/sample.diff --fake
 ```
 
-Fake mode makes no network calls and uses a deterministic local fake LLM client. It is the default mode for tests and safe local exploration.
+Fake mode makes no network calls and uses a deterministic local fake LLM client behind the Dominatus `Llm.Call` actuation path. It is the default mode for tests and safe local exploration.
 
 ## Live OpenRouter mode
 
@@ -82,6 +84,6 @@ Do not let the LLM auto-merge. Treat this as a semantic review gate and human-as
 
 ## Adapting it
 
-Replace the diff loader with GitHub, GitLab, Jira, or local patch ingestion. Keep the pattern: deterministic input preparation, one bounded LLM semantic call, structured parsing, policy/approval on the result, and no secret printing.
+Replace the diff loader with GitHub, GitLab, Jira, or local patch ingestion. Keep the pattern: deterministic input preparation, HFSM node orchestration, one bounded `Llm.Call`, blackboard result storage, structured parsing, policy/approval on the result, and no secret printing.
 
-Need a custom workflow, actuator, dashboard, or enterprise integration? Open a GitHub Discussion/Issue describing the workflow. This template is intentionally small so it can become a paid/custom deployment starting point.
+Need this adapted to your stack? Open a GitHub Discussion with your workflow, systems involved, required approvals, and success criteria. Dominatus is MIT-licensed; custom workflow/actuator/dashboard work can be built on top.

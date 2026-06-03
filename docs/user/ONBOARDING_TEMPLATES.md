@@ -9,6 +9,7 @@ These templates are different from the architecture/demo samples. Existing sampl
 ## Design principles
 
 - Deterministic orchestration first.
+- Use the real Dominatus primitives: HFSM nodes, `Ai.Decide`, `DecisionPolicy`, blackboards, typed `Ai.Act`, and `Llm.Call`.
 - Use LLMs only where semantic judgment is useful.
 - Keep side effects behind typed actuator boundaries.
 - Use fake mode before live mode.
@@ -20,7 +21,7 @@ These templates are different from the architecture/demo samples. Existing sampl
 
 Path: [`samples/Templates/Dominatus.Template.LlmPrReview`](../../samples/Templates/Dominatus.Template.LlmPrReview)
 
-This template reads a PR diff, builds bounded review context, calls a configured LLM provider or deterministic fake client, parses a structured result, and exits as a semantic gate:
+This template reads a PR diff, builds bounded review context, yields `Llm.Call` from an HFSM node, stores the result on a blackboard, parses a structured result, and exits as a semantic gate:
 
 - `PASS` means safe to continue.
 - `FAIL` means a blocking issue was found.
@@ -45,7 +46,7 @@ Do not let an LLM auto-merge. Use this as a review gate and human-assist signal.
 
 Path: [`samples/Templates/Dominatus.Template.HomeAssistantThermostat`](../../samples/Templates/Dominatus.Template.HomeAssistantThermostat)
 
-This non-LLM template uses utility scoring, hysteresis, and `min_commit` to control a thermostat without thrashing. It emits a typed Home Assistant `climate.set_hvac_mode` command only when the committed mode changes and policy allows actuation.
+This non-LLM template uses an HFSM root node, `Ai.Decide`, `Consideration` scores, `DecisionPolicy` hysteresis/min-commit, blackboard keys, and typed `Ai.Act` commands to control a thermostat without thrashing. It emits a typed Home Assistant `climate.set_hvac_mode` command only when the committed mode changes and policy allows actuation.
 
 Start in fake mode:
 
@@ -63,4 +64,6 @@ Use `--dry-run` to print the command without calling Home Assistant.
 
 ## Need a custom workflow?
 
-Dominatus is MIT-licensed and can be used directly. If you want a custom actuator, workflow, dashboard, or enterprise integration, open a GitHub Discussion/Issue describing your workflow. These templates are starting points for paid/custom deployments.
+These templates intentionally use the real Dominatus primitives. They are not wrappers around an LLM client or a raw API call.
+
+Dominatus is MIT-licensed and can be used directly. Need this adapted to your stack? Open a GitHub Discussion with your workflow, systems involved, required approvals, and success criteria. Custom workflow/actuator/dashboard work can be built on top.

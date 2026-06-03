@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Dominatus.Core.Runtime;
 
 namespace Dominatus.Template.HomeAssistantThermostat;
 
@@ -19,9 +20,9 @@ public sealed record ThermostatReading(
 
 public sealed record ThermostatPolicy(
     double Hysteresis,
-    int MinCommitTicks)
+    float MinCommitSeconds)
 {
-    public static ThermostatPolicy Default { get; } = new(Hysteresis: 0.5, MinCommitTicks: 3);
+    public static ThermostatPolicy Default { get; } = new(Hysteresis: 0.5, MinCommitSeconds: 3);
 }
 
 public sealed record ThermostatDecision(
@@ -32,13 +33,26 @@ public sealed record ThermostatDecision(
     double HeatUtility,
     double CoolUtility,
     double IdleUtility,
-    int TicksInCommittedMode);
+    string DecisionReason);
 
-public sealed record ThermostatTickInput(double CurrentTemp, double TargetTemp);
+public sealed record ThermostatTickInput(double CurrentTemp, double TargetTemp, bool Occupied = true);
 
-public sealed record ThermostatRunResult(IReadOnlyList<ThermostatDecision> Decisions, IReadOnlyList<HomeAssistantThermostatCommand> Commands);
+public sealed record ThermostatRunMetadata(
+    bool UsedAiWorld,
+    bool UsedAiAgent,
+    bool UsedHfsm,
+    bool UsedAiDecide,
+    bool UsedDecisionPolicy,
+    string DecisionSlot,
+    int DecideStepCount,
+    IReadOnlyList<Dominatus.Core.Decision.DecisionReport> DecisionReports);
 
-public sealed record HomeAssistantThermostatCommand(string EntityId, ThermostatMode Mode)
+public sealed record ThermostatRunResult(
+    IReadOnlyList<ThermostatDecision> Decisions,
+    IReadOnlyList<HomeAssistantThermostatCommand> Commands,
+    ThermostatRunMetadata Metadata);
+
+public sealed record HomeAssistantThermostatCommand(string EntityId, ThermostatMode Mode) : IActuationCommand
 {
     public string HvacMode => Mode switch
     {

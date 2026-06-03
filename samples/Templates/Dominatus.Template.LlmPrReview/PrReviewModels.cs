@@ -25,3 +25,18 @@ public sealed record PrReviewResult(
     string Summary,
     IReadOnlyList<PrReviewIssue> Issues,
     IReadOnlyList<string> NonBlockingNotes);
+
+public sealed record PrReviewRunMetadata(
+    bool UsedAiWorld,
+    bool UsedAiAgent,
+    bool UsedHfsm,
+    bool UsedLlmCall,
+    int LlmCallCount,
+    IReadOnlyList<string> StableIds,
+    bool ResultStoredOnBlackboard);
+
+public sealed record PrReviewRunResult(
+    PrReviewResult Result,
+    string RawText,
+    string ResultJson,
+    PrReviewRunMetadata Metadata);

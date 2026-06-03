@@ -3,74 +3,36 @@ using Dominatus.Template.HomeAssistantThermostat;
 public sealed class ThermostatControllerTests
 {
     [Fact]
-    public void BelowTargetChoosesHeat()
+    public async Task Thermostat_UsesAiDecideForModeSelection()
     {
-        var controller = new ThermostatController(new ThermostatPolicy(0.5, 0));
+        var result = await RunFakeAsync([new ThermostatTickInput(67, 70)], minCommit: 0);
 
-        var decision = controller.Decide(new ThermostatReading(67, 70, 0.5, ThermostatMode.Idle));
-
-        Assert.Equal(ThermostatMode.Heat, decision.CommittedMode);
-        Assert.True(decision.CommandRequired);
+        Assert.True(result.Metadata.UsedAiWorld);
+        Assert.True(result.Metadata.UsedAiAgent);
+        Assert.True(result.Metadata.UsedHfsm);
+        Assert.True(result.Metadata.UsedAiDecide);
+        Assert.Equal("thermostat.mode", result.Metadata.DecisionSlot);
+        Assert.NotEmpty(result.Metadata.DecisionReports);
     }
 
     [Fact]
-    public void AboveTargetChoosesCool()
+    public async Task Thermostat_UsesDecisionPolicyForHysteresisAndMinCommit()
     {
-        var controller = new ThermostatController(new ThermostatPolicy(0.5, 0));
-
-        var decision = controller.Decide(new ThermostatReading(74, 70, 0.5, ThermostatMode.Idle));
-
-        Assert.Equal(ThermostatMode.Cool, decision.CommittedMode);
-        Assert.True(decision.CommandRequired);
-    }
-
-    [Fact]
-    public void WithinDeadbandChoosesIdle()
-    {
-        var controller = new ThermostatController(new ThermostatPolicy(0.5, 0));
-
-        var decision = controller.Decide(new ThermostatReading(70.2, 70, 0.5, ThermostatMode.Idle));
-
-        Assert.Equal(ThermostatMode.Idle, decision.CommittedMode);
-        Assert.False(decision.CommandRequired);
-    }
-
-    [Fact]
-    public void HysteresisPreventsImmediateFlipFromHeatToIdleNearTarget()
-    {
-        var controller = new ThermostatController(new ThermostatPolicy(0.5, 0));
-        _ = controller.Decide(new ThermostatReading(67, 70, 0.5, ThermostatMode.Idle));
-
-        var decision = controller.Decide(new ThermostatReading(70.1, 70, 0.5, ThermostatMode.Heat));
-
-        Assert.Equal(ThermostatMode.Heat, decision.CommittedMode);
-        Assert.False(decision.CommandRequired);
-        Assert.Contains("hysteresis", decision.Reason);
-    }
-
-    [Fact]
-    public async Task MinCommitPreventsThrashingAcrossMultipleTicks()
-    {
-        var actuator = new FakeHomeAssistantThermostatActuator();
-        var controller = new ThermostatController(new ThermostatPolicy(0, 3));
-        var workflow = new ThermostatWorkflow(controller, actuator, "climate.test");
-
-        var result = await workflow.RunAsync([
+        var result = await RunFakeAsync([
             new ThermostatTickInput(67, 70),
-            new ThermostatTickInput(74, 70),
-            new ThermostatTickInput(67, 70)
-        ], deadband: 0.5);
+            new ThermostatTickInput(70.1, 70),
+            new ThermostatTickInput(74, 70)
+        ], hysteresis: 0.5, minCommit: 3);
 
-        Assert.Single(result.Commands);
-        Assert.All(result.Decisions, decision => Assert.Equal(ThermostatMode.Heat, decision.CommittedMode));
-        Assert.Contains(result.Decisions, decision => decision.Reason.Contains("min_commit", StringComparison.OrdinalIgnoreCase));
+        Assert.True(result.Metadata.UsedDecisionPolicy);
+        Assert.Contains(result.Decisions, decision => decision.DecisionReason is "MinCommitActive" or "HysteresisBlock");
     }
 
     [Fact]
-    public async Task FakeActuatorRecordsExpectedCommand()
+    public async Task Thermostat_HeatBelowTarget_EmitsAiActCommand()
     {
         var actuator = new FakeHomeAssistantThermostatActuator();
-        var workflow = new ThermostatWorkflow(new ThermostatController(new ThermostatPolicy(0.5, 0)), actuator, "climate.living_room");
+        var workflow = new ThermostatWorkflow(actuator, "climate.living_room", new ThermostatPolicy(0.5, 0));
 
         var result = await workflow.RunAsync([new ThermostatTickInput(67, 70)], 0.5);
 
@@ -78,10 +40,58 @@ public sealed class ThermostatControllerTests
         Assert.Equal("climate.living_room", command.EntityId);
         Assert.Equal("heat", command.HvacMode);
         Assert.Single(actuator.Commands);
+        Assert.True(result.Metadata.UsedAiDecide);
     }
 
     [Fact]
-    public async Task LiveModeRefusesWithoutRequiredEnvVars()
+    public async Task Thermostat_CoolAboveTarget_EmitsAiActCommand()
+    {
+        var result = await RunFakeAsync([new ThermostatTickInput(74, 70)], minCommit: 0);
+
+        var command = Assert.Single(result.Commands);
+        Assert.Equal(ThermostatMode.Cool, command.Mode);
+        Assert.Equal("cool", command.HvacMode);
+    }
+
+    [Fact]
+    public async Task Thermostat_WithinDeadband_HoldsOrIdles()
+    {
+        var result = await RunFakeAsync([new ThermostatTickInput(70.2, 70)], minCommit: 0);
+
+        Assert.Equal(ThermostatMode.Idle, result.Decisions.Single().CommittedMode);
+        Assert.Empty(result.Commands);
+    }
+
+    [Fact]
+    public async Task Thermostat_MinCommit_PreventsThrashingAcrossTicks()
+    {
+        var result = await RunFakeAsync([
+            new ThermostatTickInput(67, 70),
+            new ThermostatTickInput(74, 70),
+            new ThermostatTickInput(67, 70)
+        ], hysteresis: 0, minCommit: 3);
+
+        Assert.Single(result.Commands);
+        Assert.All(result.Decisions, decision => Assert.Equal(ThermostatMode.Heat, decision.CommittedMode));
+        Assert.Contains(result.Decisions, decision => string.Equals(decision.DecisionReason, "MinCommitActive", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Thermostat_FakeMode_NoNetwork()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var code = await ThermostatCli.RunAsync(["--fake", "--current-temp", "67", "--target-temp", "70", "--ticks", "2"], output, error);
+
+        Assert.Equal(0, code);
+        Assert.Contains("Dominatus Thermostat Utility Controller", output.ToString());
+        Assert.Contains("Ai.Decide=True", output.ToString());
+        Assert.Empty(error.ToString());
+    }
+
+    [Fact]
+    public async Task Thermostat_LiveMode_RequiresEnvVars()
     {
         var previousUrl = Environment.GetEnvironmentVariable("HOMEASSISTANT_URL");
         var previousToken = Environment.GetEnvironmentVariable("HOMEASSISTANT_TOKEN");
@@ -107,7 +117,7 @@ public sealed class ThermostatControllerTests
     }
 
     [Fact]
-    public async Task DryRunPrintsCommandButDoesNotCallLiveActuator()
+    public async Task Thermostat_DryRun_DoesNotCallNetwork()
     {
         var previousUrl = Environment.GetEnvironmentVariable("HOMEASSISTANT_URL");
         var previousToken = Environment.GetEnvironmentVariable("HOMEASSISTANT_TOKEN");
@@ -162,15 +172,37 @@ public sealed class ThermostatControllerTests
     }
 
     [Fact]
-    public async Task FakeCliUsesNoLiveHomeAssistantCallInTests()
+    public void StaticGuard_UsesDominatusPrimitivesInsteadOfManualDecisionLoop()
     {
-        using var output = new StringWriter();
-        using var error = new StringWriter();
+        var controllerSource = File.ReadAllText(Path.Combine(RepoRoot(), "samples/Templates/Dominatus.Template.HomeAssistantThermostat/ThermostatController.cs"));
+        var workflowSource = File.ReadAllText(Path.Combine(RepoRoot(), "samples/Templates/Dominatus.Template.HomeAssistantThermostat/ThermostatWorkflow.cs"));
+        var combined = controllerSource + workflowSource;
 
-        var code = await ThermostatCli.RunAsync(["--fake", "--current-temp", "67", "--target-temp", "70", "--ticks", "2"], output, error);
+        Assert.DoesNotContain(".Decide(", workflowSource);
+        Assert.DoesNotContain("ScoreHeat", combined);
+        Assert.DoesNotContain("ChooseDesired", combined);
+        Assert.Contains("Consideration", combined);
+        Assert.Contains("Ai.Option", combined);
+        Assert.Contains("Ai.Decide", combined);
+        Assert.Contains("DecisionPolicy", combined);
+        Assert.Contains("Ai.Act", combined);
+    }
 
-        Assert.Equal(0, code);
-        Assert.Contains("Dominatus Thermostat Utility Controller", output.ToString());
-        Assert.Empty(error.ToString());
+    private static Task<ThermostatRunResult> RunFakeAsync(IReadOnlyList<ThermostatTickInput> ticks, double hysteresis = 0.5, int minCommit = 0)
+    {
+        var actuator = new FakeHomeAssistantThermostatActuator();
+        var workflow = new ThermostatWorkflow(actuator, "climate.test", new ThermostatPolicy(hysteresis, minCommit));
+        return workflow.RunAsync(ticks, 0.5);
+    }
+
+    private static string RepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Dominatus.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("Could not locate repo root.");
     }
 }
