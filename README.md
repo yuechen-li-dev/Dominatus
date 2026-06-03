@@ -66,6 +66,16 @@ Because the orchestration loop is C# code plus deterministic runtime state, Domi
 - [Orchestration ladder](docs/user/ORCHESTRATION_LADDER.md) — when to use direct code, dispatch tables, Dominatus HFSM/utility, `Llm.Call`, `Llm.Decide`, `MagiDecide`, human approval, Semantic Kernel, MCP, and OpenAPI.
 - [Actuation policy](docs/user/ACTUATION_POLICY.md) — typed side effects, policy composition, approval boundaries, and audit-friendly actuation.
 
+
+## Start here: runnable templates
+
+If you want to plug in your own key/token and run a practical workflow today, start with the onboarding templates:
+
+- [`samples/Templates/Dominatus.Template.LlmPrReview`](samples/Templates/Dominatus.Template.LlmPrReview) — LLM PR Review Gate: a semantic pass/fail/needs-human review gate for PR diffs. Fake mode is available for local runs and tests; live mode uses `OPENROUTER_API_KEY` and `DOMINATUS_PR_REVIEW_MODEL` from environment variables.
+- [`samples/Templates/Dominatus.Template.HomeAssistantThermostat`](samples/Templates/Dominatus.Template.HomeAssistantThermostat) — Home Assistant Thermostat Utility Controller: a non-LLM utility-AI controller with hysteresis and `min_commit` anti-thrashing. Fake mode records commands locally; live mode uses Home Assistant URL/token/entity environment variables.
+
+Both templates avoid telemetry, avoid committed secrets, and keep live service credentials in environment variables. Need a custom workflow, actuator, dashboard, or enterprise integration? Open a GitHub Discussion/Issue describing the workflow. See [Onboarding templates](docs/user/ONBOARDING_TEMPLATES.md).
+
 ## Tiny feel sample
 
 Dominatus states are C# iterators that yield runtime steps. The full host setup is intentionally omitted here; see the samples below for complete projects.
