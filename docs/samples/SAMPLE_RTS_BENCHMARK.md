@@ -1474,12 +1474,7 @@ Single-run JSON and CSV exports include parallel-agent metadata such as `paralle
 
 The RTSBenchmark can take this fast path because its current decision nodes and scorers already fit the safe subset. Core still exposes direct `ctx.WorldBb`, `ctx.Mail`, and `ctx.Act` surfaces, so a general Core parallel runner needs staged/facade context surfaces before it can be safe for arbitrary authored graphs.
 
-Future work remains:
-
-- Core staged `ParallelAiWorldRunner`;
-- staged `WorldBb`, mailbox, and actuation surfaces;
-- parallel sensor phase over immutable snapshots;
-- deterministic parallel action-resolution partitions.
+M11 follows this by integrating the generic Core staged `ParallelAiWorldRunner` as a separate execution mode. Future work remains for broader safe parallelism beyond the decision subset, including parallel sensor phases over immutable snapshots and deterministic parallel action-resolution partitions.
 
 ## M11 Core ParallelAiWorldRunner decision mode
 
@@ -1521,3 +1516,5 @@ dotnet run --project samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.cspro
 ```
 
 The comparison report includes the execution mode, median agent-ticks/sec, speedup versus sequential, hash stability, and deterministic-hash equivalence versus sequential. The Core runner can be slower than the benchmark-local mode because it pays the generic staged-runtime overhead for snapshots, staged surfaces, merge accounting, and safety diagnostics. The primary M11 correctness proof is deterministic equivalence: sequential, benchmark-local parallel, and Core runner modes should produce the same deterministic hash and deterministic counters for the same benchmark options except agent execution mode.
+
+A refreshed 2026-06-02 Release `net10.0` Skirmish comparison on a 2-processor Ubuntu 24.04.4 environment reported all three modes with hash `535c9b8e5f5d01e1`: `Sequential` at 76,942.79 median agent-ticks/sec, `LocalParallelDecision` at 74,149.66 median agent-ticks/sec (0.96x versus sequential), and `CoreParallelRunner` at 68,625.18 median agent-ticks/sec (0.89x versus sequential). A Smoke Core runner sanity run produced deterministic hash `2ec6db6dd10db075` with zero staged world writes, mailbox messages, actuations, or conflicts. These values are run/build/machine specific; the portable result is deterministic hash equivalence in the safe subset.
