@@ -1,6 +1,6 @@
 # Dominatus Template: LLM PR Review Gate
 
-This template demonstrates the intended Dominatus authoring model for bounded semantic LLM work. Dominatus owns orchestration: an `AiWorld` hosts an `AiAgent` running an HFSM node; the node stores the diff on the blackboard, yields `Llm.Call` with a stable id, and stores the raw/result JSON back on blackboard before parsing a concise gate result.
+This template demonstrates the intended Dominatus authoring model for bounded semantic LLM work. Dominatus owns orchestration: an `AiWorld` hosts an `AiAgent` running an HFSM review lifecycle: `LoadDiff -> Review -> Evaluate -> Report`. The lifecycle stores the diff on the blackboard, yields the selected LLM primitive with a stable id, stores raw/result JSON back on the blackboard, parses a typed gate result, and reports the CLI outcome.
 
 It does not call an LLM provider directly from workflow code. Provider clients are wired behind the existing LLM actuation/cassette/policy path, and fake mode is safe/no-network.
 
@@ -11,6 +11,29 @@ It is not an "LLM code review as infinite comments" bot. It is a PR gate that as
 - `NEEDS_HUMAN` — ambiguous or high-risk enough for human judgment.
 
 The prompt focuses on correctness, security, data loss, race conditions, API contract breaks, missing tests for changed behavior, and obvious maintainability hazards. It explicitly suppresses style nits, subjective naming, formatting, and broad unrelated rewrites.
+
+## Why this uses this primitive
+
+The PR review gate is a one-cycle human-in-the-loop review workflow, not a full autonomous reviewer:
+
+1. **Read** — the human or CI supplies a diff, and `LoadDiff` stores it on the blackboard.
+2. **Orient** — `Review` builds bounded gate criteria: correctness, security, data loss, races, API contracts, and changed-behavior test risks.
+3. **Act** — Dominatus invokes the LLM through `Llm.Call`, stores the raw text and result JSON on the blackboard, and asks for one structured verdict/report.
+4. **Evaluate** — `Evaluate` parses `PASS`, `FAIL`, or `NEEDS_HUMAN` into a typed `PrReviewResult` on the blackboard.
+5. **Report/loop** — `Report` hands the result to the CLI. If the verdict is `FAIL`, the human edits code and reruns. If it is `NEEDS_HUMAN`, the human reviews. If it is `PASS`, the workflow succeeds.
+
+Dominatus has `Llm.Decide` for semantic choice among a closed option set, and `PASS` / `FAIL` / `NEEDS_HUMAN` is a closed choice. For this template, however, the real output is not only the choice: the onboarding gate also needs a concise structured report with blocking issues and non-blocking notes, while live mode is intentionally wired to the existing OpenRouter text client. `Llm.Decide` stores a compact choice/rationale/result JSON; it is not enough by itself for the issue report without adding a second LLM call to a starter sample.
+
+So the smallest honest primitive here is `Llm.Call` for verdict-plus-report generation. The HFSM exists to model the review lifecycle (`LoadDiff -> Review -> Evaluate -> Report`), not to imply that every one-shot LLM call needs a full state machine.
+
+API inspection summary for this template:
+
+- `Llm.Decide` exists in the public `Dominatus.Llm.OptFlow` API.
+- It supports semantic choice among a closed option set such as `PASS`, `FAIL`, and `NEEDS_HUMAN`.
+- It can store the chosen option, compact rationale, and decision result JSON on the blackboard.
+- Its rationale/output contract is intentionally compact; it is not a full blocking-issue report format for this PR gate.
+- Because this starter also needs issue/rationale text and live OpenRouter text-client behavior, `Llm.Call` remains the report-generation and verdict-generation step.
+- `MagiDecide` is intentionally not used; the onboarding template is a simple human-in-the-loop gate, not a multi-LLM deliberation workflow.
 
 ## Fake mode first
 
@@ -84,6 +107,6 @@ Do not let the LLM auto-merge. Treat this as a semantic review gate and human-as
 
 ## Adapting it
 
-Replace the diff loader with GitHub, GitLab, Jira, or local patch ingestion. Keep the pattern: deterministic input preparation, HFSM node orchestration, one bounded `Llm.Call`, blackboard result storage, structured parsing, policy/approval on the result, and no secret printing.
+Replace the diff loader with GitHub, GitLab, Jira, or local patch ingestion. Keep the pattern: deterministic input preparation, lifecycle-shaped HFSM orchestration, the smallest honest LLM primitive for the semantic work, blackboard result storage, structured parsing, policy/approval on the result, and no secret printing.
 
 Need this adapted to your stack? Open a GitHub Discussion with your workflow, systems involved, required approvals, and success criteria. Dominatus is MIT-licensed; custom workflow/actuator/dashboard work can be built on top.
