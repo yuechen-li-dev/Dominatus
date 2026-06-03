@@ -1,17 +1,26 @@
 using Dominatus.Core;
 using Dominatus.Core.Trace;
+using Dominatus.Llm.OptFlow;
 
 namespace Dominatus.Template.LlmPrReview;
 
 public sealed class PrReviewTrace : IAiTraceSink
 {
     private readonly List<string> _stableIds = [];
+    private readonly List<string> _statesEntered = [];
 
     public int LlmCallCount { get; private set; }
 
+    public int LlmDecideCount { get; private set; }
+
     public IReadOnlyList<string> StableIds => _stableIds;
 
-    public void OnEnter(StateId state, float time, string reason) { }
+    public IReadOnlyList<string> StatesEntered => _statesEntered;
+
+    public void OnEnter(StateId state, float time, string reason)
+    {
+        _statesEntered.Add(state.Value);
+    }
 
     public void OnExit(StateId state, float time, string reason) { }
 
@@ -26,10 +35,20 @@ public sealed class PrReviewTrace : IAiTraceSink
             stableId = PrReviewGate.StableId;
         }
 
-        if (string.Equals(stableId, PrReviewGate.StableId, StringComparison.Ordinal))
+        if (!string.Equals(stableId, PrReviewGate.StableId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _stableIds.Add(stableId!);
+
+        if (request is LlmDecisionRequest)
+        {
+            LlmDecideCount++;
+        }
+        else
         {
             LlmCallCount++;
-            _stableIds.Add(stableId!);
         }
     }
 }

@@ -9,7 +9,8 @@ These templates are different from the architecture/demo samples. Existing sampl
 ## Design principles
 
 - Deterministic orchestration first.
-- Use the real Dominatus primitives: HFSM nodes, `Ai.Decide`, `DecisionPolicy`, blackboards, typed `Ai.Act`, and `Llm.Call`.
+- Use the real Dominatus primitives: HFSM nodes, `Ai.Decide`, `DecisionPolicy`, blackboards, typed `Ai.Act`, `Llm.Decide`, and `Llm.Call`.
+- Use the smallest honest Dominatus primitive for the motivating case: `Ai.Decide` for deterministic utility scoring, `Llm.Decide` for semantic choice among known options, `Llm.Call` for semantic generation/transformation, and HFSM when there is lifecycle/state structure.
 - Use LLMs only where semantic judgment is useful.
 - Keep side effects behind typed actuator boundaries.
 - Use fake mode before live mode.
@@ -21,7 +22,7 @@ These templates are different from the architecture/demo samples. Existing sampl
 
 Path: [`samples/Templates/Dominatus.Template.LlmPrReview`](../../samples/Templates/Dominatus.Template.LlmPrReview)
 
-This template reads a PR diff, builds bounded review context, yields `Llm.Call` from an HFSM node, stores the result on a blackboard, parses a structured result, and exits as a semantic gate:
+This template reads a PR diff, builds bounded review context, runs a one-cycle ROA-lite lifecycle (`LoadDiff -> Review -> Evaluate -> Report`), stores the result on a blackboard, parses a structured result, and exits as a semantic gate:
 
 - `PASS` means safe to continue.
 - `FAIL` means a blocking issue was found.
@@ -40,13 +41,15 @@ Live mode uses OpenRouter with your own environment variables:
 - optional `OPENROUTER_HTTP_REFERER`
 - optional `OPENROUTER_TITLE`
 
+Primitive choice is deliberate: the gate is a semantic verdict/report workflow. `Llm.Decide` is the right primitive for a closed semantic choice, but this template keeps `Llm.Call` because the onboarding output needs the verdict plus concise blocking issues/non-blocking notes in one text-client path. The HFSM models the review lifecycle, not ceremony around a one-shot provider call.
+
 Do not let an LLM auto-merge. Use this as a review gate and human-assist signal.
 
 ## Home Assistant Thermostat Utility Controller
 
 Path: [`samples/Templates/Dominatus.Template.HomeAssistantThermostat`](../../samples/Templates/Dominatus.Template.HomeAssistantThermostat)
 
-This non-LLM template uses an HFSM root node, `Ai.Decide`, `Consideration` scores, `DecisionPolicy` hysteresis/min-commit, blackboard keys, and typed `Ai.Act` commands to control a thermostat without thrashing. It emits a typed Home Assistant `climate.set_hvac_mode` command only when the committed mode changes and policy allows actuation.
+This non-LLM template uses an HFSM root node, `Ai.Decide`, `Consideration` scores, `DecisionPolicy` hysteresis/min-commit, blackboard keys, and typed `Ai.Act` commands to control a thermostat without thrashing. Thermostat control uses `Ai.Decide` because it is repeated deterministic utility control, not a semantic LLM gate. It emits a typed Home Assistant `climate.set_hvac_mode` command only when the committed mode changes and policy allows actuation.
 
 Start in fake mode:
 

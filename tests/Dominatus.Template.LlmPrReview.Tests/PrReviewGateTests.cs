@@ -3,7 +3,7 @@ using Dominatus.Template.LlmPrReview;
 public sealed class PrReviewGateTests
 {
     [Fact]
-    public async Task PrReview_UsesLlmCallPath()
+    public async Task PrReview_PrimitiveChoice_IsDocumentedByMetadata()
     {
         var client = new FakePrReviewLlmClient();
         var gate = new PrReviewGate(client, "fake", "scripted-v1");
@@ -14,18 +14,48 @@ public sealed class PrReviewGateTests
         Assert.True(result.Metadata.UsedAiAgent);
         Assert.True(result.Metadata.UsedHfsm);
         Assert.True(result.Metadata.UsedLlmCall);
+        Assert.False(result.Metadata.UsedLlmDecide);
         Assert.Equal(1, result.Metadata.LlmCallCount);
+        Assert.Equal(0, result.Metadata.LlmDecideCount);
+        Assert.Equal(PrReviewGate.PrimitiveChoice, result.Metadata.PrimitiveChoice);
+        Assert.Equal(PrReviewGate.ReviewWorkflowShape, result.Metadata.ReviewWorkflowShape);
+        Assert.Contains("Llm.Decide exists", result.Metadata.PrimitiveChoiceRationale);
         Assert.Contains(PrReviewGate.StableId, result.Metadata.StableIds);
     }
 
     [Fact]
-    public void PrReview_DoesNotCallILlmClientDirectlyFromGate()
+    public async Task PrReview_KeepsLlmCallOnlyIfDecideUnsuitable()
+    {
+        var result = await NewGate().ReviewWithMetadataAsync("diff --git a/src/PaymentRouter.cs b/src/PaymentRouter.cs\n+++ b/src/PaymentRouter.cs\n+// possible null dereference after retry fallback", 5);
+
+        Assert.Equal(PrReviewVerdict.Fail, result.Result.Verdict);
+        Assert.True(result.Metadata.UsedLlmCall);
+        Assert.False(result.Metadata.UsedLlmDecide);
+        Assert.Contains("structured review report", result.Metadata.PrimitiveChoiceRationale);
+        Assert.Contains("live OpenRouter text-client support", result.Metadata.PrimitiveChoiceRationale);
+    }
+
+    [Fact]
+    public async Task PrReview_HfsmModelsLifecycle_NotCeremony()
+    {
+        var result = await NewGate().ReviewWithMetadataAsync("diff --git a/src/Foo.cs b/src/Foo.cs\n+return value;", 3);
+
+        Assert.Contains("LoadDiff", result.Metadata.WorkflowSteps);
+        Assert.Contains("Review", result.Metadata.WorkflowSteps);
+        Assert.Contains("Evaluate", result.Metadata.WorkflowSteps);
+        Assert.Contains("Report", result.Metadata.WorkflowSteps);
+        Assert.True(result.Metadata.TypedResultStoredOnBlackboard);
+    }
+
+    [Fact]
+    public void PrReview_DoesNotCallGenerateTextAsyncDirectlyFromGate()
     {
         var gateSource = File.ReadAllText(Path.Combine(RepoRoot(), "samples/Templates/Dominatus.Template.LlmPrReview/PrReviewGate.cs"));
 
         Assert.DoesNotContain("GenerateTextAsync", gateSource);
         Assert.Contains("Llm.Call", gateSource);
         Assert.Contains("ReviewRawResultKey", gateSource);
+        Assert.Contains("EvaluateNode", gateSource);
     }
 
     [Fact]
@@ -116,6 +146,7 @@ public sealed class PrReviewGateTests
         var result = await NewGate().ReviewWithMetadataAsync("diff --git a/src/Foo.cs b/src/Foo.cs\n+return value;", 3);
 
         Assert.True(result.Metadata.ResultStoredOnBlackboard);
+        Assert.True(result.Metadata.TypedResultStoredOnBlackboard);
         Assert.False(string.IsNullOrWhiteSpace(result.RawText));
         Assert.Contains(PrReviewGate.StableId, result.ResultJson);
     }

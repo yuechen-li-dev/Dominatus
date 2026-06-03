@@ -31,9 +31,16 @@ public sealed record PrReviewRunMetadata(
     bool UsedAiAgent,
     bool UsedHfsm,
     bool UsedLlmCall,
+    bool UsedLlmDecide,
     int LlmCallCount,
+    int LlmDecideCount,
     IReadOnlyList<string> StableIds,
-    bool ResultStoredOnBlackboard);
+    bool ResultStoredOnBlackboard,
+    bool TypedResultStoredOnBlackboard,
+    string PrimitiveChoice,
+    string PrimitiveChoiceRationale,
+    string ReviewWorkflowShape,
+    IReadOnlyList<string> WorkflowSteps);
 
 public sealed record PrReviewRunResult(
     PrReviewResult Result,
