@@ -393,6 +393,13 @@ The implementation relies on the audited safe subset: one ship per agent, tactic
 
 Use `--parallel-agents` for the benchmark-local decision fast path and `--max-degree N` to bound worker degree. Use `--compare-agent-parallelism` to compare sequential agents against the parallel decision configuration while checking hash stability and sequential/parallel hash equivalence. This remains separate from `--parallel-trials`, which runs independent benchmark trials concurrently.
 
+
+## Follow-up: RTSBenchmark M11 Core runner integration
+
+RTSBenchmark M11 integrated the generic Core `ParallelAiWorldRunner` as a third agent execution mode alongside sequential decisions and the benchmark-local `LocalParallelDecision` fast path. The Core runner is embedded only in the RTSBenchmark parallel decision phase with prepare steps disabled, because the benchmark still owns cooldown, sensor, action resolution, event delivery, checkpoint, and hash phases.
+
+The M11 safe-subset check demonstrated deterministic hash equivalence in the benchmark path: `Sequential`, `LocalParallelDecision`, and `CoreParallelRunner` produced the same Skirmish deterministic hash in the refreshed comparison, and the Smoke Core runner sanity run produced hash `2ec6db6dd10db075` with zero staged world writes, mailbox messages, actuations, or conflicts. This validates the staged compute / deterministic merge model for the tested safe subset; it does not remove the known live-world escape hatches or prove arbitrary authored-code parallel safety.
+
 ## Follow-up: Core Parallel M2 context factory seam
 
 Core Parallel M2 adds a node/HFSM context factory seam for execution-time `AiCtx` construction. `HfsmInstance.ContextFactory` can be set by advanced runtime code before an agent tick and cleared afterward; `NodeRunner.Enter` and `NodeRunner.Tick` both route context creation through that current factory. The default factory remains the live sequential context: `View = world.View`, `Mail = world.Mail`, `Act = world.Actuator`, and `WorldBb = new LiveWorldBb(world.Bb)`.
