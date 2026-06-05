@@ -36,10 +36,7 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
                 diagnostics.Add(Required($"nodes.{nodeId}.speaker", context));
             }
 
-            if (string.IsNullOrWhiteSpace(node.Text))
-            {
-                diagnostics.Add(Required($"nodes.{nodeId}.text", context));
-            }
+            ValidateLineOrText($"nodes.{nodeId}", context, diagnostics, node.Line, node.Text);
 
             var choiceIds = new HashSet<string>(StringComparer.Ordinal);
             for (var choiceIndex = 0; choiceIndex < node.Choices.Count; choiceIndex++)
@@ -71,10 +68,7 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
             diagnostics.Add(Error("dialogue.duplicate_choice_id", $"Node '{nodeId}' contains duplicate choice id '{choice.Id}'.", $"nodes.{nodeId}.choices", context));
         }
 
-        if (string.IsNullOrWhiteSpace(choice.Text))
-        {
-            diagnostics.Add(Required($"{choicePath}.text", context));
-        }
+        ValidateLineOrText(choicePath, context, diagnostics, choice.Line, choice.Text);
 
         var hasLocalNext = !string.IsNullOrWhiteSpace(choice.Next);
         var hasNextAsset = !string.IsNullOrWhiteSpace(choice.NextAsset);
@@ -108,6 +102,31 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
         diagnostics.Add(Required($"{choicePath}.next", context));
     }
 
+    private static void ValidateLineOrText(string ownerPath, AssetValidationContext context, List<AssetDiagnostic> diagnostics, string? line, string? text)
+    {
+        var hasLine = !string.IsNullOrWhiteSpace(line);
+        var hasText = !string.IsNullOrWhiteSpace(text);
+
+        if (!hasLine && !hasText)
+        {
+            diagnostics.Add(AssetValidation.Error(
+                "dialogue.missing_line_or_text",
+                $"Dialogue entry '{ownerPath}' must set either line or fallback text.",
+                context.SourcePath,
+                keyPath: $"{ownerPath}.line",
+                span: context.GetSpan(ownerPath)));
+        }
+        else if (!hasLine && hasText)
+        {
+            diagnostics.Add(AssetValidation.Warning(
+                "dialogue.inline_text_only",
+                $"Dialogue entry '{ownerPath}' uses inline fallback text without a localization line key.",
+                context.SourcePath,
+                keyPath: $"{ownerPath}.text",
+                span: context.GetSpan($"{ownerPath}.text")));
+        }
+    }
+
     private static AssetDiagnostic Required(string keyPath, AssetValidationContext context) =>
         AssetValidation.Error(
             "dialogue.required_field",
@@ -118,6 +137,63 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
 
     private static AssetDiagnostic Error(string code, string message, string keyPath, AssetValidationContext context) =>
         AssetValidation.Error(code, message, context.SourcePath, keyPath: keyPath, span: context.GetSpan(keyPath));
+}
+
+public sealed class DialogueLocalizationValidator : IAssetPackValidator<DialogueAsset>
+{
+    private readonly ILocalizationTable _table;
+
+    public DialogueLocalizationValidator(ILocalizationTable table)
+    {
+        _table = table ?? throw new ArgumentNullException(nameof(table));
+    }
+
+    public IReadOnlyList<AssetDiagnostic> Validate(AssetPack<DialogueAsset> pack, AssetValidationContext context)
+    {
+        var diagnostics = new List<AssetDiagnostic>();
+
+        foreach (var entry in pack.Assets.Values)
+        {
+            foreach (var (nodeId, node) in entry.Asset.Nodes)
+            {
+                ValidateLine(_table, node.Line, entry, $"nodes.{nodeId}.line", diagnostics);
+
+                for (var choiceIndex = 0; choiceIndex < node.Choices.Count; choiceIndex++)
+                {
+                    var choice = node.Choices[choiceIndex];
+                    ValidateLine(_table, choice.Line, entry, $"nodes.{nodeId}.choices[{choiceIndex}].line", diagnostics);
+                }
+            }
+        }
+
+        return diagnostics;
+    }
+
+    private static void ValidateLine(
+        ILocalizationTable table,
+        string? line,
+        AssetPackEntry<DialogueAsset> entry,
+        string keyPath,
+        List<AssetDiagnostic> diagnostics)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        var key = new LocalizationKey(line);
+        var diagnostic = LocalizationValidation.MissingLocalizationKey(
+            table,
+            key,
+            entry.SourcePath,
+            keyPath,
+            entry.SourceMap is not null && entry.SourceMap.TryGetSpan(keyPath, out var span) ? span : null);
+
+        if (diagnostic is not null)
+        {
+            diagnostics.Add(diagnostic);
+        }
+    }
 }
 
 public sealed class DialogueAssetPackValidator : IAssetPackValidator<DialogueAsset>

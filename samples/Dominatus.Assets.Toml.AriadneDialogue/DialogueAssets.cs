@@ -15,7 +15,9 @@ public sealed record DialogueNodeAsset
 {
     public required string Speaker { get; init; }
 
-    public required string Text { get; init; }
+    public string? Line { get; init; }
+
+    public string? Text { get; init; }
 
     public List<string> Tags { get; init; } = [];
 
@@ -30,7 +32,9 @@ public sealed record DialogueChoiceAsset
 {
     public required string Id { get; init; }
 
-    public required string Text { get; init; }
+    public string? Line { get; init; }
+
+    public string? Text { get; init; }
 
     public string? Next { get; init; }
 

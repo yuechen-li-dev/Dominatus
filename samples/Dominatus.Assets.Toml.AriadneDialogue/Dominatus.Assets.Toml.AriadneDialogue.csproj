@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <None Include="dialogue\*.toml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="localization\*.csv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

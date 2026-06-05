@@ -351,3 +351,102 @@ Likely follow-up areas include:
 - Aurelian integration;
 - Ariadne dialogue runtime bridge;
 - broader sample asset catalogs.
+
+## M3 localization keys: TOML structure, shipped strings elsewhere
+
+M3 adds a deliberately small localization convention for authored assets:
+
+- TOML owns authored structure: dialogue nodes, choices, IDs, symbolic conditions, and symbolic effects.
+- Localization tables own shipped strings.
+- C# owns behavior and any culture/fallback policy.
+
+A production-style dialogue line stores a stable localization key in `line` and may keep fallback `text` for editor or development preview:
+
+```toml
+[nodes.greeting]
+speaker = "blacksmith"
+line = "dialogue.blacksmith_intro.greeting"
+text = "You look like someone who needs a blade."
+
+[[nodes.greeting.choices]]
+id = "ask_work"
+line = "choice.blacksmith_intro.ask_work"
+text = "Got any work?"
+next_asset = "dialogue.north_road_job"
+next_node = "offer"
+```
+
+The fallback `text` is not the canonical shipped string. It lets tools render something useful when a localization table is absent or incomplete. The sample validator allows gradual adoption: a node or choice with `text` but no `line` emits a `Warning` with code `dialogue.inline_text_only`; a node or choice with neither `line` nor `text` emits an `Error` with code `dialogue.missing_line_or_text`.
+
+### Public localization API
+
+The public API is intentionally boring and dictionary-shaped:
+
+```csharp
+public readonly record struct LocalizationKey
+{
+    public LocalizationKey(string value);
+    public string Value { get; }
+}
+
+public interface ILocalizationTable
+{
+    bool Contains(LocalizationKey key);
+    bool TryGet(LocalizationKey key, out string value);
+}
+
+public sealed class DictionaryLocalizationTable : ILocalizationTable
+{
+    public DictionaryLocalizationTable(IReadOnlyDictionary<LocalizationKey, string> entries);
+}
+```
+
+`LocalizationKey` rejects empty or whitespace values and trims leading/trailing whitespace, matching the `AssetId` convention. Keys are case-sensitive by default: `dialogue.blacksmith_intro.greeting` and `dialogue.Blacksmith_Intro.Greeting` are different keys.
+
+`DictionaryLocalizationTable` is a generic adapter for tests, samples, build tools, and import pipelines. Consumers can also implement `ILocalizationTable` around `.resx`, `IStringLocalizer`, a database snapshot, a generated table, or any other string source without adding those dependencies to `Dominatus.Assets.Toml`.
+
+### Missing-key validation
+
+`LocalizationValidation.MissingLocalizationKey(...)` returns an `AssetDiagnostic?`. It returns `null` when a key exists and an `Error` diagnostic with code `localization.missing_key` when it does not. Callers can pass source path, key path, and span so missing localization entries point back to the authored TOML field:
+
+```csharp
+var diagnostic = LocalizationValidation.MissingLocalizationKey(
+    table,
+    new LocalizationKey(node.Line),
+    entry.SourcePath,
+    "nodes.greeting.line",
+    entry.SourceMap?.TryGetSpan("nodes.greeting.line", out var span) == true ? span : null);
+```
+
+The Ariadne sample's `DialogueLocalizationValidator` applies that helper to each node `line` and choice `line`. Typical key paths are:
+
+- `nodes.greeting.line`
+- `nodes.greeting.choices[0].line`
+
+When the TOML source map can resolve those paths, diagnostics include `SourcePath`, `KeyPath`, `Span`, and line/column convenience fields.
+
+### Sample CSV table
+
+Because this package is TOML-specific, M3 does not add a public CSV localization loader. The Ariadne sample includes a tiny sample/test CSV loader and `localization/en.csv` to demonstrate the model:
+
+```csv
+id,text
+dialogue.blacksmith_intro.greeting,You look like someone who needs a blade.
+choice.blacksmith_intro.ask_work,Got any work?
+```
+
+The sample program loads the dialogue pack, loads the CSV into `DictionaryLocalizationTable`, runs structural validators, runs cross-asset reference validation, runs localization-key validation, and prints a localized preview that resolves text from the table while showing the line key.
+
+### Non-goals preserved
+
+Localization keys are data. M3 does not add a string DSL, expression language, executable TOML, VM, full localization framework, `.resx` generator, PO/XLIFF pipeline, culture fallback policy, hot reload system, editor, or game-engine integration. Those remain future adapter or tooling concerns outside the TOML asset substrate.
+
+### Future work
+
+Possible future work can remain additive and adapter-based:
+
+- `.resx` / `ResourceManager` table adapter;
+- PO/XLIFF import tooling;
+- explicit culture fallback policy;
+- editor localized preview;
+- build-time reports for unused or duplicated localization keys.
