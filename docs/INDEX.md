@@ -13,6 +13,7 @@ This index separates user-facing documentation from release prep, development lo
 - [Orchestration ladder](user/ORCHESTRATION_LADDER.md) — direct code, dispatch tables, HFSM/utility, `Llm.Call`, `Llm.Decide`, `MagiDecide`, human approval, and capability surfaces.
 - [Actuation policy](user/ACTUATION_POLICY.md) — policy-gated typed side effects and approval boundaries.
 - [Team coordination](user/TEAM_COORDINATION.md) — shared/team blackboard coordination patterns.
+- [TOML assets](user/ASSETS_TOML.md) — generic typed TOML asset loading, diagnostics, validators, symbolic references, and the Ariadne dialogue sample.
 
 ## Actuators
 
@@ -54,6 +55,7 @@ This index separates user-facing documentation from release prep, development lo
 - [Semantic Kernel Orchestration](samples/SAMPLE_SEMANTICKERNEL_ORCHESTRATION.md) — Microsoft-style orchestration loop implemented with Dominatus HFSM/utility/mailbox plus SK functions.
 - [`samples/Dominatus.Llm.ContextDogfood`](../samples/Dominatus.Llm.ContextDogfood) — context packets, loadouts, manifests, and PRIMER.context dogfood.
 - [`samples/Dominatus.Llm.DemoConsole`](../samples/Dominatus.Llm.DemoConsole) — `Llm.Call`, `Llm.Decide`, cassettes, provider clients, and replayable LLM demos.
+- [`samples/Dominatus.Assets.Toml.AriadneDialogue`](../samples/Dominatus.Assets.Toml.AriadneDialogue) — typed TOML loading and validation for Ariadne-style authored dialogue data.
 
 ## Game and simulation integration
 

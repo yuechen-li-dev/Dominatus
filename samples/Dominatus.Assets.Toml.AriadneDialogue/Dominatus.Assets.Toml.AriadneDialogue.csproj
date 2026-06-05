@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominatus.Assets.Toml\Dominatus.Assets.Toml.csproj" />
+    <ProjectReference Include="..\..\src\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="dialogue\*.toml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
