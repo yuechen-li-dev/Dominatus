@@ -3,59 +3,39 @@ using Dominatus.Assets.Toml.AriadneDialogue;
 
 Console.WriteLine("Dominatus.Assets.Toml Ariadne Dialogue Sample");
 
-var directory = Path.Combine(AppContext.BaseDirectory, "dialogue");
-var result = TomlAssetPackLoader.LoadDirectory<DialogueAsset>(
-    directory,
+var dialogueDirectory = Path.Combine(AppContext.BaseDirectory, "dialogue");
+var localizationPath = Path.Combine(AppContext.BaseDirectory, "localization", "en.csv");
+
+var packResult = TomlAssetPackLoader.LoadDirectory<DialogueAsset>(
+    dialogueDirectory,
     dialogue => new AssetId(dialogue.Id),
     new DialogueAssetValidator(),
     new DialogueAssetPackValidator());
 
-if (result.Pack is not { } pack)
+var localizationResult = SampleLocalizationCsvLoader.LoadFile(localizationPath);
+var diagnostics = new List<AssetDiagnostic>();
+diagnostics.AddRange(packResult.Diagnostics);
+diagnostics.AddRange(localizationResult.Diagnostics);
+
+if (packResult.Pack is not { } pack || localizationResult.Value is not { } localizationTable)
 {
-    PrintDiagnostics(result.Diagnostics);
+    PrintDiagnostics(diagnostics);
     Environment.ExitCode = 1;
     return;
 }
 
+diagnostics.AddRange(new DialogueLocalizationValidator(localizationTable).Validate(pack, new AssetValidationContext()));
+
 Console.WriteLine($"Loaded dialogue pack: {pack.Assets.Count} assets");
-Console.WriteLine($"Validation: {(result.Success ? "OK" : "FAILED")}");
+Console.WriteLine($"Loaded localization keys: {localizationTable.Count}");
+Console.WriteLine($"Validation: {(diagnostics.Any(d => d.Severity == AssetDiagnosticSeverity.Error) ? "FAILED" : "OK")}");
 Console.WriteLine();
 
-foreach (var entry in pack.Assets.Values.OrderBy(entry => entry.Id.ToString(), StringComparer.Ordinal))
+Console.Write(DialoguePreviewRenderer.Render(pack, localizationTable));
+
+if (diagnostics.Count > 0)
 {
-    var dialogue = entry.Asset;
-    Console.WriteLine(dialogue.Id);
-    Console.WriteLine($"Title: {dialogue.Title}");
-    Console.WriteLine($"Start: {dialogue.Start}");
-
-    foreach (var (nodeId, node) in dialogue.Nodes)
-    {
-        Console.WriteLine($"[{nodeId}] {node.Speaker}: {node.Text}");
-        if (!string.IsNullOrWhiteSpace(node.Condition))
-        {
-            Console.WriteLine($"condition: {node.Condition}");
-        }
-
-        foreach (var effect in node.Effects)
-        {
-            Console.WriteLine($"effect: {effect.Id}{(effect.Value is null ? string.Empty : $" = {effect.Value}")}");
-        }
-
-        foreach (var choice in node.Choices)
-        {
-            var target = string.IsNullOrWhiteSpace(choice.NextAsset)
-                ? choice.Next
-                : $"{choice.NextAsset}:{choice.NextNode}";
-            Console.WriteLine($"-> {choice.Id}: {choice.Text} [{target}]");
-        }
-    }
-
-    Console.WriteLine();
-}
-
-if (result.Diagnostics.Count > 0)
-{
-    PrintDiagnostics(result.Diagnostics);
+    PrintDiagnostics(diagnostics);
 }
 
 static void PrintDiagnostics(IReadOnlyList<AssetDiagnostic> diagnostics)

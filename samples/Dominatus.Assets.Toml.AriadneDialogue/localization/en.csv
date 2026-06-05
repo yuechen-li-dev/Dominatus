@@ -1,0 +1,11 @@
+id,text
+dialogue.blacksmith_intro.greeting,You look like someone who needs a blade.
+choice.blacksmith_intro.ask_work,Got any work?
+choice.blacksmith_intro.browse,Show me what you have.
+dialogue.blacksmith_intro.shop,"Iron, steel, and a few pieces I do not show strangers."
+choice.blacksmith_intro.leave,Maybe later.
+dialogue.blacksmith_intro.end,Keep your edge sharp.
+dialogue.north_road_job.offer,Bandits took a shipment on the north road.
+choice.north_road_job.accept,I'll look into it.
+choice.north_road_job.decline,That sounds dangerous.
+dialogue.north_road_job.end,Keep your edge sharp.

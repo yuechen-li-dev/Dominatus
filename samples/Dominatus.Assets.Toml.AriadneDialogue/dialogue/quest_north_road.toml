@@ -3,21 +3,25 @@ title = "North Road Job"
 start = "offer"
 
 [nodes.offer]
-speaker = "Blacksmith"
+speaker = "blacksmith"
+line = "dialogue.north_road_job.offer"
 text = "Bandits took a shipment on the north road. Bring back the steel and I'll owe you."
 
 [[nodes.offer.choices]]
 id = "accept"
+line = "choice.north_road_job.accept"
 text = "I'll look into it."
 next = "end"
 
 [[nodes.offer.choices]]
 id = "decline"
+line = "choice.north_road_job.decline"
 text = "That sounds dangerous."
 next = "end"
 
 [nodes.end]
-speaker = "Blacksmith"
+speaker = "blacksmith"
+line = "dialogue.north_road_job.end"
 text = "Keep your edge sharp."
 
 [[nodes.end.effects]]

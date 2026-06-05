@@ -394,6 +394,208 @@ public sealed class TomlAssetLoaderTests
         Assert.Equal("blacksmith_basic", effect.Value);
     }
 
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t")]
+    public void LocalizationKey_RejectsEmptyOrWhitespace(string value)
+    {
+        Assert.Throws<ArgumentException>(() => new LocalizationKey(value));
+    }
+
+    [Fact]
+    public void DictionaryLocalizationTable_ContainsAndTryGet()
+    {
+        var key = new LocalizationKey("dialogue.blacksmith_intro.greeting");
+        var table = new DictionaryLocalizationTable(new Dictionary<LocalizationKey, string> { [key] = "Hello" });
+
+        Assert.True(table.Contains(key));
+        Assert.True(table.TryGet(key, out var value));
+        Assert.Equal("Hello", value);
+        Assert.False(table.Contains(new LocalizationKey("dialogue.missing")));
+    }
+
+    [Fact]
+    public void LocalizationValidation_MissingKey_ReturnsDiagnosticWithKeyPathAndSpan()
+    {
+        var span = new AssetSourceSpan { SourcePath = "dialogue.toml", StartLine = 4, StartColumn = 1, EndLine = 4, EndColumn = 5 };
+        var table = new DictionaryLocalizationTable(new Dictionary<LocalizationKey, string>());
+
+        var diagnostic = LocalizationValidation.MissingLocalizationKey(table, new LocalizationKey("dialogue.missing"), "dialogue.toml", "nodes.start.line", span);
+
+        Assert.NotNull(diagnostic);
+        Assert.Equal("localization.missing_key", diagnostic.Code);
+        Assert.Equal("dialogue.toml", diagnostic.SourcePath);
+        Assert.Equal("nodes.start.line", diagnostic.KeyPath);
+        Assert.Same(span, diagnostic.Span);
+        Assert.Equal(4, diagnostic.Line);
+        Assert.Equal(1, diagnostic.Column);
+    }
+
+    [Fact]
+    public void DialogueLocalizationValidator_AcceptsKeysPresentInTable()
+    {
+        var result = LoadDialoguePack();
+        var table = LoadSampleLocalizationTable();
+
+        var diagnostics = new DialogueLocalizationValidator(table).Validate(result.Pack!, new AssetValidationContext());
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void DialogueLocalizationValidator_RejectsMissingNodeLineKey()
+    {
+        var result = TomlAssetLoader.LoadString<DialogueAsset>("""
+            id = "dialogue.test"
+            title = "Test"
+            start = "start"
+
+            [nodes.start]
+            speaker = "narrator"
+            line = "dialogue.test.missing"
+            text = "Fallback."
+            """, new DialogueAssetValidator(), new TomlAssetLoadOptions { SourcePath = "dialogue.toml" });
+        var pack = ToPack(result.Value!, "dialogue.toml", result.SourceMap);
+        var table = new DictionaryLocalizationTable(new Dictionary<LocalizationKey, string>());
+
+        var diagnostics = new DialogueLocalizationValidator(table).Validate(pack, new AssetValidationContext());
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("localization.missing_key", diagnostic.Code);
+        Assert.Equal("nodes.start.line", diagnostic.KeyPath);
+        Assert.Equal("dialogue.toml", diagnostic.SourcePath);
+        Assert.NotNull(diagnostic.Span);
+    }
+
+    [Fact]
+    public void DialogueLocalizationValidator_RejectsMissingChoiceLineKey()
+    {
+        var result = TomlAssetLoader.LoadString<DialogueAsset>("""
+            id = "dialogue.test"
+            title = "Test"
+            start = "start"
+
+            [nodes.start]
+            speaker = "narrator"
+            line = "dialogue.test.start"
+            text = "Fallback."
+
+            [[nodes.start.choices]]
+            id = "go"
+            line = "choice.test.missing"
+            text = "Go."
+            next = "end"
+
+            [nodes.end]
+            speaker = "narrator"
+            line = "dialogue.test.end"
+            text = "End."
+            """, new DialogueAssetValidator(), new TomlAssetLoadOptions { SourcePath = "dialogue.toml" });
+        var pack = ToPack(result.Value!, "dialogue.toml", result.SourceMap);
+        var table = new DictionaryLocalizationTable(new Dictionary<LocalizationKey, string>
+        {
+            [new LocalizationKey("dialogue.test.start")] = "Start.",
+            [new LocalizationKey("dialogue.test.end")] = "End."
+        });
+
+        var diagnostics = new DialogueLocalizationValidator(table).Validate(pack, new AssetValidationContext());
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("localization.missing_key", diagnostic.Code);
+        Assert.Equal("nodes.start.choices[0].line", diagnostic.KeyPath);
+        Assert.NotNull(diagnostic.Span);
+    }
+
+    [Fact]
+    public void DialogueLocalizationValidator_WarnsInlineTextWithoutLine()
+    {
+        var dialogue = new DialogueAsset
+        {
+            Id = "dialogue.test",
+            Title = "Test",
+            Start = "start",
+            Nodes = new Dictionary<string, DialogueNodeAsset>
+            {
+                ["start"] = new() { Speaker = "Narrator", Text = "Inline." }
+            }
+        };
+
+        var diagnostics = new DialogueAssetValidator().Validate(dialogue, new AssetValidationContext { SourcePath = "inline" });
+
+        Assert.Contains(diagnostics, d => d.Code == "dialogue.inline_text_only" && d.Severity == AssetDiagnosticSeverity.Warning && d.KeyPath == "nodes.start.text");
+    }
+
+    [Fact]
+    public void DialogueLocalizationValidator_ErrorsWhenLineAndTextMissing()
+    {
+        var dialogue = new DialogueAsset
+        {
+            Id = "dialogue.test",
+            Title = "Test",
+            Start = "start",
+            Nodes = new Dictionary<string, DialogueNodeAsset>
+            {
+                ["start"] = new() { Speaker = "Narrator" }
+            }
+        };
+
+        var diagnostics = new DialogueAssetValidator().Validate(dialogue, new AssetValidationContext { SourcePath = "inline" });
+
+        Assert.Contains(diagnostics, d => d.Code == "dialogue.missing_line_or_text" && d.Severity == AssetDiagnosticSeverity.Error && d.KeyPath == "nodes.start.line");
+    }
+
+    [Fact]
+    public void AriadneDialogueSample_LoadsLocalizationTable()
+    {
+        var table = LoadSampleLocalizationTable();
+
+        Assert.Equal(10, table.Count);
+        Assert.True(table.TryGet(new LocalizationKey("dialogue.blacksmith_intro.greeting"), out var text));
+        Assert.Equal("You look like someone who needs a blade.", text);
+    }
+
+    [Fact]
+    public void AriadneDialogueSample_ValidatesLocalizationKeys()
+    {
+        var result = LoadDialoguePack();
+        var table = LoadSampleLocalizationTable();
+
+        var diagnostics = new DialogueLocalizationValidator(table).Validate(result.Pack!, new AssetValidationContext());
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void AriadneDialogueSample_LocalizedPreviewUsesTableText()
+    {
+        var result = LoadDialoguePack();
+        var table = LoadSampleLocalizationTable();
+
+        var preview = DialoguePreviewRenderer.Render(result.Pack!, table);
+
+        Assert.Contains("[greeting] blacksmith: You look like someone who needs a blade. (dialogue.blacksmith_intro.greeting)", preview);
+        Assert.Contains("-> accept: I'll look into it. (choice.north_road_job.accept) [end]", preview);
+    }
+
+    [Fact]
+    public void TomlIsData_LocalizationKeysAreDataOnly()
+    {
+        var result = LoadDialoguePack();
+        var blacksmith = result.Pack!.Assets[new AssetId("dialogue.blacksmith_intro")].Asset;
+        var greeting = blacksmith.Nodes["greeting"];
+        var table = new DictionaryLocalizationTable(new Dictionary<LocalizationKey, string>
+        {
+            [new LocalizationKey(greeting.Line!)] = "Localized greeting from table."
+        });
+
+        Assert.Equal("dialogue.blacksmith_intro.greeting", greeting.Line);
+        Assert.Equal("You look like someone who needs a blade.", greeting.Text);
+        Assert.True(table.TryGet(new LocalizationKey(greeting.Line!), out var localized));
+        Assert.Equal("Localized greeting from table.", localized);
+    }
+
     private static TomlAssetLoadResult<DialogueAsset> LoadBlacksmith()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "dialogue", "blacksmith.toml");
@@ -406,6 +608,25 @@ public sealed class TomlAssetLoaderTests
             dialogue => new AssetId(dialogue.Id),
             new DialogueAssetValidator(),
             new DialogueAssetPackValidator());
+
+
+    private static DictionaryLocalizationTable LoadSampleLocalizationTable()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "localization", "en.csv");
+        var result = SampleLocalizationCsvLoader.LoadFile(path);
+        Assert.True(result.Success, FormatDiagnostics(result.Diagnostics));
+        Assert.NotNull(result.Value);
+        return result.Value;
+    }
+
+    private static AssetPack<DialogueAsset> ToPack(DialogueAsset asset, string sourcePath, TomlAssetSourceMap? sourceMap) =>
+        new()
+        {
+            Assets = new Dictionary<AssetId, AssetPackEntry<DialogueAsset>>
+            {
+                [new AssetId(asset.Id)] = new() { Id = new AssetId(asset.Id), Asset = asset, SourcePath = sourcePath, SourceMap = sourceMap }
+            }
+        };
 
     private static string WriteSimpleToml(string directory, string fileName, string id, string title)
     {

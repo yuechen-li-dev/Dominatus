@@ -3,22 +3,26 @@ title = "Blacksmith Introduction"
 start = "greeting"
 
 [nodes.greeting]
-speaker = "Blacksmith"
+speaker = "blacksmith"
+line = "dialogue.blacksmith_intro.greeting"
 text = "You look like someone who needs a blade."
 
 [[nodes.greeting.choices]]
 id = "ask_work"
+line = "choice.blacksmith_intro.ask_work"
 text = "Got any work?"
 next_asset = "dialogue.north_road_job"
 next_node = "offer"
 
 [[nodes.greeting.choices]]
 id = "browse"
+line = "choice.blacksmith_intro.browse"
 text = "Show me what you have."
 next = "shop"
 
 [nodes.shop]
-speaker = "Blacksmith"
+speaker = "blacksmith"
+line = "dialogue.blacksmith_intro.shop"
 text = "Iron, steel, and a few pieces I do not show strangers."
 condition = "can_trade_with_blacksmith"
 
@@ -28,9 +32,11 @@ value = "blacksmith_basic"
 
 [[nodes.shop.choices]]
 id = "leave"
+line = "choice.blacksmith_intro.leave"
 text = "Maybe later."
 next = "end"
 
 [nodes.end]
-speaker = "Blacksmith"
+speaker = "blacksmith"
+line = "dialogue.blacksmith_intro.end"
 text = "Keep your edge sharp."
