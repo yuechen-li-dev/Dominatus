@@ -32,7 +32,11 @@ public sealed record DialogueChoiceAsset
 
     public required string Text { get; init; }
 
-    public required string Next { get; init; }
+    public string? Next { get; init; }
+
+    public string? NextAsset { get; init; }
+
+    public string? NextNode { get; init; }
 }
 
 public sealed record DialogueEffectAsset

@@ -7,7 +7,7 @@
     <PackageId>Dominatus.Assets.Toml</PackageId>
     <Version>0.2.1</Version>
     <Authors>Dominatus Contributors</Authors>
-    <Description>Generic typed TOML asset loading, diagnostics, and validation hooks for designer-authored Dominatus data.</Description>
+    <Description>Generic typed TOML asset and asset-pack loading, diagnostics, and validation hooks for designer-authored Dominatus data.</Description>
     <PackageTags>toml;assets;authoring;game-ai;simulation;dialogue</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>

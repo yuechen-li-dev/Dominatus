@@ -22,7 +22,7 @@
   <ItemGroup>
     <Compile Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\DialogueAssets.cs" Link="AriadneDialogue\DialogueAssets.cs" />
     <Compile Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\DialogueAssetValidator.cs" Link="AriadneDialogue\DialogueAssetValidator.cs" />
-    <None Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\dialogue\blacksmith.toml" Link="dialogue\blacksmith.toml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\dialogue\*.toml" Link="dialogue\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,39 +3,51 @@ using Dominatus.Assets.Toml.AriadneDialogue;
 
 Console.WriteLine("Dominatus.Assets.Toml Ariadne Dialogue Sample");
 
-var path = Path.Combine(AppContext.BaseDirectory, "dialogue", "blacksmith.toml");
-var result = TomlAssetLoader.LoadFile<DialogueAsset>(path, new DialogueAssetValidator());
+var directory = Path.Combine(AppContext.BaseDirectory, "dialogue");
+var result = TomlAssetPackLoader.LoadDirectory<DialogueAsset>(
+    directory,
+    dialogue => new AssetId(dialogue.Id),
+    new DialogueAssetValidator(),
+    new DialogueAssetPackValidator());
 
-if (result.Value is not { } dialogue)
+if (result.Pack is not { } pack)
 {
     PrintDiagnostics(result.Diagnostics);
     Environment.ExitCode = 1;
     return;
 }
 
-Console.WriteLine($"Loaded: {dialogue.Id}");
-Console.WriteLine($"Title: {dialogue.Title}");
-Console.WriteLine($"Start: {dialogue.Start}");
-Console.WriteLine($"Nodes: {dialogue.Nodes.Count}");
+Console.WriteLine($"Loaded dialogue pack: {pack.Assets.Count} assets");
 Console.WriteLine($"Validation: {(result.Success ? "OK" : "FAILED")}");
 Console.WriteLine();
 
-foreach (var (nodeId, node) in dialogue.Nodes)
+foreach (var entry in pack.Assets.Values.OrderBy(entry => entry.Id.ToString(), StringComparer.Ordinal))
 {
-    Console.WriteLine($"[{nodeId}] {node.Speaker}: {node.Text}");
-    if (!string.IsNullOrWhiteSpace(node.Condition))
-    {
-        Console.WriteLine($"condition: {node.Condition}");
-    }
+    var dialogue = entry.Asset;
+    Console.WriteLine(dialogue.Id);
+    Console.WriteLine($"Title: {dialogue.Title}");
+    Console.WriteLine($"Start: {dialogue.Start}");
 
-    foreach (var effect in node.Effects)
+    foreach (var (nodeId, node) in dialogue.Nodes)
     {
-        Console.WriteLine($"effect: {effect.Id}{(effect.Value is null ? string.Empty : $" = {effect.Value}")}");
-    }
+        Console.WriteLine($"[{nodeId}] {node.Speaker}: {node.Text}");
+        if (!string.IsNullOrWhiteSpace(node.Condition))
+        {
+            Console.WriteLine($"condition: {node.Condition}");
+        }
 
-    foreach (var choice in node.Choices)
-    {
-        Console.WriteLine($"-> {choice.Id}: {choice.Text} [{choice.Next}]");
+        foreach (var effect in node.Effects)
+        {
+            Console.WriteLine($"effect: {effect.Id}{(effect.Value is null ? string.Empty : $" = {effect.Value}")}");
+        }
+
+        foreach (var choice in node.Choices)
+        {
+            var target = string.IsNullOrWhiteSpace(choice.NextAsset)
+                ? choice.Next
+                : $"{choice.NextAsset}:{choice.NextNode}";
+            Console.WriteLine($"-> {choice.Id}: {choice.Text} [{target}]");
+        }
     }
 
     Console.WriteLine();

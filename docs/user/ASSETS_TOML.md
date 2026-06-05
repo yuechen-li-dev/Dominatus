@@ -1,6 +1,6 @@
 # Dominatus.Assets.Toml
 
-`Dominatus.Assets.Toml` is the M0 TOML asset substrate for designer-authored Dominatus data. It loads TOML files into typed C# records/classes, returns structured diagnostics, and lets consumers add validation without turning authored data into executable behavior.
+`Dominatus.Assets.Toml` is a TOML asset substrate for designer-authored Dominatus data. It loads TOML files into typed C# records/classes, returns structured diagnostics, supports small multi-file asset packs, and lets consumers add validation without turning authored data into executable behavior.
 
 ## Why TOML assets?
 
@@ -23,7 +23,9 @@ condition = "can_accept_bandit_quest"
 effect = "offer_bandit_quest"
 ```
 
-Runtime C# code is responsible for registering, resolving, evaluating, and executing those symbols later. The TOML loader does not include an expression language, scripting engine, command runner, or arbitrary evaluation path.
+Runtime C# code is responsible for registering, resolving, evaluating, and executing those symbols later. The TOML loader does not include an expression language, scripting engine, command runner, arbitrary evaluation path, hot reload system, editor, engine integration, or runtime side effects.
+
+Cross-asset references are symbolic IDs. Loading a pack can validate that a referenced ID exists, but it does not execute a transition, run a script, or resolve behavior.
 
 ## Typed records and classes
 
@@ -39,11 +41,11 @@ public sealed record DialogueAsset
 }
 ```
 
-Tomlyn performs TOML parsing and model binding. By default, Tomlyn maps PascalCase property names to snake_case/TOML-style keys, so `StartNode` maps to `start_node`; simple names like `Id`, `Title`, and `Start` map to `id`, `title`, and `start`.
+Tomlyn performs TOML parsing and model binding. By default, Tomlyn maps PascalCase property names to snake_case/TOML-style keys, so `NextAsset` maps to `next_asset`; simple names like `Id`, `Title`, and `Start` map to `id`, `title`, and `start`.
 
-## Loader API
+## Single-file loader API
 
-The core entry point is `TomlAssetLoader`:
+The single-file entry point remains `TomlAssetLoader`:
 
 ```csharp
 var result = TomlAssetLoader.LoadFile<MyAsset>(
@@ -59,7 +61,7 @@ if (!result.Success)
 }
 ```
 
-M0 provides:
+Core primitives include:
 
 - `AssetId` for non-empty symbolic asset IDs;
 - `AssetRef<TAsset>` for typed symbolic references;
@@ -68,63 +70,186 @@ M0 provides:
 - `TomlAssetLoadOptions` for source path, strict diagnostics, and Tomlyn model options;
 - `IAssetValidator<T>` and `AssetValidationContext` for consumer-defined structural checks.
 
-## Diagnostics
+`AssetId` is value-based and case-sensitive. `dialogue.blacksmith_intro` and `dialogue.Blacksmith_Intro` are different IDs and different dictionary keys.
 
-Ordinary invalid authored TOML should not crash the load path. Parse and binding failures are returned as diagnostics with stable high-level codes such as:
+## M1 asset packs
 
-- `TOML_PARSE` for Tomlyn parse/validation diagnostics;
-- `TOML_BIND` for Tomlyn model binding diagnostics;
-- `TOML_BIND_EXCEPTION` for expected binding exceptions converted into asset diagnostics;
-- consumer validator codes such as `DIALOGUE_START_MISSING`.
-
-When Tomlyn supplies source positions, diagnostics include line and column numbers. `LoadFile` uses the loaded path as the source path unless an explicit `TomlAssetLoadOptions.SourcePath` is provided.
-
-## Validators
-
-Validation is intentionally separate from parsing and binding. Consumers define structural rules for their own asset types:
+M1 adds small asset-pack loading for directories and explicit file lists:
 
 ```csharp
-public sealed class MyAssetValidator : IAssetValidator<MyAsset>
+var result = TomlAssetPackLoader.LoadDirectory<DialogueAsset>(
+    "content/dialogue",
+    dialogue => new AssetId(dialogue.Id),
+    new DialogueAssetValidator(),
+    new DialogueAssetPackValidator());
+```
+
+The generic pack loader takes a required `Func<TAsset, AssetId> getId` because it does not assume every asset type has an `Id` property. It returns `AssetPackLoadResult<TAsset>`:
+
+- `Pack` contains loaded entries when a pack could be constructed;
+- `Diagnostics` contains parse, bind, per-asset validation, duplicate-ID, file, and pack-level validation diagnostics;
+- `Success` is `false` when any `Error` diagnostic exists.
+
+Pack data is held in `AssetPack<TAsset>`:
+
+```csharp
+if (result.Pack.TryGet(new AssetId("dialogue.blacksmith_intro"), out var dialogue))
 {
-    public IReadOnlyList<AssetDiagnostic> Validate(MyAsset asset, AssetValidationContext context)
+    Console.WriteLine(dialogue.Title);
+}
+
+if (result.Pack.TryGetEntry(new AssetId("dialogue.blacksmith_intro"), out var entry))
+{
+    Console.WriteLine(entry.SourcePath);
+}
+```
+
+Each `AssetPackEntry<TAsset>` stores:
+
+- `Id`;
+- typed `Asset`;
+- `SourcePath`.
+
+### Directory loading
+
+`LoadDirectory` validates that the directory exists, enumerates files using `AssetPackLoadOptions.SearchPattern` (`*.toml` by default), and recurses into subdirectories by default:
+
+```csharp
+var result = TomlAssetPackLoader.LoadDirectory<MyAsset>(
+    "content/assets",
+    asset => new AssetId(asset.Id),
+    options: new AssetPackLoadOptions
     {
-        return string.IsNullOrWhiteSpace(asset.Id)
-            ? [AssetValidation.Required("id", context.SourcePath)]
-            : [];
+        SearchPattern = "*.toml",
+        RecurseSubdirectories = true,
+        ContinueOnError = true
+    });
+```
+
+A missing directory returns an error diagnostic with code `asset.directory_missing` and no pack.
+
+### Explicit file loading
+
+`LoadFiles` loads exactly the paths supplied by the caller. This is useful for manifests, editor selections, tests, or build tooling:
+
+```csharp
+var result = TomlAssetPackLoader.LoadFiles<MyAsset>(
+    manifest.Paths,
+    asset => new AssetId(asset.Id),
+    new MyAssetValidator());
+```
+
+The loader does not impose a manifest file format. A typed manifest can be represented in the caller's C# code or loaded separately and passed as an explicit file list.
+
+### ContinueOnError
+
+`AssetPackLoadOptions.ContinueOnError` defaults to `true`.
+
+When `true`, the pack loader keeps loading other files after a file parse/bind/validation error. Valid assets remain inspectable in the returned pack, while `Success` is `false` because diagnostics contain errors.
+
+When `false`, the loader stops after the first error it observes. The returned pack contains only entries loaded before that stopping point. Pack-level validation is skipped if loading already found an error and `ContinueOnError` is `false`.
+
+### Duplicate asset IDs
+
+Duplicate IDs produce an `Error` diagnostic with code `asset.duplicate_id`. The message includes the duplicated ID, the duplicate source path, and the first source path.
+
+The pack keeps the first asset for inspection and does not overwrite it. `Success` is `false` because the pack is ambiguous from an authoring perspective.
+
+## Source-path-aware diagnostics
+
+Single-file and pack loaders pass source paths into parse, bind, and validator diagnostics. Consumer validators should use `context.SourcePath` when creating diagnostics:
+
+```csharp
+AssetValidation.Error(
+    "DIALOGUE_CHOICE_TARGET_MISSING",
+    "Choice points to a missing node.",
+    context.SourcePath);
+```
+
+Pack-level validators should use the referring entry's `SourcePath`, so missing cross-asset references point at the asset that contains the bad reference.
+
+## Pack validators and cross-asset references
+
+Per-asset validators check rules that only require one asset, such as required fields and same-file graph references. Pack validators check relationships across loaded assets:
+
+```csharp
+public sealed class DialogueAssetPackValidator : IAssetPackValidator<DialogueAsset>
+{
+    public IReadOnlyList<AssetDiagnostic> Validate(
+        AssetPack<DialogueAsset> pack,
+        AssetValidationContext context)
+    {
+        // Inspect symbolic IDs such as choice.NextAsset and report diagnostics.
     }
 }
 ```
 
-Validators are the correct place to check references, required domain fields, duplicate IDs, graph reachability, or symbol naming conventions. They should still treat symbolic conditions/effects as data and leave behavior to runtime C# systems.
+`AssetPackValidation.MissingReference` provides a small helper for common missing-asset checks:
 
-## Ariadne dialogue sample
+```csharp
+var diagnostic = AssetPackValidation.MissingReference(
+    pack,
+    new AssetId(choice.NextAsset),
+    entry.SourcePath,
+    "nodes.greeting.choices[ask_work].next_asset");
+```
 
-The first consumer sample is `samples/Dominatus.Assets.Toml.AriadneDialogue`. It loads `dialogue/blacksmith.toml` into typed dialogue records and validates graph structure:
+Validators inspect `AssetRef<TAsset>`, `AssetId`, or string ID values. They report missing referenced assets and optionally domain-specific sub-targets, such as a missing node inside a target dialogue. They still do not execute transitions or run authored code.
 
-- dialogue ID/title/start;
-- non-empty node dictionary;
-- start node exists;
-- every choice target exists;
-- node speaker/text are present;
-- choice id/text/next are present;
-- duplicate choice IDs within a node are rejected;
-- symbolic conditions and effects are loaded as strings only.
+## Multi-file Ariadne dialogue sample
 
-The sample currently demonstrates the authored data load/validation path. It references Ariadne as the intended dialogue authoring/runtime ecosystem, but a runtime bridge from TOML dialogue records into Ariadne execution primitives is deferred until that mapping can be done without coupling this generic TOML package to Ariadne-specific behavior.
+The sample project `samples/Dominatus.Assets.Toml.AriadneDialogue` loads every TOML file in its `dialogue` folder as one dialogue pack.
+
+Example cross-asset dialogue reference:
+
+```toml
+id = "dialogue.blacksmith_intro"
+title = "Blacksmith Introduction"
+start = "greeting"
+
+[nodes.greeting]
+speaker = "Blacksmith"
+text = "You look like someone who needs a blade."
+
+[[nodes.greeting.choices]]
+id = "ask_work"
+text = "Got any work?"
+next_asset = "dialogue.north_road_job"
+next_node = "offer"
+```
+
+The target dialogue lives in a different TOML file:
+
+```toml
+id = "dialogue.north_road_job"
+title = "North Road Job"
+start = "offer"
+
+[nodes.offer]
+speaker = "Blacksmith"
+text = "Bandits took a shipment on the north road."
+```
+
+Dialogue validation rules are split by scope:
+
+- `DialogueAssetValidator` checks required fields, local start nodes, duplicate choice IDs within a node, local `next` targets, and whether cross-asset choices provide `next_node`.
+- `DialogueAssetPackValidator` checks that `next_asset` exists and that `next_node` exists inside the target dialogue asset.
+
+The sample output includes loaded asset count, validation status, each asset ID/title/start, and local or cross-asset choice targets.
 
 ## Aurelian and engine use
 
 `Dominatus.Assets.Toml` is intended to support Dominatus/Aurelian-style authored data in game and simulation projects. Engine integrations should consume typed assets after loading and validation, then map those assets into engine-specific runtime systems, content databases, or authoring workflows outside this package.
 
-## Non-goals for M0
+## Non-goals
 
-M0 does not include:
+This package does not include:
 
 - scripting;
 - expression languages;
 - executable TOML;
 - node graph editors;
-- hot reload;
+- hot reload or file watching;
 - editor UI;
 - Godot/MonoGame/Stride integration;
 - Aurelian dependencies;
@@ -138,10 +263,10 @@ M0 does not include:
 
 Likely follow-up areas include:
 
-- asset packs and manifests;
+- richer typed manifest conventions;
 - richer source spans;
 - localization-friendly text extraction;
-- hot reload/watch-mode support;
+- optional watch-mode support outside the core loader;
 - Aurelian integration;
 - Ariadne dialogue runtime bridge;
 - broader sample asset catalogs.
