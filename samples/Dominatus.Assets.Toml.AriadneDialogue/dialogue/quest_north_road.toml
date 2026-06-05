@@ -7,6 +7,10 @@ speaker = "blacksmith"
 line = "dialogue.north_road_job.offer"
 text = "Bandits took a shipment on the north road. Bring back the steel and I'll owe you."
 
+[[nodes.offer.effects]]
+id = "offer_quest"
+value = "north_road_bandits"
+
 [[nodes.offer.choices]]
 id = "accept"
 line = "choice.north_road_job.accept"
@@ -23,7 +27,3 @@ next = "end"
 speaker = "blacksmith"
 line = "dialogue.north_road_job.end"
 text = "Keep your edge sharp."
-
-[[nodes.end.effects]]
-id = "offer_quest"
-value = "north_road_bandits"

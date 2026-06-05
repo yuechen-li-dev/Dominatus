@@ -16,6 +16,7 @@ next_node = "offer"
 
 [[nodes.greeting.choices]]
 id = "browse"
+condition = "can_trade_with_blacksmith"
 line = "choice.blacksmith_intro.browse"
 text = "Show me what you have."
 next = "shop"

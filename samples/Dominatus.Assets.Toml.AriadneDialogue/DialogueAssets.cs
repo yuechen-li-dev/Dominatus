@@ -41,6 +41,10 @@ public sealed record DialogueChoiceAsset
     public string? NextAsset { get; init; }
 
     public string? NextNode { get; init; }
+
+    public string? Condition { get; init; }
+
+    public List<DialogueEffectAsset> Effects { get; init; } = [];
 }
 
 public sealed record DialogueEffectAsset

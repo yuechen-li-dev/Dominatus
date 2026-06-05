@@ -1,11 +1,58 @@
 # Dominatus.Assets.Toml Ariadne Dialogue Sample
 
-This sample demonstrates a small multi-file dialogue asset pack loaded by `Dominatus.Assets.Toml` with M3 localization-key validation.
+This sample demonstrates a small multi-file dialogue asset pack loaded by `Dominatus.Assets.Toml` and bridged into an Ariadne-shaped runtime traversal.
+
+```text
+TOML dialogue asset pack
+-> typed DialogueAsset records
+-> validation
+-> localization resolution
+-> runtime graph
+-> deterministic playthrough
+```
+
+The bridge is sample-local on purpose. `Dominatus.Assets.Toml` remains a generic TOML asset substrate, while Ariadne-specific records such as `DialogueRuntimeGraph`, `DialogueRuntimeNode`, `DialogueRuntimeChoice`, `DialogueConditionRegistry`, `DialogueEffectRegistry`, and `DialogueTraversal` live in this sample.
 
 ## Run
 
 ```bash
 dotnet run --project samples/Dominatus.Assets.Toml.AriadneDialogue/Dominatus.Assets.Toml.AriadneDialogue.csproj --framework net10.0
+```
+
+Useful options:
+
+- `--preview` also prints the localized asset-pack preview.
+- `--start dialogue.blacksmith_intro:greeting` starts at an explicit runtime address.
+- `--interactive` is accepted for CLI shape, but M4 still falls back to deterministic scripted traversal so tests and docs do not require console input.
+
+## Expected scripted path
+
+The default playthrough starts at `dialogue.blacksmith_intro:greeting`, chooses `ask_work`, crosses to `dialogue.north_road_job:offer`, runs `offer_quest north_road_bandits`, chooses `accept`, and completes at `dialogue.north_road_job:end`.
+
+Example output shape:
+
+```text
+Dominatus.Assets.Toml Ariadne Dialogue Runtime Bridge
+Loaded dialogue pack: 2 assets
+Validation: OK
+
+Start: dialogue.blacksmith_intro:greeting
+
+blacksmith: You look like someone who needs a blade.
+1. Got any work?
+2. Show me what you have.
+   Chosen: ask_work
+
+blacksmith: Bandits took a shipment on the north road.
+Effect: offer_quest north_road_bandits
+
+1. I'll look into it.
+2. That sounds dangerous.
+   Chosen: accept
+
+blacksmith: Keep your edge sharp.
+
+Traversal complete.
 ```
 
 ## Files loaded
@@ -32,22 +79,23 @@ line = "dialogue.blacksmith_intro.greeting"
 text = "You look like someone who needs a blade."
 ```
 
-The localization CSV owns the preview/shipped string values:
+The localization CSV owns the preview/runtime string values:
 
 ```csv
 id,text
 dialogue.blacksmith_intro.greeting,You look like someone who needs a blade.
 ```
 
-The sample preview resolves text through `ILocalizationTable` and prints the key beside the localized string. If a key is missing, the preview can fall back to `text`, but validation reports `localization.missing_key` first.
+The runtime bridge resolves text through `ILocalizationTable`. If a key is missing but fallback `text` exists, the bridge can use fallback text and emit `dialogue.localization_fallback`; the separate localization validator can still make missing keys an error for build gates.
 
 ## Validation performed
 
-The sample runs three validation passes:
+The sample runs validation in layers:
 
 1. `DialogueAssetValidator` checks single-asset structure, local node targets, and line/text presence.
 2. `DialogueAssetPackValidator` checks cross-asset choice targets.
-3. `DialogueLocalizationValidator` checks that every authored `line` key exists in the localization table.
+3. `DialogueLocalizationValidator` checks that authored `line` keys exist in the localization table.
+4. `DialogueRuntimeBridge.ValidateRegistrySymbols` checks that every condition/effect symbol has a C# handler before traversal.
 
 A node or choice with fallback `text` but no `line` emits `dialogue.inline_text_only` as a warning. A node or choice with neither `line` nor `text` emits `dialogue.missing_line_or_text` as an error.
 
@@ -56,7 +104,7 @@ A node or choice with fallback `text` but no `line` emits `dialogue.inline_text_
 Choices can point to a node in the same dialogue:
 
 ```toml
-next = "end"
+next = "shop"
 ```
 
 Choices can also point symbolically to a node in another dialogue asset:
@@ -66,9 +114,36 @@ next_asset = "dialogue.north_road_job"
 next_node = "offer"
 ```
 
-## TOML is data
+The runtime bridge normalizes both forms to `DialogueAddress(AssetId AssetId, string NodeId)` and fails clearly if invalid data slips past validation.
 
-The sample does not execute TOML, evaluate expressions, run scripts, or localize speaker names. Designers can edit TOML IDs, line keys, fallback text, choices, conditions, and effects as authored data. C# validators define what those fields mean structurally, the localization table supplies strings, and a future runtime bridge would decide how to interpret symbolic conditions/effects or perform dialogue transitions.
+## Conditions and effects are symbolic
+
+TOML names symbols only:
+
+```toml
+condition = "can_trade_with_blacksmith"
+
+[[nodes.offer.effects]]
+id = "offer_quest"
+value = "north_road_bandits"
+```
+
+C# owns interpretation:
+
+```csharp
+conditions.Register("can_trade_with_blacksmith", ctx => true);
+effects.Register("offer_quest", (ctx, value) => log.Add($"offer quest {value}"));
+```
+
+False conditions hide conditioned choices or prevent a conditioned node from being entered. Registered effects run when entering a node or taking a choice. Unknown condition/effect IDs are diagnostics, not dynamically evaluated code.
+
+## Ariadne/OptFlow integration status
+
+`Ariadne.OptFlow` currently exposes dialogue actuation primitives (`Diag.Line`, `Diag.Ask`, `Diag.Choose`, and `DiagChoice`) that are authored inside C# HFSM state delegates. It does not yet expose a standalone data-driven runtime dialogue graph API that TOML can map into directly. M4 therefore uses a sample-local Ariadne-compatible traversal adapter and projects runtime choices to Ariadne `DiagChoice` values where useful. Direct Ariadne runtime graph integration is deferred until that API exists.
+
+## TOML is data: no DSL, no VM
+
+The sample does not execute TOML, evaluate expressions, run scripts, define a custom dialogue DSL, or embed a Yarn-style VM. Designers author IDs, line keys, fallback text, choices, conditions, and effects as data. C# validators and registries decide what symbols mean, and Ariadne/Dominatus-style runtime traversal owns state and side effects.
 
 ## Diagnostics
 
