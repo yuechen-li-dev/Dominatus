@@ -5,6 +5,45 @@ namespace Dominatus.Assets.Toml.Tests;
 
 public sealed class TomlAssetLoaderTests
 {
+
+    [Fact]
+    public void AssetDiagnosticFormatter_FormatsPathLineColumnAndKeyPath()
+    {
+        var diagnostic = new AssetDiagnostic
+        {
+            Severity = AssetDiagnosticSeverity.Error,
+            Code = "asset.missing_reference",
+            Message = "Missing asset reference 'dialogue.missing'.",
+            SourcePath = "dialogue/blacksmith.toml",
+            Line = 12,
+            Column = 5,
+            Span = new AssetSourceSpan
+            {
+                SourcePath = "dialogue/blacksmith.toml",
+                StartLine = 12,
+                StartColumn = 5,
+                EndLine = 12,
+                EndColumn = 15
+            },
+            KeyPath = "nodes.greeting.choices[0].next_asset"
+        };
+
+        var formatted = AssetDiagnosticFormatter.Format(diagnostic);
+
+        Assert.Equal($"error asset.missing_reference: Missing asset reference 'dialogue.missing'.{Environment.NewLine}at dialogue/blacksmith.toml:12:5{Environment.NewLine}key: nodes.greeting.choices[0].next_asset", formatted);
+    }
+
+    [Fact]
+    public void DiagnosticFormatter_FormatMany_StableOrdering()
+    {
+        var first = AssetValidation.Warning("asset.first", "First.", "a.toml");
+        var second = AssetValidation.Error("asset.second", "Second.", "b.toml", keyPath: "id");
+
+        var formatted = AssetDiagnosticFormatter.FormatMany([first, second]);
+
+        Assert.Equal($"warning asset.first: First.{Environment.NewLine}at a.toml{Environment.NewLine}error asset.second: Second.{Environment.NewLine}at b.toml{Environment.NewLine}key: id", formatted);
+    }
+
     [Fact]
     public void TomlAssetLoader_LoadString_MapsValidTomlToRecord()
     {
@@ -28,7 +67,33 @@ public sealed class TomlAssetLoaderTests
 
         Assert.False(result.Success);
         Assert.Null(result.Value);
-        Assert.Contains(result.Diagnostics, d => d.Severity == AssetDiagnosticSeverity.Error && d.Code == "TOML_PARSE");
+        Assert.Contains(result.Diagnostics, d => d.Severity == AssetDiagnosticSeverity.Error && d.Code == "toml.parse");
+    }
+
+    [Fact]
+    public void TomlAssetLoader_InvalidToml_DiagnosticHasSourceSpanOrLineColumn()
+    {
+        var result = TomlAssetLoader.LoadString<SimpleAsset>("id = \"unterminated", new TomlAssetLoadOptions { SourcePath = "broken.toml" });
+
+        var diagnostic = Assert.Single(result.Diagnostics.Where(d => d.Code == "toml.parse"));
+        Assert.Equal("broken.toml", diagnostic.SourcePath);
+        Assert.True(
+            diagnostic.Span is { StartLine: not null, StartColumn: not null } ||
+            diagnostic is { Line: not null, Column: not null });
+    }
+
+    [Fact]
+    public void TomlAssetLoader_BindError_DiagnosticHasSourcePathAndKeyPathWhenAvailable()
+    {
+        var result = TomlAssetLoader.LoadString<StrictAsset>("""
+            id = "asset.one"
+            count = "not a number"
+            """, new TomlAssetLoadOptions { SourcePath = "strict.toml" });
+
+        Assert.False(result.Success);
+        var diagnostic = result.Diagnostics.First(d => d.Code == "toml.bind");
+        Assert.Equal("strict.toml", diagnostic.SourcePath);
+        Assert.True(string.IsNullOrWhiteSpace(diagnostic.KeyPath) || diagnostic.KeyPath == "count");
     }
 
     [Fact]
@@ -117,7 +182,7 @@ public sealed class TomlAssetLoaderTests
 
         var diagnostics = new DialogueAssetValidator().Validate(dialogue, new AssetValidationContext { SourcePath = "inline" });
 
-        Assert.Contains(diagnostics, d => d.Code == "DIALOGUE_START_MISSING");
+        Assert.Contains(diagnostics, d => d.Code == "dialogue.missing_start_node" && d.KeyPath == "start");
     }
 
     [Fact]
@@ -141,7 +206,7 @@ public sealed class TomlAssetLoaderTests
 
         var diagnostics = new DialogueAssetValidator().Validate(dialogue, new AssetValidationContext { SourcePath = "inline" });
 
-        Assert.Contains(diagnostics, d => d.Code == "DIALOGUE_CHOICE_TARGET_MISSING");
+        Assert.Contains(diagnostics, d => d.Code == "dialogue.missing_choice_target" && d.KeyPath == "nodes.start.choices[0].next");
     }
 
     [Fact]
@@ -190,6 +255,7 @@ public sealed class TomlAssetLoaderTests
         Assert.Contains(first, diagnostic.Message);
         Assert.Contains(second, diagnostic.Message);
         Assert.Equal(second, diagnostic.SourcePath);
+        Assert.Equal("id", diagnostic.KeyPath);
         Assert.NotNull(result.Pack);
         Assert.Single(result.Pack.Assets);
         Assert.Equal("First", result.Pack.Assets[new AssetId("asset.same")].Asset.Title);
@@ -208,7 +274,7 @@ public sealed class TomlAssetLoaderTests
         Assert.False(result.Success);
         Assert.NotNull(result.Pack);
         Assert.True(result.Pack.TryGet(new AssetId("asset.valid"), out _));
-        Assert.Contains(result.Diagnostics, d => d.Code == "TOML_PARSE" && d.SourcePath == invalid);
+        Assert.Contains(result.Diagnostics, d => d.Code == "toml.parse" && d.SourcePath == invalid);
     }
 
     [Fact]
@@ -227,7 +293,7 @@ public sealed class TomlAssetLoaderTests
         Assert.False(result.Success);
         Assert.NotNull(result.Pack);
         Assert.Empty(result.Pack.Assets);
-        Assert.Contains(result.Diagnostics, d => d.Code == "TOML_PARSE" && d.SourcePath == invalid);
+        Assert.Contains(result.Diagnostics, d => d.Code == "toml.parse" && d.SourcePath == invalid);
     }
 
     [Fact]
@@ -259,8 +325,9 @@ public sealed class TomlAssetLoaderTests
         var diagnostic = AssetPackValidation.MissingReference(pack, new AssetId("asset.missing"), "source.toml", "target");
 
         Assert.NotNull(diagnostic);
-        Assert.Equal("asset.reference_missing", diagnostic.Code);
+        Assert.Equal("asset.missing_reference", diagnostic.Code);
         Assert.Equal("source.toml", diagnostic.SourcePath);
+        Assert.Equal("target", diagnostic.KeyPath);
     }
 
     [Fact]
@@ -281,7 +348,7 @@ public sealed class TomlAssetLoaderTests
         var result = LoadDialoguePack();
 
         Assert.True(result.Success, FormatDiagnostics(result.Diagnostics));
-        Assert.DoesNotContain(result.Diagnostics, d => d.Code is "DIALOGUE_CHOICE_ASSET_MISSING" or "DIALOGUE_CHOICE_ASSET_NODE_MISSING");
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code is "dialogue.missing_choice_asset" or "dialogue.missing_choice_asset_node");
     }
 
     [Fact]
@@ -293,7 +360,7 @@ public sealed class TomlAssetLoaderTests
         var result = LoadDialoguePack(temp.Path);
 
         Assert.False(result.Success);
-        Assert.Contains(result.Diagnostics, d => d.Code == "DIALOGUE_CHOICE_ASSET_MISSING" && d.SourcePath!.EndsWith("source.toml", StringComparison.Ordinal));
+        Assert.Contains(result.Diagnostics, d => d.Code == "dialogue.missing_choice_asset" && d.SourcePath!.EndsWith("source.toml", StringComparison.Ordinal) && d.KeyPath == "nodes.start.choices[0].next_asset");
     }
 
     [Fact]
@@ -306,7 +373,7 @@ public sealed class TomlAssetLoaderTests
         var result = LoadDialoguePack(temp.Path);
 
         Assert.False(result.Success);
-        Assert.Contains(result.Diagnostics, d => d.Code == "DIALOGUE_CHOICE_ASSET_NODE_MISSING" && d.SourcePath!.EndsWith("source.toml", StringComparison.Ordinal));
+        Assert.Contains(result.Diagnostics, d => d.Code == "dialogue.missing_choice_asset_node" && d.SourcePath!.EndsWith("source.toml", StringComparison.Ordinal) && d.KeyPath == "nodes.start.choices[0].next_node");
     }
 
     [Fact]
@@ -385,7 +452,7 @@ public sealed class TomlAssetLoaderTests
     private static TempDirectory CreateTempDirectory() => new(Path.Combine(Path.GetTempPath(), $"dominatus-assets-{Guid.NewGuid():N}"));
 
     private static string FormatDiagnostics(IEnumerable<AssetDiagnostic> diagnostics) =>
-        string.Join(Environment.NewLine, diagnostics.Select(d => $"{d.Severity} {d.Code}: {d.Message} ({d.SourcePath})"));
+        AssetDiagnosticFormatter.FormatMany(diagnostics);
 
     public sealed record SimpleAsset
     {
@@ -394,6 +461,13 @@ public sealed class TomlAssetLoaderTests
         public required string Title { get; init; }
 
         public int Score { get; init; }
+    }
+
+    public sealed record StrictAsset
+    {
+        public required string Id { get; init; }
+
+        public required int Count { get; init; }
     }
 
     public sealed record ReferenceAsset
@@ -407,7 +481,7 @@ public sealed class TomlAssetLoaderTests
         {
             return asset.Target == "known.node"
                 ? []
-                : [AssetValidation.Error("TEST_REFERENCE_MISSING", $"Target '{asset.Target}' does not exist.", context.SourcePath)];
+                : [AssetValidation.Error("TEST_REFERENCE_MISSING", $"Target '{asset.Target}' does not exist.", context.SourcePath, keyPath: "target", span: context.GetSpan("target"))];
         }
     }
 

@@ -6,5 +6,7 @@ public sealed record TomlAssetLoadResult<T>
 
     public required IReadOnlyList<AssetDiagnostic> Diagnostics { get; init; }
 
+    public TomlAssetSourceMap? SourceMap { get; init; }
+
     public bool Success => Value is not null && !Diagnostics.Any(d => d.Severity == AssetDiagnosticSeverity.Error);
 }

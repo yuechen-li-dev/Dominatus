@@ -65,12 +65,90 @@ Core primitives include:
 
 - `AssetId` for non-empty symbolic asset IDs;
 - `AssetRef<TAsset>` for typed symbolic references;
-- `TomlAssetLoadResult<T>` for loaded values and diagnostics;
-- `AssetDiagnostic` with severity, code, message, source path, and optional line/column;
+- `TomlAssetLoadResult<T>` for loaded values, diagnostics, and an optional TOML source map;
+- `AssetDiagnostic` with severity, stable code, designer-facing message, source path, optional line/column, optional source span, and optional key path;
 - `TomlAssetLoadOptions` for source path, strict diagnostics, and Tomlyn model options;
 - `IAssetValidator<T>` and `AssetValidationContext` for consumer-defined structural checks.
 
 `AssetId` is value-based and case-sensitive. `dialogue.blacksmith_intro` and `dialogue.Blacksmith_Intro` are different IDs and different dictionary keys.
+
+
+## M2 diagnostics: spans, key paths, and formatter
+
+M2 expands diagnostics so asset authors, CLI tools, and future visual editors can identify the field that caused a problem without reading C# exception details.
+
+`AssetDiagnostic` now carries both compatibility fields and richer structured fields:
+
+- `Severity`, `Code`, and `Message` remain the stable diagnostic identity and designer-facing explanation.
+- `SourcePath`, `Line`, and `Column` remain convenience fields for existing consumers.
+- `Span` is an optional `AssetSourceSpan` with `SourcePath`, `StartLine`, `StartColumn`, `EndLine`, and `EndColumn`.
+- `KeyPath` is an optional TOML/model path such as `id`, `start`, `nodes.greeting`, `nodes.greeting.choices[0].next`, or `nodes.greeting.choices[0].next_asset`.
+
+The loader builds a `TomlAssetSourceMap` from Tomlyn syntax when parsing succeeds far enough to produce a syntax tree. `TomlAssetLoadResult<T>.SourceMap` can resolve known key paths back to approximate source spans:
+
+```csharp
+if (result.SourceMap?.TryGetSpan("nodes.greeting.choices[0].next_asset", out var span) == true)
+{
+    Console.WriteLine($"{span.SourcePath}:{span.StartLine}:{span.StartColumn}");
+}
+```
+
+Validators should report the most specific key path they know, even when no text span is available:
+
+```csharp
+AssetValidation.Error(
+    "dialogue.missing_choice_target",
+    "Choice 'ask_work' points to missing node 'offer'.",
+    context.SourcePath,
+    keyPath: "nodes.greeting.choices[0].next");
+```
+
+When validators run through `TomlAssetLoader`, `AssetValidationContext.SourceMap` is also available. A validator can attach both key path and span:
+
+```csharp
+var keyPath = "start";
+AssetValidation.Error(
+    "dialogue.missing_start_node",
+    "Start node 'missing' does not exist.",
+    context.SourcePath,
+    keyPath: keyPath,
+    span: context.GetSpan(keyPath));
+```
+
+`AssetDiagnosticFormatter` provides stable, color-free rendering for console tools and sample output:
+
+```text
+error asset.missing_reference: Missing asset reference 'dialogue.missing' in field 'nodes.greeting.choices[0].next_asset'.
+at samples/Dominatus.Assets.Toml.AriadneDialogue/dialogue_invalid/broken_reference.toml:11:1
+key: nodes.greeting.choices[0].next_asset
+```
+
+Use `AssetDiagnosticFormatter.Format(diagnostic)` for one diagnostic and `AssetDiagnosticFormatter.FormatMany(diagnostics)` for a sequence. `FormatMany` preserves input order; it does not sort diagnostics.
+
+### Source-location behavior and limitations
+
+Tomlyn exposes parse and bind diagnostics as `DiagnosticMessage` values with `SourceSpan`, and syntax nodes such as documents, tables, table arrays, keys, and values also carry spans. M2 uses those APIs for parse/bind diagnostic line and column data and for a lightweight syntax-derived source map.
+
+Model-to-object binding does not attach source metadata to the created C# object graph. For that reason, validator diagnostics are path-aware by design and span-aware when the validator supplies a key path that exists in the source map. This is intentionally approximate: array-of-table key paths use numeric indexes in file order, and source maps focus on TOML table/key locations rather than every nested runtime object property.
+
+### Diagnostic code conventions
+
+New diagnostics use lower-case dotted codes. Current conventions include:
+
+- `toml.parse`
+- `toml.bind`
+- `asset.directory_missing`
+- `asset.file_missing`
+- `asset.duplicate_id`
+- `asset.validation`
+- `asset.missing_reference`
+- `dialogue.missing_start_node`
+- `dialogue.missing_node`
+- `dialogue.missing_choice_target`
+- `dialogue.duplicate_choice_id`
+- `dialogue.required_field`
+
+Codes are intended to be stable for tests, build tooling, and future visual editor integrations.
 
 ## M1 asset packs
 
@@ -108,7 +186,8 @@ Each `AssetPackEntry<TAsset>` stores:
 
 - `Id`;
 - typed `Asset`;
-- `SourcePath`.
+- `SourcePath`;
+- optional `SourceMap` for resolving key paths in that file.
 
 ### Directory loading
 
@@ -161,9 +240,11 @@ Single-file and pack loaders pass source paths into parse, bind, and validator d
 
 ```csharp
 AssetValidation.Error(
-    "DIALOGUE_CHOICE_TARGET_MISSING",
+    "dialogue.missing_choice_target",
     "Choice points to a missing node.",
-    context.SourcePath);
+    context.SourcePath,
+    keyPath: "nodes.greeting.choices[0].next",
+    span: context.GetSpan("nodes.greeting.choices[0].next"));
 ```
 
 Pack-level validators should use the referring entry's `SourcePath`, so missing cross-asset references point at the asset that contains the bad reference.
@@ -191,7 +272,7 @@ var diagnostic = AssetPackValidation.MissingReference(
     pack,
     new AssetId(choice.NextAsset),
     entry.SourcePath,
-    "nodes.greeting.choices[ask_work].next_asset");
+    "nodes.greeting.choices[0].next_asset");
 ```
 
 Validators inspect `AssetRef<TAsset>`, `AssetId`, or string ID values. They report missing referenced assets and optionally domain-specific sub-targets, such as a missing node inside a target dialogue. They still do not execute transitions or run authored code.

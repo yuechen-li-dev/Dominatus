@@ -29,14 +29,15 @@ public static class TomlAssetLoader
         }
         catch (Exception ex)
         {
-            diagnostics.Add(AssetValidation.Error("TOML_PARSE_EXCEPTION", $"Unexpected TOML parse failure: {ex.Message}", sourcePath));
+            diagnostics.Add(AssetValidation.Error("toml.parse", $"Unexpected TOML parse failure: {ex.Message}", sourcePath));
             return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics };
         }
 
-        diagnostics.AddRange(document.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "TOML_PARSE")));
+        var sourceMap = TomlAssetSourceMapBuilder.Build(document, sourcePath);
+        diagnostics.AddRange(document.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "toml.parse", sourceMap)));
         if (document.HasErrors)
         {
-            return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics };
+            return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics, SourceMap = sourceMap };
         }
 
         try
@@ -44,35 +45,35 @@ public static class TomlAssetLoader
             var bindResult = TryBindToModel<T>(document, options.ModelOptions);
             if (!bindResult.Success)
             {
-                diagnostics.AddRange(bindResult.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "TOML_BIND")));
-                return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics };
+                diagnostics.AddRange(bindResult.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "toml.bind", sourceMap)));
+                return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics, SourceMap = sourceMap };
             }
 
             var value = bindResult.Value;
-            diagnostics.AddRange(bindResult.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "TOML_BIND")));
+            diagnostics.AddRange(bindResult.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "toml.bind", sourceMap)));
 
             if (value is null)
             {
-                diagnostics.Add(AssetValidation.Error("TOML_BIND_NULL", $"TOML content did not bind to {typeof(T).Name}.", sourcePath));
-                return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics };
+                diagnostics.Add(AssetValidation.Error("toml.bind", $"TOML content did not bind to {typeof(T).Name}.", sourcePath));
+                return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics, SourceMap = sourceMap };
             }
 
             if (validator is not null)
             {
-                diagnostics.AddRange(validator.Validate(value, new AssetValidationContext { SourcePath = sourcePath }));
+                diagnostics.AddRange(validator.Validate(value, new AssetValidationContext { SourcePath = sourcePath, SourceMap = sourceMap }));
             }
 
             if (options.RequireNoDiagnostics && diagnostics.Count > 0 && !diagnostics.Any(d => d.Severity == AssetDiagnosticSeverity.Error))
             {
-                diagnostics.Add(AssetValidation.Error("ASSET_DIAGNOSTICS_PRESENT", "TOML asset produced diagnostics and RequireNoDiagnostics is enabled.", sourcePath));
+                diagnostics.Add(AssetValidation.Error("asset.diagnostics_present", "TOML asset produced diagnostics and RequireNoDiagnostics is enabled.", sourcePath));
             }
 
-            return new TomlAssetLoadResult<T> { Value = value, Diagnostics = diagnostics };
+            return new TomlAssetLoadResult<T> { Value = value, Diagnostics = diagnostics, SourceMap = sourceMap };
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or NotSupportedException or TargetInvocationException)
         {
             var message = (ex as TargetInvocationException)?.InnerException?.Message ?? ex.Message;
-            diagnostics.Add(AssetValidation.Error("TOML_BIND_EXCEPTION", $"TOML content could not bind to {typeof(T).Name}: {message}", sourcePath));
+            diagnostics.Add(AssetValidation.Error("toml.bind", $"TOML content could not bind to {typeof(T).Name}: {message}", sourcePath));
             return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics };
         }
     }
@@ -120,7 +121,7 @@ public static class TomlAssetLoader
 
     private sealed record TomlynBindResult<T>(T? Value, DiagnosticsBag Diagnostics, bool Success);
 
-    private static AssetDiagnostic ConvertDiagnostic(DiagnosticMessage diagnostic, string? sourcePath, string code)
+    private static AssetDiagnostic ConvertDiagnostic(DiagnosticMessage diagnostic, string? sourcePath, string code, TomlAssetSourceMap? sourceMap)
     {
         var severity = diagnostic.Kind == DiagnosticMessageKind.Warning
             ? AssetDiagnosticSeverity.Warning
@@ -133,7 +134,19 @@ public static class TomlAssetLoader
             Message = diagnostic.Message,
             SourcePath = string.IsNullOrWhiteSpace(diagnostic.Span.FileName) ? sourcePath : diagnostic.Span.FileName,
             Line = diagnostic.Span.Start.Line + 1,
-            Column = diagnostic.Span.Start.Column + 1
+            Column = diagnostic.Span.Start.Column + 1,
+            Span = ToAssetSpan(diagnostic.Span, sourcePath),
+            KeyPath = sourceMap?.FindNearestKeyPath(diagnostic.Span)
         };
     }
+
+    private static AssetSourceSpan ToAssetSpan(SourceSpan span, string? fallbackSourcePath) =>
+        new()
+        {
+            SourcePath = string.IsNullOrWhiteSpace(span.FileName) ? fallbackSourcePath ?? string.Empty : span.FileName,
+            StartLine = span.Start.Line + 1,
+            StartColumn = span.Start.Column + 1,
+            EndLine = span.End.Line + 1,
+            EndColumn = span.End.Column + 1
+        };
 }

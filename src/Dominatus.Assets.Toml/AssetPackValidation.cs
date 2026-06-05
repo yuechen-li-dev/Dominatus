@@ -25,8 +25,9 @@ public static class AssetPackValidation
         return pack.Assets.ContainsKey(id)
             ? null
             : AssetValidation.Error(
-                "asset.reference_missing",
-                $"Field '{fieldName}' references missing asset '{id}'.",
-                sourcePath);
+                "asset.missing_reference",
+                $"Missing asset reference '{id}' in field '{fieldName}'.",
+                sourcePath,
+                keyPath: fieldName);
     }
 }

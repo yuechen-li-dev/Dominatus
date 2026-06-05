@@ -37,3 +37,12 @@ next_node = "offer"
 ## TOML is data
 
 The sample does not execute TOML, evaluate expressions, or run scripts. Designers can edit TOML IDs, text, choices, conditions, and effects as authored data. C# validators define what those fields mean structurally, and a future runtime bridge would decide how to interpret symbolic conditions/effects or perform dialogue transitions.
+
+
+## Diagnostics
+
+The sample prints diagnostics with `AssetDiagnosticFormatter`, which produces stable, color-free output with severity, code, message, source location when known, and key path when supplied.
+
+Dialogue validators report key paths such as `start`, `nodes.greeting.choices[0].next`, and `nodes.greeting.choices[0].next_asset`. When the loader can resolve those paths through Tomlyn syntax, diagnostics also carry an `AssetSourceSpan` for line/column-aware CLI or editor tooling.
+
+`dialogue_invalid/broken_reference.toml` is an optional broken example for diagnostics experiments. It is not loaded by the default sample run, so the normal sample remains successful.
