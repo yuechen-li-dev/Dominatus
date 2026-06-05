@@ -61,11 +61,5 @@ if (result.Diagnostics.Count > 0)
 static void PrintDiagnostics(IReadOnlyList<AssetDiagnostic> diagnostics)
 {
     Console.WriteLine("Diagnostics:");
-    foreach (var diagnostic in diagnostics)
-    {
-        var location = diagnostic.Line is null
-            ? diagnostic.SourcePath
-            : $"{diagnostic.SourcePath}:{diagnostic.Line}:{diagnostic.Column}";
-        Console.WriteLine($"{diagnostic.Severity} {diagnostic.Code}: {diagnostic.Message}{(location is null ? string.Empty : $" ({location})")}");
-    }
+    Console.WriteLine(AssetDiagnosticFormatter.FormatMany(diagnostics));
 }

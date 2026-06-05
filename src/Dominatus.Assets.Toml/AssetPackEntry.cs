@@ -7,4 +7,6 @@ public sealed record AssetPackEntry<TAsset>
     public required TAsset Asset { get; init; }
 
     public required string SourcePath { get; init; }
+
+    public TomlAssetSourceMap? SourceMap { get; init; }
 }

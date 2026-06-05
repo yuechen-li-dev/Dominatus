@@ -116,10 +116,15 @@ public static class TomlAssetPackLoader
 
             if (entries.TryGetValue(id, out var existing))
             {
+                var duplicateSpan = loadResult.SourceMap is not null && loadResult.SourceMap.TryGetSpan("id", out var idSpan)
+                    ? idSpan
+                    : null;
                 diagnostics.Add(AssetValidation.Error(
                     "asset.duplicate_id",
                     $"Duplicate asset id '{id}' in '{path}'. First occurrence is '{existing.SourcePath}'. Keeping first asset and not overwriting it.",
-                    path));
+                    path,
+                    keyPath: "id",
+                    span: duplicateSpan));
 
                 if (!options.ContinueOnError)
                 {
@@ -129,7 +134,7 @@ public static class TomlAssetPackLoader
                 continue;
             }
 
-            entries.Add(id, new AssetPackEntry<TAsset> { Id = id, Asset = asset, SourcePath = path });
+            entries.Add(id, new AssetPackEntry<TAsset> { Id = id, Asset = asset, SourcePath = path, SourceMap = loadResult.SourceMap });
 
             if (!options.ContinueOnError && HasError(loadResult.Diagnostics))
             {

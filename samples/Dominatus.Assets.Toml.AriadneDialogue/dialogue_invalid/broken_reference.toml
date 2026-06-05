@@ -1,0 +1,13 @@
+id = "dialogue.broken_reference"
+title = "Broken Reference Example"
+start = "greeting"
+
+[nodes.greeting]
+speaker = "Narrator"
+text = "This optional file demonstrates a cross-asset diagnostic."
+
+[[nodes.greeting.choices]]
+id = "continue"
+text = "Continue elsewhere"
+next_asset = "dialogue.missing"
+next_node = "start"

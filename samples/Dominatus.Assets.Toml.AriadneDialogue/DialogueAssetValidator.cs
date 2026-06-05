@@ -10,41 +10,41 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
 
         if (string.IsNullOrWhiteSpace(asset.Id))
         {
-            diagnostics.Add(AssetValidation.Required("id", context.SourcePath));
+            diagnostics.Add(Required("id", context));
         }
 
         if (string.IsNullOrWhiteSpace(asset.Start))
         {
-            diagnostics.Add(AssetValidation.Required("start", context.SourcePath));
+            diagnostics.Add(Required("start", context));
         }
 
         if (asset.Nodes is null || asset.Nodes.Count == 0)
         {
-            diagnostics.Add(AssetValidation.Error("DIALOGUE_NODES_EMPTY", "Dialogue must contain at least one node.", context.SourcePath));
+            diagnostics.Add(Error("dialogue.missing_node", "Dialogue must contain at least one node.", "nodes", context));
             return diagnostics;
         }
 
         if (!string.IsNullOrWhiteSpace(asset.Start) && !asset.Nodes.ContainsKey(asset.Start))
         {
-            diagnostics.Add(AssetValidation.Error("DIALOGUE_START_MISSING", $"Start node '{asset.Start}' does not exist.", context.SourcePath));
+            diagnostics.Add(Error("dialogue.missing_start_node", $"Start node '{asset.Start}' does not exist.", "start", context));
         }
 
         foreach (var (nodeId, node) in asset.Nodes)
         {
             if (string.IsNullOrWhiteSpace(node.Speaker))
             {
-                diagnostics.Add(AssetValidation.Required($"nodes.{nodeId}.speaker", context.SourcePath));
+                diagnostics.Add(Required($"nodes.{nodeId}.speaker", context));
             }
 
             if (string.IsNullOrWhiteSpace(node.Text))
             {
-                diagnostics.Add(AssetValidation.Required($"nodes.{nodeId}.text", context.SourcePath));
+                diagnostics.Add(Required($"nodes.{nodeId}.text", context));
             }
 
             var choiceIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var choice in node.Choices)
+            for (var choiceIndex = 0; choiceIndex < node.Choices.Count; choiceIndex++)
             {
-                ValidateChoice(asset, nodeId, choice, choiceIds, context.SourcePath, diagnostics);
+                ValidateChoice(asset, nodeId, node.Choices[choiceIndex], choiceIndex, choiceIds, context, diagnostics);
             }
         }
 
@@ -55,22 +55,25 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
         DialogueAsset asset,
         string nodeId,
         DialogueChoiceAsset choice,
+        int choiceIndex,
         HashSet<string> choiceIds,
-        string? sourcePath,
+        AssetValidationContext context,
         List<AssetDiagnostic> diagnostics)
     {
+        var choicePath = $"nodes.{nodeId}.choices[{choiceIndex}]";
+
         if (string.IsNullOrWhiteSpace(choice.Id))
         {
-            diagnostics.Add(AssetValidation.Required($"nodes.{nodeId}.choices[].id", sourcePath));
+            diagnostics.Add(Required($"{choicePath}.id", context));
         }
         else if (!choiceIds.Add(choice.Id))
         {
-            diagnostics.Add(AssetValidation.Error("DIALOGUE_CHOICE_ID_DUPLICATE", $"Node '{nodeId}' contains duplicate choice id '{choice.Id}'.", sourcePath));
+            diagnostics.Add(Error("dialogue.duplicate_choice_id", $"Node '{nodeId}' contains duplicate choice id '{choice.Id}'.", $"nodes.{nodeId}.choices", context));
         }
 
         if (string.IsNullOrWhiteSpace(choice.Text))
         {
-            diagnostics.Add(AssetValidation.Required($"nodes.{nodeId}.choices[{choice.Id}].text", sourcePath));
+            diagnostics.Add(Required($"{choicePath}.text", context));
         }
 
         var hasLocalNext = !string.IsNullOrWhiteSpace(choice.Next);
@@ -79,14 +82,14 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
 
         if (hasLocalNext && (hasNextAsset || hasNextNode))
         {
-            diagnostics.Add(AssetValidation.Error("DIALOGUE_CHOICE_TARGET_AMBIGUOUS", $"Choice '{choice.Id}' on node '{nodeId}' cannot set both next and next_asset/next_node.", sourcePath));
+            diagnostics.Add(Error("dialogue.choice_target_ambiguous", $"Choice '{choice.Id}' on node '{nodeId}' cannot set both next and next_asset/next_node.", choicePath, context));
         }
 
         if (hasLocalNext)
         {
             if (!asset.Nodes.ContainsKey(choice.Next!))
             {
-                diagnostics.Add(AssetValidation.Error("DIALOGUE_CHOICE_TARGET_MISSING", $"Choice '{choice.Id}' on node '{nodeId}' points to missing node '{choice.Next}'.", sourcePath));
+                diagnostics.Add(Error("dialogue.missing_choice_target", $"Choice '{choice.Id}' on node '{nodeId}' points to missing node '{choice.Next}'.", $"{choicePath}.next", context));
             }
 
             return;
@@ -96,14 +99,25 @@ public sealed class DialogueAssetValidator : IAssetValidator<DialogueAsset>
         {
             if (!hasNextNode)
             {
-                diagnostics.Add(AssetValidation.Required($"nodes.{nodeId}.choices[{choice.Id}].next_node", sourcePath));
+                diagnostics.Add(Required($"{choicePath}.next_node", context));
             }
 
             return;
         }
 
-        diagnostics.Add(AssetValidation.Required($"nodes.{nodeId}.choices[{choice.Id}].next", sourcePath));
+        diagnostics.Add(Required($"{choicePath}.next", context));
     }
+
+    private static AssetDiagnostic Required(string keyPath, AssetValidationContext context) =>
+        AssetValidation.Error(
+            "dialogue.required_field",
+            $"Required field '{keyPath}' is missing or empty.",
+            context.SourcePath,
+            keyPath: keyPath,
+            span: context.GetSpan(keyPath));
+
+    private static AssetDiagnostic Error(string code, string message, string keyPath, AssetValidationContext context) =>
+        AssetValidation.Error(code, message, context.SourcePath, keyPath: keyPath, span: context.GetSpan(keyPath));
 }
 
 public sealed class DialogueAssetPackValidator : IAssetPackValidator<DialogueAsset>
@@ -116,16 +130,24 @@ public sealed class DialogueAssetPackValidator : IAssetPackValidator<DialogueAss
         {
             foreach (var (nodeId, node) in entry.Asset.Nodes)
             {
-                foreach (var choice in node.Choices.Where(choice => !string.IsNullOrWhiteSpace(choice.NextAsset)))
+                for (var choiceIndex = 0; choiceIndex < node.Choices.Count; choiceIndex++)
                 {
+                    var choice = node.Choices[choiceIndex];
+                    if (string.IsNullOrWhiteSpace(choice.NextAsset))
+                    {
+                        continue;
+                    }
+
+                    var nextAssetPath = $"nodes.{nodeId}.choices[{choiceIndex}].next_asset";
                     var targetId = new AssetId(choice.NextAsset!);
-                    var missingAsset = AssetPackValidation.MissingReference(pack, targetId, entry.SourcePath, $"nodes.{nodeId}.choices[{choice.Id}].next_asset");
+                    var missingAsset = AssetPackValidation.MissingReference(pack, targetId, entry.SourcePath, nextAssetPath);
                     if (missingAsset is not null)
                     {
                         diagnostics.Add(missingAsset with
                         {
-                            Code = "DIALOGUE_CHOICE_ASSET_MISSING",
-                            Message = $"Choice '{choice.Id}' on node '{nodeId}' references missing dialogue asset '{targetId}'."
+                            Code = "dialogue.missing_choice_asset",
+                            Message = $"Choice '{choice.Id}' on node '{nodeId}' references missing dialogue asset '{targetId}'.",
+                            Span = entry.SourceMap is not null && entry.SourceMap.TryGetSpan(nextAssetPath, out var span) ? span : null
                         });
                         continue;
                     }
@@ -138,10 +160,13 @@ public sealed class DialogueAssetPackValidator : IAssetPackValidator<DialogueAss
                     var target = pack.Assets[targetId].Asset;
                     if (!target.Nodes.ContainsKey(choice.NextNode!))
                     {
+                        var nextNodePath = $"nodes.{nodeId}.choices[{choiceIndex}].next_node";
                         diagnostics.Add(AssetValidation.Error(
-                            "DIALOGUE_CHOICE_ASSET_NODE_MISSING",
+                            "dialogue.missing_choice_asset_node",
                             $"Choice '{choice.Id}' on node '{nodeId}' references missing node '{choice.NextNode}' in dialogue asset '{targetId}'.",
-                            entry.SourcePath));
+                            entry.SourcePath,
+                            keyPath: nextNodePath,
+                            span: entry.SourceMap is not null && entry.SourceMap.TryGetSpan(nextNodePath, out var span) ? span : null));
                     }
                 }
             }
