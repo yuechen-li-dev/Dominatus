@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dominatus.Assets.Toml\Dominatus.Assets.Toml.csproj" />
+    <ProjectReference Include="..\..\src\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>

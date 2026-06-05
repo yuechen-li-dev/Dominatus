@@ -450,3 +450,62 @@ Possible future work can remain additive and adapter-based:
 - explicit culture fallback policy;
 - editor localized preview;
 - build-time reports for unused or duplicated localization keys.
+
+## M4 Ariadne runtime bridge sample
+
+M4 demonstrates the intended runtime path without changing the generic package into a dialogue runtime:
+
+```text
+TOML dialogue asset pack
+-> typed DialogueAsset records
+-> structural, pack, localization, and registry validation
+-> localized sample runtime graph
+-> deterministic Ariadne-shaped traversal
+```
+
+The bridge code lives in `samples/Dominatus.Assets.Toml.AriadneDialogue`, not in `Dominatus.Assets.Toml`, because the package remains a generic TOML asset substrate. The sample uses a stable runtime address of `AssetId + NodeId` (`dialogue.blacksmith_intro:greeting`) and normalizes both same-asset `next` links and cross-asset `next_asset`/`next_node` links into that address model.
+
+### Ariadne/OptFlow inspection result
+
+`Ariadne.OptFlow` currently provides dialogue-oriented runtime commands and authoring helpers (`Diag.Line`, `Diag.Ask`, `Diag.Choose`, and `DiagChoice`) that dispatch through Dominatus actuation and HFSM state delegates. Existing Ariadne samples author traversal directly in C# by yielding `AiStep` values and using Dominatus/HFSM transitions. There is not yet a standalone data-driven dialogue graph API that TOML records can be mapped into directly.
+
+For M4, the sample therefore uses an Ariadne-compatible traversal adapter: choices can be projected to `DiagChoice`, but TOML remains data and C# owns traversal, conditions, effects, state, and side effects. Direct HFSM/Ariadne state generation from TOML is intentionally deferred until Ariadne exposes a suitable runtime graph surface.
+
+### Symbolic conditions and effects
+
+Conditions and effects are plain string symbols in TOML:
+
+```toml
+condition = "can_trade_with_blacksmith"
+
+[[nodes.offer.effects]]
+id = "offer_quest"
+value = "north_road_bandits"
+```
+
+The sample resolves them through C# registries:
+
+- `DialogueConditionRegistry` maps a condition ID to `Func<DialogueRuntimeContext, bool>`.
+- `DialogueEffectRegistry` maps an effect ID to `Action<DialogueRuntimeContext, string?>`.
+- Unknown condition and effect symbols produce diagnostics before traversal.
+- False conditions hide choices or stop a conditioned node from being entered.
+- Effects run when entering a node or taking a choice, depending on where the authored effect appears.
+
+The registry lookup is exact string matching. A string such as `1 == 1` is not parsed or evaluated; it is just an unregistered condition key unless C# explicitly registers a handler with that exact ID.
+
+### Localization and fallback behavior
+
+Runtime lines resolve `line` IDs through `ILocalizationTable`. If a localization key is missing but fallback `text` exists, the bridge can use the fallback text and report a warning diagnostic (`dialogue.localization_fallback`). The stricter sample localization validator still reports missing localization keys as errors when used as a validation gate, so projects can choose whether missing localized text blocks a build or only degrades a preview.
+
+### Scripted traversal
+
+The default sample run performs a deterministic playthrough:
+
+1. Start at `dialogue.blacksmith_intro:greeting`.
+2. Choose `ask_work`.
+3. Cross to `dialogue.north_road_job:offer`.
+4. Run the `offer_quest north_road_bandits` effect.
+5. Choose `accept`.
+6. End at `dialogue.north_road_job:end`.
+
+This proves that TOML-authored dialogue content can feed a runtime traversal path while avoiding a Yarn-style string DSL, expression language, script VM, executable TOML, hot reload system, editor runtime, or engine integration.
