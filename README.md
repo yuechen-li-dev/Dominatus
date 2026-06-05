@@ -33,7 +33,7 @@ Dominatus does not make prompt chains faster. It removes prompt chains from the 
 
 LLMs are excellent authors, reviewers, semantic tools, and bounded decision helpers. They are not ideal schedulers for every step of a workflow.
 
-Dominatus targets the layer below live prompt chaining: durable runtime behavior. Humans and LLMs can write boring, inspectable C# workflows ahead of time; Dominatus then executes those workflows as deterministic state machines with blackboards, mailboxes, utility scoring, typed actuators, policy gates, save/restore, replay, and traceable approvals.
+Dominatus targets the layer below live prompt chaining: durable runtime behavior. `Dominatus.Assets.Toml` also provides hot-reload-friendly TOML asset reports for data packs: reload produces a fresh pack, diagnostics, and deterministic added/removed/changed/unchanged asset ID lists while callers keep the previous valid pack on failure. Humans and LLMs can write boring, inspectable C# workflows ahead of time; Dominatus then executes those workflows as deterministic state machines with blackboards, mailboxes, utility scoring, typed actuators, policy gates, save/restore, replay, and traceable approvals.
 
 Live LLM calls are still first-class when they make sense: `Llm.Call` for text transforms, `Llm.Decide` for bounded semantic selection, `Llm.MagiDecide` for multi-participant review, `Llm.Stream` for streaming output, cassettes for replay, ranked clients for fallback, and explicit context packets for persistent LLM memory. But ordinary agent logic does not need to call a model every tick.
 

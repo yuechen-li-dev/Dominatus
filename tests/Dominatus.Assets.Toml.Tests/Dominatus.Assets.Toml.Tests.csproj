@@ -26,6 +26,7 @@
     <Compile Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\SampleLocalizationCsvLoader.cs" Link="AriadneDialogue\SampleLocalizationCsvLoader.cs" />
     <Compile Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\DialoguePreviewRenderer.cs" Link="AriadneDialogue\DialoguePreviewRenderer.cs" />
     <Compile Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\DialogueRuntimeBridge.cs" Link="AriadneDialogue\DialogueRuntimeBridge.cs" />
+    <Compile Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\DialogueReloadDemo.cs" Link="AriadneDialogue\DialogueReloadDemo.cs" />
     <None Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\dialogue\*.toml" Link="dialogue\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\samples\Dominatus.Assets.Toml.AriadneDialogue\localization\*.csv" Link="localization\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

@@ -509,3 +509,99 @@ The default sample run performs a deterministic playthrough:
 6. End at `dialogue.north_road_job:end`.
 
 This proves that TOML-authored dialogue content can feed a runtime traversal path while avoiding a Yarn-style string DSL, expression language, script VM, executable TOML, hot reload system, editor runtime, or engine integration.
+
+## M5 hot-reload-friendly reload reports
+
+M5 adds explicit reload infrastructure for tools, games, simulations, and future editors that want to re-read authored TOML after a save without mutating the currently running pack. TOML remains data: reload loads files, validates typed records, compares old/new packs, and reports diagnostics and changes. It does not execute TOML, add a runtime VM, integrate with a game engine, or start a file-watcher loop.
+
+### Reload result model
+
+The public reload entry points are `TomlAssetPackReloader.ReloadDirectory<TAsset>(...)` and `TomlAssetPackReloader.ReloadFiles<TAsset>(...)`. Both take the previous `AssetPack<TAsset>`, load the requested directory/files into a fresh pack, run the same single-asset and pack validators used by normal pack loading, and return `AssetPackReloadResult<TAsset>`.
+
+A reload result contains:
+
+- `OldPack`: the exact pack instance the caller was already using;
+- `NewPack`: the newly loaded pack when loading produced one, including a partial pack if loading continued after diagnostics;
+- `EffectivePack`: the pack the caller should use after applying the configured failure policy;
+- `Diagnostics`: reload diagnostics from parsing, binding, asset validators, and pack validators;
+- `Added`, `Removed`, `Changed`, and `Unchanged`: deterministic asset ID lists sorted by `AssetId.Value` ordinal;
+- `Success`: `true` only when the new load has no error diagnostics;
+- `UsedOldPack`: `true` when `EffectivePack` is the original old pack instance.
+
+The old pack is never mutated in place. A successful reload uses the new pack as `EffectivePack`; a failed reload can preserve the old pack so the application keeps running with the last valid data.
+
+### Failure policy and old-pack retention
+
+`AssetPackReloadOptions` wraps normal `AssetPackLoadOptions` and adds `KeepOldPackOnError`, which defaults to `true`:
+
+```csharp
+var result = TomlAssetPackReloader.ReloadDirectory(
+    oldPack,
+    dialogueDirectory,
+    dialogue => new AssetId(dialogue.Id),
+    new DialogueAssetValidator(),
+    new DialogueAssetPackValidator(),
+    new AssetPackReloadOptions { KeepOldPackOnError = true });
+
+var packForRuntime = result.EffectivePack;
+```
+
+When reload succeeds, `EffectivePack` is the new pack. When reload fails and `KeepOldPackOnError` is `true`, `EffectivePack` remains `OldPack`, `UsedOldPack` is `true`, and the caller can display diagnostics while the game/editor/runtime keeps using the previous valid data. When reload fails and `KeepOldPackOnError` is `false`, `EffectivePack` is `NewPack ?? OldPack`; this allows tools to inspect partial failed output while still providing a non-null effective pack if no new pack was available.
+
+### Diff and content-hash change detection
+
+`AssetPackEntry<TAsset>` now includes `ContentHash`, a SHA-256 hash computed from the source file bytes during file/directory pack loading. The hash is deterministic for the file content and intentionally does not include the path, so two files with identical bytes produce the same hash even if they have different names or live in different directories.
+
+Reload diff rules are:
+
+- `Added`: IDs present in the new pack but not the old pack;
+- `Removed`: IDs present in the old pack but not the new pack;
+- `Changed`: IDs present in both packs whose content hashes differ;
+- `Unchanged`: IDs present in both packs whose content hashes match.
+
+If either side of a shared asset lacks `ContentHash`, the reloader falls back to `EqualityComparer<TAsset>.Default.Equals(old.Asset, new.Asset)`. This works well for records and other types with structural equality while keeping the file-content path deterministic for normal TOML-loaded assets.
+
+### Reload report formatter
+
+`AssetPackReloadReportFormatter.Format(result)` produces a stable text report suitable for CLI output, logs, editor panels, and tests. A successful reload includes the status, effective pack, counts, and non-empty ID sections. A failed reload includes error count, effective pack (`old` or `new`), and formatted diagnostics:
+
+```text
+Asset reload: FAILED — keeping previous pack
+Added: 0
+Removed: 0
+Changed: 1
+Unchanged: 1
+Errors: 1
+Effective pack: old
+
+Changed:
+* dialogue.north_road_job
+
+Diagnostics:
+error toml.parse: ...
+```
+
+### Sample reload demo
+
+The Ariadne dialogue sample supports an explicit reload demonstration:
+
+```bash
+dotnet run --project samples/Dominatus.Assets.Toml.AriadneDialogue/Dominatus.Assets.Toml.AriadneDialogue.csproj --framework net10.0 -- --reload-demo
+```
+
+The sample copies the dialogue TOML files to a temporary directory, loads the temp directory, edits one temp TOML file, reloads the temp directory, prints the reload report, and runs the deterministic traversal using `EffectivePack`. Source sample files are not modified.
+
+### File watcher status
+
+M5 intentionally does not add production `FileSystemWatcher` support. Watchers are useful but can be platform-dependent and timing-sensitive in tests. The supported M5 model is an explicit reload call: an editor can call reload after a save, a development console can expose a reload command, or a polling adapter can invoke reload on its own schedule. A future watcher can be layered on top of the same `TomlAssetPackReloader` APIs without changing the reload result model.
+
+### Editor and engine workflow
+
+A typical integration loop is:
+
+1. Load a directory into an `AssetPack<TAsset>` during startup.
+2. After a save/reload command, call `TomlAssetPackReloader.ReloadDirectory` with the current pack.
+3. If `result.Success` is `true`, swap runtime/editor state to `result.EffectivePack`.
+4. If reload fails, keep using the old pack, show `result.Diagnostics`, and display `Added`/`Removed`/`Changed`/`Unchanged` as context.
+
+This keeps authored data reloadable and diagnosable while C# continues to own behavior, state, conditions, effects, engine integration, and side effects.
