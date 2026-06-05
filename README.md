@@ -123,6 +123,7 @@ static IEnumerator<AiStep> Review(AiCtx ctx)
 - [`samples/Dominatus.Llm.ContextDogfood`](samples/Dominatus.Llm.ContextDogfood) — explicit context stores, named loadouts, packet manifests, `PRIMER.context`, and dogfood review artifacts for LLM-assisted authoring. Start with [LLM Context M5](docs/llm/LLM_CONTEXT_M5_PRIMER_CONTEXT.md) and the [PrimerExamples source artifacts](docs/PrimerExamples/README.md).
 - [Standard HTTP WebSafety](docs/actuators/ACTUATORS_STANDARD_M5_HTTP_WEB_SAFETY.md) and [WebContentSafety](docs/actuators/ACTUATORS_STANDARD_M6_WEB_CONTENT_SAFETY.md) — safe web/content ingestion for LLM agents: destination policy before fetch, content safety after fetch.
 - [`samples/Dominatus.Llm.DemoConsole`](samples/Dominatus.Llm.DemoConsole) — `Llm.Call`, `Llm.Decide`, cassettes, provider clients, and demo paths for model-backed or replayed LLM usage. Related docs: [prompt call](docs/llm/LLM_V1_M8a_PROMPT_CALL.md), [streaming](docs/llm/LLM_V1_M9a_STREAMING.md), [ranked client](docs/llm/LLM_V1_M10a_RANKED_CLIENT.md), and [OpenRouter client](docs/llm/LLM_V1_M11a_OPENROUTER_CLIENT.md).
+- [`samples/Dominatus.Assets.Toml.AriadneDialogue`](samples/Dominatus.Assets.Toml.AriadneDialogue) — typed TOML asset loading for Ariadne-style dialogue graphs; see [Dominatus.Assets.Toml docs](docs/user/ASSETS_TOML.md).
 - [`samples/Dominatus.FishTank`](samples/Dominatus.FishTank) — a MonoGame fish tank simulator that shows utility AI and runtime agent behavior in a non-LLM simulation.
 
 ## Packages
@@ -133,6 +134,7 @@ All packable projects use the root README as their NuGet README, so this page is
 | --- | --- |
 | [`Dominatus.Core`](https://www.nuget.org/packages/Dominatus.Core/) | Runtime kernel: agents, blackboards, HFSMs, utility decisions, mailboxes, commands, actuation boundaries, persistence, replay, and tracing. |
 | [`Dominatus.OptFlow`](https://www.nuget.org/packages/Dominatus.OptFlow/) | Concise authoring helpers for `Ai.*` steps, control flow, waits, utility decisions, and command emission. |
+| [`Dominatus.Assets.Toml`](https://www.nuget.org/packages/Dominatus.Assets.Toml/) | TOML asset loader for designer-authored typed data; first sample loads and validates Ariadne-style dialogue graphs. |
 | [`Ariadne.OptFlow`](https://www.nuget.org/packages/Ariadne.OptFlow/) | Dialogue-focused authoring layer on the same runtime model. |
 | [`Dominatus.UtilityLite`](https://www.nuget.org/packages/Dominatus.UtilityLite/) | Readable utility conditions and score combinators for intent selection. |
 | [`Dominatus.Actuators.Standard`](https://www.nuget.org/packages/Dominatus.Actuators.Standard/) | Standard typed actuators: sandboxed files, wall-clock/time, calendar, HTTP, process, WebSafety, and WebContentSafety. |

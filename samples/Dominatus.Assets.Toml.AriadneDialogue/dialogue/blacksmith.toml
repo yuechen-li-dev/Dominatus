@@ -1,0 +1,36 @@
+id = "dialogue.blacksmith_intro"
+title = "Blacksmith Introduction"
+start = "greeting"
+
+[nodes.greeting]
+speaker = "Blacksmith"
+text = "You look like someone who needs a blade."
+tags = ["merchant", "intro"]
+
+[[nodes.greeting.choices]]
+id = "ask_work"
+text = "Got any work?"
+next = "work_offer"
+
+[[nodes.greeting.choices]]
+id = "leave"
+text = "Not today."
+next = "end"
+
+[nodes.work_offer]
+speaker = "Blacksmith"
+text = "Bandits took a shipment on the north road."
+condition = "can_accept_bandit_quest"
+
+[[nodes.work_offer.effects]]
+id = "offer_quest"
+value = "north_road_bandits"
+
+[[nodes.work_offer.choices]]
+id = "accept"
+text = "I'll look into it."
+next = "end"
+
+[nodes.end]
+speaker = "Blacksmith"
+text = "Keep your edge sharp."
