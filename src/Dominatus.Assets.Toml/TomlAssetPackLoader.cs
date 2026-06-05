@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Dominatus.Assets.Toml;
 
 public static class TomlAssetPackLoader
@@ -72,9 +74,13 @@ public static class TomlAssetPackLoader
             }
 
             TomlAssetLoadResult<TAsset> loadResult;
+            string? contentHash;
             try
             {
-                loadResult = TomlAssetLoader.LoadFile(path, validator, new TomlAssetLoadOptions { SourcePath = path });
+                var fileBytes = File.ReadAllBytes(path);
+                contentHash = Convert.ToHexString(SHA256.HashData(fileBytes));
+                var toml = File.ReadAllText(path);
+                loadResult = TomlAssetLoader.LoadString<TAsset>(toml, validator, new TomlAssetLoadOptions { SourcePath = path });
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
             {
@@ -134,7 +140,7 @@ public static class TomlAssetPackLoader
                 continue;
             }
 
-            entries.Add(id, new AssetPackEntry<TAsset> { Id = id, Asset = asset, SourcePath = path, SourceMap = loadResult.SourceMap });
+            entries.Add(id, new AssetPackEntry<TAsset> { Id = id, Asset = asset, SourcePath = path, SourceMap = loadResult.SourceMap, ContentHash = contentHash });
 
             if (!options.ContinueOnError && HasError(loadResult.Diagnostics))
             {

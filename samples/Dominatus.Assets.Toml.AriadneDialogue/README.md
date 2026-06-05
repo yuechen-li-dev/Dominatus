@@ -24,6 +24,19 @@ Useful options:
 - `--preview` also prints the localized asset-pack preview.
 - `--start dialogue.blacksmith_intro:greeting` starts at an explicit runtime address.
 - `--interactive` is accepted for CLI shape, but M4 still falls back to deterministic scripted traversal so tests and docs do not require console input.
+- `--reload-demo` copies the dialogue pack to a temporary directory, edits one temp TOML file, reloads, prints a reload report, and runs traversal against the effective pack.
+
+## Hot reload demo
+
+M5 adds a hot-reload-friendly workflow without adding a live file watcher. Run:
+
+```bash
+dotnet run --project samples/Dominatus.Assets.Toml.AriadneDialogue/Dominatus.Assets.Toml.AriadneDialogue.csproj --framework net10.0 -- --reload-demo
+```
+
+The demo loads the normal sample data, copies `dialogue/*.toml` to a temporary directory, loads that temp directory as the old pack, edits `quest_north_road.toml` in the temp directory, and calls `TomlAssetPackReloader.ReloadDirectory`. The report lists added, removed, changed, and unchanged asset IDs. The expected changed ID is `dialogue.north_road_job`.
+
+Reload failure is designed to be safe for a running game/editor: `AssetPackReloadOptions.KeepOldPackOnError` defaults to `true`, so a parse or validation error makes `EffectivePack` remain the previous valid pack while diagnostics are reported. The sample then runs deterministic traversal with `EffectivePack`; TOML is still data and C# still owns behavior, conditions, effects, state, and side effects.
 
 ## Expected scripted path
 

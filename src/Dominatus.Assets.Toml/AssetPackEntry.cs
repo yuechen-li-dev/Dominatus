@@ -9,4 +9,6 @@ public sealed record AssetPackEntry<TAsset>
     public required string SourcePath { get; init; }
 
     public TomlAssetSourceMap? SourceMap { get; init; }
+
+    public string? ContentHash { get; init; }
 }

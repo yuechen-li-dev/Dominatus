@@ -6,6 +6,7 @@ Console.WriteLine("Dominatus.Assets.Toml Ariadne Dialogue Runtime Bridge");
 var dialogueDirectory = Path.Combine(AppContext.BaseDirectory, "dialogue");
 var localizationPath = Path.Combine(AppContext.BaseDirectory, "localization", "en.csv");
 var scripted = !args.Contains("--interactive", StringComparer.OrdinalIgnoreCase);
+var reloadDemo = args.Contains("--reload-demo", StringComparer.OrdinalIgnoreCase);
 var start = ParseStart(args) ?? new DialogueAddress(new AssetId("dialogue.blacksmith_intro"), "greeting");
 
 var packResult = TomlAssetPackLoader.LoadDirectory<DialogueAsset>(
@@ -36,6 +37,16 @@ Console.WriteLine();
 if (args.Contains("--preview", StringComparer.OrdinalIgnoreCase))
 {
     Console.Write(DialoguePreviewRenderer.Render(pack, localizationTable));
+}
+
+if (reloadDemo && !diagnostics.Any(d => d.Severity == AssetDiagnosticSeverity.Error))
+{
+    var reloadDemoResult = DialogueReloadDemo.Run(dialogueDirectory, localizationTable);
+    Console.WriteLine(DialogueReloadDemo.Format(reloadDemoResult));
+    Console.WriteLine();
+    pack = reloadDemoResult.ReloadResult.EffectivePack;
+    diagnostics.AddRange(reloadDemoResult.ReloadResult.Diagnostics);
+    diagnostics.AddRange(reloadDemoResult.TraversalResult.Diagnostics);
 }
 
 if (diagnostics.Any(d => d.Severity == AssetDiagnosticSeverity.Error))
