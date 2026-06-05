@@ -238,15 +238,13 @@ public sealed class HomeAssistantActuatorsTests
     [Fact]
     public void TimeoutFailsClearly()
     {
-        using var handler = NewHandler(async (_, ct) =>
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(250), ct);
-            return HttpResponse(HttpStatusCode.OK, "{}");
-        }, BaseOptions with { Timeout = TimeSpan.FromMilliseconds(30) });
+        using var handler = NewHandler((_, _) =>
+            Task.FromException<HttpResponseMessage>(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.")));
 
         var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
         Assert.False(result.Ok);
         Assert.Contains("timed out", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(BaseOptions.AccessToken, result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
