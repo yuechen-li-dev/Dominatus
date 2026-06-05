@@ -1,0 +1,25 @@
+id = "dialogue.north_road_job"
+title = "North Road Job"
+start = "offer"
+
+[nodes.offer]
+speaker = "Blacksmith"
+text = "Bandits took a shipment on the north road. Bring back the steel and I'll owe you."
+
+[[nodes.offer.choices]]
+id = "accept"
+text = "I'll look into it."
+next = "end"
+
+[[nodes.offer.choices]]
+id = "decline"
+text = "That sounds dangerous."
+next = "end"
+
+[nodes.end]
+speaker = "Blacksmith"
+text = "Keep your edge sharp."
+
+[[nodes.end.effects]]
+id = "offer_quest"
+value = "north_road_bandits"

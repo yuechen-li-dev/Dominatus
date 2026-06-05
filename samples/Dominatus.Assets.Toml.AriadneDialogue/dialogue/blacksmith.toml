@@ -5,30 +5,30 @@ start = "greeting"
 [nodes.greeting]
 speaker = "Blacksmith"
 text = "You look like someone who needs a blade."
-tags = ["merchant", "intro"]
 
 [[nodes.greeting.choices]]
 id = "ask_work"
 text = "Got any work?"
-next = "work_offer"
+next_asset = "dialogue.north_road_job"
+next_node = "offer"
 
 [[nodes.greeting.choices]]
-id = "leave"
-text = "Not today."
-next = "end"
+id = "browse"
+text = "Show me what you have."
+next = "shop"
 
-[nodes.work_offer]
+[nodes.shop]
 speaker = "Blacksmith"
-text = "Bandits took a shipment on the north road."
-condition = "can_accept_bandit_quest"
+text = "Iron, steel, and a few pieces I do not show strangers."
+condition = "can_trade_with_blacksmith"
 
-[[nodes.work_offer.effects]]
-id = "offer_quest"
-value = "north_road_bandits"
+[[nodes.shop.effects]]
+id = "open_shop"
+value = "blacksmith_basic"
 
-[[nodes.work_offer.choices]]
-id = "accept"
-text = "I'll look into it."
+[[nodes.shop.choices]]
+id = "leave"
+text = "Maybe later."
 next = "end"
 
 [nodes.end]
