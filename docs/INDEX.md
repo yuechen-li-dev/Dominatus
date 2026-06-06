@@ -60,6 +60,7 @@ This index separates user-facing documentation from release prep, development lo
 ## Game and simulation integration
 
 - [StrideConn M0](user/STRIDECONN_M0.md) and [Stride Rust simulator M1](user/STRIDECONN_M1_RUST_SIMULATOR.md) — Stride connector and sample integration notes.
+- [MonoGameConn M0](user/MONOGAME_CONN.md) — thin MonoGame `GameComponent` update bridge, SpriteBatch blackboard key conventions, and debug overlay helpers.
 - [`samples/Dominatus.FishTank`](../samples/Dominatus.FishTank) — MonoGame fish tank simulation.
 - [`samples/Dominatus.SimConsole`](../samples/Dominatus.SimConsole) — compact simulation-console sample.
 
