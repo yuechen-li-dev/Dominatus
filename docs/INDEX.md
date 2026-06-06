@@ -46,6 +46,7 @@ This index separates user-facing documentation from release prep, development lo
 - [LLM Orchestrator Baseline Report](benchmarks/LLM_ORCHESTRATOR_BASELINE_REPORT.md) — M10.2 live/manual Codex self-measurement for one RTS-style action decision compared with local CPU utility orchestration.
 
 ## Samples
+- [MonoGame RTS Demo](samples/SAMPLE_MONOGAME_RTS_DEMO.md) — 1080p visual RTS-style behavioral-AI demo using MonoGameConn; larger behavior scale than FishTank while RTSBenchmark remains the CPU benchmark authority.
 
 - [Onboarding templates](user/ONBOARDING_TEMPLATES.md) — start here for copy/configure/run LLM PR review and Home Assistant thermostat templates.
 - [TinyTown](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation where runtime utility AI drives needs and actions while LLM-style calls act as DM support for dialogue/relationship outcomes.
