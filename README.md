@@ -124,7 +124,7 @@ static IEnumerator<AiStep> Review(AiCtx ctx)
 - [Standard HTTP WebSafety](docs/actuators/ACTUATORS_STANDARD_M5_HTTP_WEB_SAFETY.md) and [WebContentSafety](docs/actuators/ACTUATORS_STANDARD_M6_WEB_CONTENT_SAFETY.md) — safe web/content ingestion for LLM agents: destination policy before fetch, content safety after fetch.
 - [`samples/Dominatus.Llm.DemoConsole`](samples/Dominatus.Llm.DemoConsole) — `Llm.Call`, `Llm.Decide`, cassettes, provider clients, and demo paths for model-backed or replayed LLM usage. Related docs: [prompt call](docs/llm/LLM_V1_M8a_PROMPT_CALL.md), [streaming](docs/llm/LLM_V1_M9a_STREAMING.md), [ranked client](docs/llm/LLM_V1_M10a_RANKED_CLIENT.md), and [OpenRouter client](docs/llm/LLM_V1_M11a_OPENROUTER_CLIENT.md).
 - [`samples/Dominatus.Assets.Toml.AriadneDialogue`](samples/Dominatus.Assets.Toml.AriadneDialogue) — typed TOML asset loading for Ariadne-style dialogue graphs; see [Dominatus.Assets.Toml docs](docs/user/ASSETS_TOML.md).
-- [`samples/Dominatus.FishTank`](samples/Dominatus.FishTank) — a MonoGame fish tank simulator that shows utility AI and runtime agent behavior in a non-LLM simulation.
+- [`samples/Dominatus.FishTank`](samples/Dominatus.FishTank) — a MonoGame fish tank simulator that shows utility AI and runtime agent behavior in a non-LLM simulation. For new MonoGame projects, `Dominatus.MonoGameConn` provides a thin `GameComponent` bridge and SpriteBatch blackboard conventions without becoming a renderer or engine.
 
 ## Packages
 
@@ -143,6 +143,7 @@ All packable projects use the root README as their NuGet README, so this page is
 | [`Dominatus.Llm.Context`](https://www.nuget.org/packages/Dominatus.Llm.Context/) | Explicit LLM context stores, loadouts, packet containers, manifests, and reusable `PRIMER.context` support. |
 | [`Dominatus.Llm.OptFlow`](https://www.nuget.org/packages/Dominatus.Llm.OptFlow/) | LLM-oriented authoring and integration: `Llm.Call`, `Llm.Decide`, `MagiDecide`, streaming, cassettes, ranked clients, provider clients, and OpenRouter. |
 | [`Dominatus.Server`](https://www.nuget.org/packages/Dominatus.Server/) | ASP.NET Core read-only inspection endpoints for worlds, agents, blackboards, active paths, and durable LLM stream read models/SSE. |
+| [`Dominatus.MonoGameConn`](https://www.nuget.org/packages/Dominatus.MonoGameConn/) | Thin MonoGame connector: a `GameComponent` that ticks `AiWorld`, SpriteBatch-oriented blackboard key conventions, and optional debug overlay helpers. |
 
 Some integrations are preview packages because their external surfaces are still evolving. The core runtime remains intentionally independent from LLM providers, Semantic Kernel, web fetchers, and home automation systems.
 
@@ -151,6 +152,7 @@ Some integrations are preview packages because their external surfaces are still
 - [`src/Ariadne.Console`](src/Ariadne.Console) — a small dialogue/text-adventure runner built on Dominatus and Ariadne.
 - [`samples/Dominatus.SimConsole`](samples/Dominatus.SimConsole) — a compact simulation-console sample.
 - [`src/Dominatus.StrideConn`](src/Dominatus.StrideConn) — a Stride connector for game/simulation integration; see [StrideConn docs](docs/user/STRIDECONN_M0.md).
+- [`src/Dominatus.MonoGameConn`](src/Dominatus.MonoGameConn) — a deliberately thin MonoGame bridge; see [MonoGameConn docs](docs/user/MONOGAME_CONN.md).
 
 ## License
 
