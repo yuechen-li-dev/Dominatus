@@ -1,6 +1,8 @@
 <Solution>
   <Project Path="samples/Dominatus.FishTank.Tests/Dominatus.FishTank.Tests.csproj" Id="4c440e8a-0dcd-4011-a1fe-d6ba70b7c0cf" />
   <Project Path="samples/Dominatus.FishTank/Dominatus.Fishtank.csproj" />
+  <Project Path="samples/Dominatus.MonoGameRtsDemo/Dominatus.MonoGameRtsDemo.csproj" />
+  <Project Path="tests/Dominatus.MonoGameRtsDemo.Tests/Dominatus.MonoGameRtsDemo.Tests.csproj" />
   <Project Path="samples/Dominatus.Llm.DemoConsole/Dominatus.Llm.DemoConsole.csproj" />
   <Project Path="samples/Dominatus.ParallelModuleWorkflow/Dominatus.ParallelModuleWorkflow.csproj" />
   <Project Path="samples/Dominatus.RTSBenchmark/Dominatus.RTSBenchmark.csproj" />

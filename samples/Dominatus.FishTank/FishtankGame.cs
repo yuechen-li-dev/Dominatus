@@ -22,7 +22,6 @@ public sealed class FishtankGame : Game
     private readonly GraphicsDeviceManager _graphics;
     private SpriteBatch _sb = null!;
     private CircleRenderer _circles = null!;
-    private SpriteFont? _font;
 
     // ------- Dominatus -------
     private AiWorld _world = null!;
@@ -97,8 +96,6 @@ public sealed class FishtankGame : Game
     {
         _sb = new SpriteBatch(GraphicsDevice);
         _circles = new CircleRenderer(GraphicsDevice);
-        // Font is optional — comment out if you don't have a Content folder set up
-        // _font = Content.Load<SpriteFont>("Arial");
     }
 
     protected override void Update(GameTime gt)
