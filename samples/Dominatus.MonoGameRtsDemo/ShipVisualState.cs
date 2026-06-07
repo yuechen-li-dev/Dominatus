@@ -16,6 +16,7 @@ public sealed class ShipVisualState
     public required RtsFaction Faction { get; init; }
     public required AiAgent Agent { get; init; }
     public Vector2 Position { get; set; }
+    public Vector2 HomePosition { get; set; }
     public Vector2 Velocity { get; set; }
     public float Hull { get; set; } = 100f;
     public float Cooldown { get; set; }

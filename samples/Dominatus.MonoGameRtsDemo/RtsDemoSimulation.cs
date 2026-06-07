@@ -18,6 +18,8 @@ public sealed class RtsDemoSimulation
     private const float SensorRange = 1000f;
     private const float ShipSpeed = 95f;
     private const float RetreatSpeed = 135f;
+    private const float SafeRetreatDistance = AttackRange * 2.4f;
+    private const float EdgeRecoveryMargin = 90f;
     private const float DamagePerShot = 12f;
     private const float FireCooldownSeconds = 0.85f;
     private readonly List<ShipVisualState> _ships = new();
@@ -98,7 +100,7 @@ public sealed class RtsDemoSimulation
 
             ship.Velocity = action switch
             {
-                "Retreat" => DirectionAway(ship, target) * RetreatSpeed,
+                "Retreat" => RetreatVelocity(ship, target, dt),
                 "Advance" => DirectionToward(ship, target) * ShipSpeed,
                 "Attack" => Vector2.Zero,
                 "HoldFormation" => FormationDrift(ship),
@@ -146,6 +148,7 @@ public sealed class RtsDemoSimulation
                 Faction = faction,
                 Agent = agent,
                 Position = position,
+                HomePosition = position,
                 Velocity = Vector2.Zero,
                 Cooldown = (i % 5) * 0.1f
             };
@@ -204,8 +207,15 @@ public sealed class RtsDemoSimulation
     {
         var hull = agent.Bb.GetOrDefault(RtsDemoKeys.HullFraction, 1f);
         var distance = agent.Bb.GetOrDefault(RtsDemoKeys.NearestEnemyDistance, SensorRange);
-        var danger = 1f - Math.Clamp(distance / 260f, 0f, 1f);
-        return Math.Clamp((1f - hull) * 1.35f + danger * 0.35f, 0f, 1f);
+        var damage = 1f - hull;
+        if (distance >= SafeRetreatDistance)
+            return damage >= 0.65f ? 0.05f : 0f;
+
+        var danger = 1f - Math.Clamp(distance / SafeRetreatDistance, 0f, 1f);
+        if (damage < 0.18f)
+            return danger * 0.18f;
+
+        return Math.Clamp((damage * 0.95f + danger * 0.45f) * danger, 0f, 1f);
     }
 
     private static float ScoreAttack(AiAgent agent)
@@ -247,16 +257,38 @@ public sealed class RtsDemoSimulation
     private static Vector2 DirectionToward(ShipVisualState ship, ShipVisualState? target)
         => NormalizeOrZero((target?.Position ?? Center) - ship.Position);
 
-    private static Vector2 DirectionAway(ShipVisualState ship, ShipVisualState? target)
+    private static Vector2 RetreatVelocity(ShipVisualState ship, ShipVisualState? target, float dt)
     {
-        var fallback = ship.Faction == RtsFaction.Dominion ? new Vector2(-1f, 0f) : new Vector2(1f, 0f);
-        return NormalizeOrZero(ship.Position - (target?.Position ?? Center), fallback);
+        var rallyDirection = DirectionTowardRally(ship);
+        var awayDirection = target is null
+            ? rallyDirection
+            : NormalizeOrZero(ship.Position - target.Position, rallyDirection);
+
+        var edgePressure = EdgePressure(ship.Position);
+        var direction = NormalizeOrZero(awayDirection * (1f - edgePressure * 0.65f) + rallyDirection * (0.35f + edgePressure), rallyDirection);
+        var proposed = ship.Position + direction * RetreatSpeed * dt;
+        if (ClampToWorld(proposed) != proposed)
+            direction = NormalizeOrZero(rallyDirection * 2f + awayDirection * 0.2f, rallyDirection);
+
+        return direction * RetreatSpeed;
     }
 
     private static Vector2 FormationDrift(ShipVisualState ship)
     {
         var desiredX = ship.Faction == RtsFaction.Dominion ? WorldWidth * 0.38f : WorldWidth * 0.62f;
         return NormalizeOrZero(new Vector2(desiredX, ship.Position.Y) - ship.Position) * 25f;
+    }
+
+    private static Vector2 DirectionTowardRally(ShipVisualState ship)
+    {
+        var rally = new Vector2(ship.Faction == RtsFaction.Dominion ? WorldWidth * 0.38f : WorldWidth * 0.62f, ship.HomePosition.Y);
+        return NormalizeOrZero(rally - ship.Position, ship.Faction == RtsFaction.Dominion ? Vector2.UnitX : -Vector2.UnitX);
+    }
+
+    private static float EdgePressure(Vector2 position)
+    {
+        var nearestEdge = MathF.Min(MathF.Min(position.X - 20f, WorldWidth - 20f - position.X), MathF.Min(position.Y - 20f, WorldHeight - 20f - position.Y));
+        return 1f - Math.Clamp(nearestEdge / EdgeRecoveryMargin, 0f, 1f);
     }
 
     private static Vector2 NormalizeOrZero(Vector2 vector, Vector2 fallback = default)
