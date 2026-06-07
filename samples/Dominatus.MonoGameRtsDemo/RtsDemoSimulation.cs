@@ -66,14 +66,17 @@ public sealed class RtsDemoSimulation
 
             var nearest = FindNearestEnemy(ship);
             var distance = nearest is null ? SensorRange : Vector2.Distance(ship.Position, nearest.Position);
-            ship.TargetId = nearest?.AgentId;
+            var targetSensed = nearest is not null && distance <= SensorRange;
+            ship.TargetId = targetSensed ? nearest!.AgentId : null;
 
             ship.Agent.Bb.Set(RtsDemoKeys.HullFraction, ship.HullFraction);
-            ship.Agent.Bb.Set(RtsDemoKeys.NearestEnemyDistance, MathF.Min(distance, SensorRange));
-            ship.Agent.Bb.Set(RtsDemoKeys.EnemyInRange, nearest is not null && distance <= AttackRange);
+            ship.Agent.Bb.Set(RtsDemoKeys.NearestEnemyDistance, targetSensed ? distance : SensorRange);
+            ship.Agent.Bb.Set(RtsDemoKeys.EnemyInRange, targetSensed && distance <= AttackRange);
             ship.Agent.Bb.Set(RtsDemoKeys.CooldownReady, ship.Cooldown <= 0f);
-            if (nearest is not null)
-                ship.Agent.Bb.Set(RtsDemoKeys.TargetId, nearest.AgentId);
+            if (targetSensed)
+                ship.Agent.Bb.Set(RtsDemoKeys.TargetId, nearest!.AgentId);
+            else
+                ship.Agent.Bb.Remove(RtsDemoKeys.TargetId);
 
             ship.Agent.Bb.Set(MonoGameBbKeys.Position, ship.Position);
             ship.Agent.Bb.Set(MonoGameBbKeys.Velocity, ship.Velocity);
@@ -207,9 +210,10 @@ public sealed class RtsDemoSimulation
 
     private static float ScoreAttack(AiAgent agent)
     {
-        var inRange = agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, false) ? 0.78f : 0f;
-        var ready = agent.Bb.GetOrDefault(RtsDemoKeys.CooldownReady, false) ? 0.22f : 0.08f;
-        return Math.Clamp(inRange + ready, 0f, 1f);
+        if (!agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, false))
+            return 0f;
+
+        return agent.Bb.GetOrDefault(RtsDemoKeys.CooldownReady, false) ? 1f : 0.65f;
     }
 
     private static float ScoreAdvance(AiAgent agent)
