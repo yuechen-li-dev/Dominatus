@@ -1,5 +1,6 @@
 using Dominatus.MonoGameConn;
 using Dominatus.MonoGameRtsDemo;
+using Microsoft.Xna.Framework;
 
 namespace Dominatus.MonoGameRtsDemo.Tests;
 
@@ -44,6 +45,55 @@ public sealed class RtsDemoSimulationTests
     }
 
     [Fact]
+    public void AttackScore_OutOfRange_IsZeroOrCannotBeatAdvance()
+    {
+        var simulation = RtsDemoSimulation.Create(2);
+        var dominion = simulation.Ships.Single(s => s.Faction == RtsFaction.Dominion);
+        var collective = simulation.Ships.Single(s => s.Faction == RtsFaction.Collective);
+
+        dominion.Position = new Vector2(500f, 500f);
+        collective.Position = new Vector2(700f, 500f);
+        dominion.Cooldown = 0f;
+        collective.Cooldown = 0f;
+
+        simulation.Step(0.1f);
+        simulation.Step(0.1f);
+
+        Assert.False(dominion.Agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, true));
+        Assert.False(collective.Agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, true));
+        Assert.NotEqual("Attack", dominion.Agent.Bb.GetOrDefault(RtsDemoKeys.CurrentAction, ""));
+        Assert.NotEqual("Attack", collective.Agent.Bb.GetOrDefault(RtsDemoKeys.CurrentAction, ""));
+    }
+
+    [Fact]
+    public void DemoSimulation_ShipsCloseIntoAttackRange()
+    {
+        var simulation = RtsDemoSimulation.Create();
+
+        var reachedAttackWhileInRange = RunUntil(simulation, 30f, 0.1f, () =>
+            simulation.Ships.Any(ship =>
+                ship.Alive
+                && ship.Agent.Bb.GetOrDefault(RtsDemoKeys.CurrentAction, "") == "Attack"
+                && ship.Agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, false)));
+
+        Assert.True(reachedAttackWhileInRange);
+    }
+
+    [Fact]
+    public void DemoSimulation_CombatEventuallyDestroysOrDamagesShips()
+    {
+        var simulation = RtsDemoSimulation.Create();
+        var initialHull = simulation.Ships.Sum(s => s.Hull);
+        var initialAlive = simulation.DominionAlive + simulation.CollectiveAlive;
+
+        var combatResolved = RunUntil(simulation, 45f, 0.1f, () =>
+            simulation.Ships.Sum(s => s.Hull) < initialHull
+            || simulation.DominionAlive + simulation.CollectiveAlive < initialAlive);
+
+        Assert.True(combatResolved);
+    }
+
+    [Fact]
     public void DemoSimulation_ResetIsDeterministic()
     {
         var simulation = RtsDemoSimulation.Create();
@@ -62,6 +112,19 @@ public sealed class RtsDemoSimulationTests
 
         Assert.DoesNotContain("Dominatus.Llm.OptFlow", sampleReferences);
         Assert.DoesNotContain("System.Net.Http", sampleReferences);
+    }
+
+    private static bool RunUntil(RtsDemoSimulation simulation, float seconds, float dt, Func<bool> predicate)
+    {
+        var steps = (int)MathF.Ceiling(seconds / dt);
+        for (var i = 0; i < steps; i++)
+        {
+            simulation.Step(dt);
+            if (predicate())
+                return true;
+        }
+
+        return false;
     }
 
     private static string Snapshot(RtsDemoSimulation simulation)
