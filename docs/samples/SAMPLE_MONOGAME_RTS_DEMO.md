@@ -4,7 +4,7 @@ Dominatus.MonoGameRtsDemo is a 1080p visual RTS-style fleet demo for the MonoGam
 
 ## Purpose
 
-The sample shows two class-diverse fleets, Dominion and Collective, moving and fighting with one Dominatus `AiAgent` per ship. The default configuration creates 50 ships total: 25 Dominion and 25 Collective. That makes utility-driven behavior visible at a Smoke-scale agent count while keeping the renderer and simulation simple enough for a sample.
+The sample shows two class-diverse fleets, Dominion and Collective, moving and fighting with one Dominatus `AiAgent` per ship. The default configuration creates 50 ships total with an uneven visual-demo split: 22 Dominion and 28 Collective. That gives the Collective a more swarm-like silhouette while keeping the renderer and simulation simple enough for a sample.
 
 RTSBenchmark remains the benchmark authority for CPU measurements, deterministic benchmark reports, and benchmark correctness claims. This demo ports the benchmark ship-class definitions and doctrine profiles for visual variety, but keeps a visual-friendly local simulation loop.
 
@@ -27,7 +27,7 @@ The HUD is written to the window title instead of a `SpriteFont`, avoiding fragi
 
 ## Fleet composition
 
-Fleet setup is deterministic and class-aware. Dominion ships spawn around the left side/left third and Collective ships spawn around the right side/right third, centered vertically in wedge-like grid formations. Each ship stores a real 2D `HomePosition` used by formation drift.
+Fleet setup is deterministic and class-aware. Dominion ships spawn around the left side/left third and Collective ships spawn around the right side/right third, centered vertically in wedge-like grid formations. Each ship stores a real 2D `HomePosition` used by formation drift. Requested ship counts remain total counts, but the demo splits them roughly 44% Dominion and 56% Collective so the Collective reads as the numerical swarm faction.
 
 Dominion composition:
 
@@ -84,15 +84,15 @@ Each ship has an HFSM with a root decision node and action states. The root node
 - `Retreat`: move away when hull is low and a sensed enemy is close;
 - `HoldFormation`: low-priority fallback drift toward a faction staging band using the ship's 2D home Y.
 
-The demo still uses Dominatus concepts directly: `AiWorld`, `AiAgent`, HFSM states, `Ai.Decide`, `Ai.Option`, `Consideration`, blackboards, and action nodes. It does not replace behavior selection with manual loops.
+The demo still uses Dominatus concepts directly: `AiWorld`, `AiAgent`, HFSM states, `Ai.Decide`, `Ai.Option`, `Consideration`, blackboards, and action nodes. It does not replace behavior selection with manual loops. The action decision policy uses stronger visual-demo hysteresis, minimum commit time, and tie epsilon values than the earlier readable showcase pass so `Attack`, `Advance`, `Retreat`, and `HoldFormation` have visible commitment instead of frame-by-frame flapping.
 
 ## Anti-clumping and perception
 
 The simulation rebuilds a deterministic spatial grid once per perception update. The grid is used to query nearby ships for class-specific sensor checks and allied separation candidates. Perception only assigns `TargetId` when an enemy is inside the ship's sensor range, and `EnemyInRange` only becomes true inside that ship's attack range.
 
-Movement combines the selected action velocity with a capped allied separation force. Separation is intentionally weaker than primary movement so fleets still close into combat, but attacking and holding ships keep a small drift that prevents them from stacking into one frozen-looking clump.
+Movement combines the selected action velocity with a capped allied separation force. Separation is intentionally weaker than primary movement so fleets still close into combat, but attacking and holding ships keep a small drift that prevents them from stacking into one frozen-looking clump. Actual velocity eases toward desired velocity with class-specific turn responsiveness, so small craft pivot faster while carriers, cruisers, and hive arks have heavier turn inertia. After movement, a deterministic allied-only minimum-spacing correction makes one or two bounded visual pushes for overlapping same-faction pairs and then writes the corrected positions back to ship blackboards.
 
-The visual simulation is intentionally simple: no pathfinding, physics engine, RTS UI, networking, LLM calls, ECS, shaders, external sprites, or benchmark report runner.
+The visual simulation is intentionally simple and tuned for readability rather than benchmark validity: no pathfinding, physics engine, RTS UI, networking, LLM calls, ECS, shaders, external sprites, or benchmark report runner. RTSBenchmark remains the headless benchmark for tactical and performance claims.
 
 ## Running and testing
 

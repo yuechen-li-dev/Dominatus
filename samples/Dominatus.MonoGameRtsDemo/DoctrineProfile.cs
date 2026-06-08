@@ -19,9 +19,9 @@ public sealed record DoctrineProfile
 
     public static DoctrineProfile Collective { get; } = new()
     {
-        Aggression = 1.16f,
-        PreserveHighValueShips = 0.82f,
+        Aggression = 1.28f,
+        PreserveHighValueShips = 0.70f,
         FocusCommandTargets = 1.24f,
-        RepairPriority = 0.92f
+        RepairPriority = 0.88f
     };
 }
