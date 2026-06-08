@@ -12,6 +12,14 @@ public static class RtsDemoKeys
     public static readonly BbKey<float> NearestEnemyDistance = new("rts_demo.nearest_enemy_distance");
     public static readonly BbKey<bool> EnemyInRange = new("rts_demo.enemy_in_range");
     public static readonly BbKey<bool> CooldownReady = new("rts_demo.cooldown_ready");
+    public static readonly BbKey<ShipClass> ShipClass = new("rts_demo.ship_class");
+    public static readonly BbKey<float> AttackRange = new("rts_demo.attack_range");
+    public static readonly BbKey<float> ShipSpeed = new("rts_demo.ship_speed");
+    public static readonly BbKey<bool> IsRepairShip = new("rts_demo.is_repair_ship");
+    public static readonly BbKey<bool> IsCarrier = new("rts_demo.is_carrier");
+    public static readonly BbKey<float> Aggression = new("rts_demo.aggression");
+    public static readonly BbKey<float> RepairPriority = new("rts_demo.repair_priority");
+    public static readonly BbKey<AgentId> VulnerableAllyId = new("rts_demo.vulnerable_ally_id");
     public static readonly BbKey<AgentId> TargetId = new("rts_demo.target_id");
     public static readonly BbKey<bool> UsedAiDecide = new("rts_demo.used_ai_decide");
 }
