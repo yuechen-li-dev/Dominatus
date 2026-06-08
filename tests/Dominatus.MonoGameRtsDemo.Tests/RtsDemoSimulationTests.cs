@@ -13,10 +13,76 @@ public sealed class RtsDemoSimulationTests
 
         Assert.Equal(RtsDemoOptions.DefaultShips, simulation.Ships.Count);
         Assert.Equal(RtsDemoOptions.DefaultShips, simulation.World.Agents.Count);
-        Assert.Equal(25, simulation.DominionAlive);
-        Assert.Equal(25, simulation.CollectiveAlive);
+        Assert.Equal(22, simulation.DominionAlive);
+        Assert.Equal(28, simulation.CollectiveAlive);
     }
 
+
+    [Fact]
+    public void DemoSimulation_CollectiveStartsWithNumericalAdvantage()
+    {
+        var simulation = RtsDemoSimulation.Create();
+
+        Assert.Equal(RtsDemoOptions.DefaultShips, simulation.DominionAlive + simulation.CollectiveAlive);
+        Assert.True(simulation.CollectiveAlive > simulation.DominionAlive, $"Expected the Collective swarm to outnumber Dominion, but counts were D:{simulation.DominionAlive} C:{simulation.CollectiveAlive}.");
+    }
+
+    [Fact]
+    public void DemoSimulation_VelocityChangesSmoothly()
+    {
+        var current = new Vector2(120f, 0f);
+        var desired = new Vector2(-120f, 0f);
+
+        var smoothed = RtsDemoSimulation.SmoothVelocity(current, desired, responsiveness: 5f, dt: 0.1f);
+
+        Assert.True(smoothed.X > desired.X, $"Expected smoothing to avoid an instant snap to {desired}, but got {smoothed}.");
+        Assert.True(smoothed.X < current.X, $"Expected smoothing to move toward {desired}, but got {smoothed}.");
+    }
+
+    [Fact]
+    public void DemoSimulation_AlliedMinimumSpacingResolverSeparatesOverlaps()
+    {
+        var simulation = RtsDemoSimulation.Create();
+        var allies = simulation.Ships.Where(s => s.Faction == RtsFaction.Collective).Take(2).ToArray();
+        var overlap = new Vector2(1000f, 540f);
+        allies[0].Position = overlap;
+        allies[1].Position = overlap;
+
+        simulation.Step(0.1f);
+
+        var distance = Vector2.Distance(allies[0].Position, allies[1].Position);
+        Assert.True(distance > 0f, $"Expected deterministic allied spacing to separate overlapping ships, but distance was {distance}.");
+        Assert.All(allies, ship =>
+        {
+            Assert.InRange(ship.Position.X, 20f, RtsDemoSimulation.WorldWidth - 20f);
+            Assert.InRange(ship.Position.Y, 20f, RtsDemoSimulation.WorldHeight - 20f);
+        });
+    }
+
+    [Fact]
+    public void DemoSimulation_ActionFlappingIsBounded()
+    {
+        var simulation = RtsDemoSimulation.Create();
+        var previous = simulation.Ships.ToDictionary(s => s.AgentId, s => s.Agent.Bb.GetOrDefault(RtsDemoKeys.CurrentAction, ""));
+        var changes = simulation.Ships.ToDictionary(s => s.AgentId, _ => 0);
+
+        for (var i = 0; i < 160; i++)
+        {
+            simulation.Step(0.1f);
+            foreach (var ship in simulation.Ships.Where(s => s.Alive))
+            {
+                var action = ship.Agent.Bb.GetOrDefault(RtsDemoKeys.CurrentAction, "");
+                if (action != previous[ship.AgentId])
+                {
+                    changes[ship.AgentId]++;
+                    previous[ship.AgentId] = action;
+                }
+            }
+        }
+
+        var maxChanges = changes.Values.Max();
+        Assert.True(maxChanges <= 24, $"Expected visual action commitment to keep flapping bounded, but one ship changed action {maxChanges} times.");
+    }
 
     [Fact]
     public void DemoSimulation_CreatesClassDiverseFleets()

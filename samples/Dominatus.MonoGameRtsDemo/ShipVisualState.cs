@@ -32,5 +32,13 @@ public sealed class ShipVisualState
     public float SensorRange => Def.SensorRange * RtsDemoSimulation.ScalePixelsPerUnit;
     public float Speed => Def.Speed * RtsDemoSimulation.ScalePixelsPerUnit * 8.5f;
     public float SeparationRadius => MathF.Max(18f, MathF.Sqrt(MaxHull) * 2.1f);
+    public float TurnResponsiveness => Class switch
+    {
+        ShipClass.NeedleDrone or ShipClass.ScoutFrigate => 11f,
+        ShipClass.MissileCorvette or ShipClass.SporeFrigate => 9f,
+        ShipClass.RailgunDestroyer or ShipClass.RepairTender or ShipClass.Regenerator or ShipClass.Harvester => 7f,
+        ShipClass.Carrier or ShipClass.CommandCruiser or ShipClass.SynapseCruiser or ShipClass.HiveArk => 5f,
+        _ => 8f
+    };
     public float HullFraction => MaxHull <= 0f ? 0f : Hull / MaxHull;
 }

@@ -22,6 +22,13 @@ public sealed class RtsDemoSimulation
     private const float SeparationForceScale = 80f;
     private const float MaxSeparationSpeed = 42f;
     private const float FormationDriftSpeed = 25f;
+    private const float ActionDecisionHysteresis = 0.10f;
+    private const float ActionMinCommitSeconds = 0.35f;
+    private const float ActionTieEpsilon = 0.01f;
+    private const float AlliedMinimumSpacingScale = 0.55f;
+    private const float MaxAlliedSpacingPushPerShip = 10f;
+    private const int AlliedSpacingIterations = 2;
+    private const float CollectiveShipShare = 0.56f;
     private const float SpatialCellSize = 160f;
     private readonly List<ShipVisualState> _ships = new();
     private readonly Dictionary<AgentId, ShipVisualState> _byId = new();
@@ -149,7 +156,9 @@ public sealed class RtsDemoSimulation
                 _ => separation * 0.4f
             };
 
-            ship.Velocity = ClampMagnitude(desiredVelocity, ship.Speed * RetreatSpeedMultiplier);
+            var maxSpeed = ship.Speed * RetreatSpeedMultiplier;
+            desiredVelocity = ClampMagnitude(desiredVelocity, maxSpeed);
+            ship.Velocity = ClampMagnitude(SmoothVelocity(ship.Velocity, desiredVelocity, ship.TurnResponsiveness, dt), maxSpeed);
 
             if (action == "Attack" && target is not null && ship.Cooldown <= 0f && Vector2.Distance(ship.Position, target.Position) <= ship.AttackRange)
             {
@@ -165,13 +174,21 @@ public sealed class RtsDemoSimulation
             ship.Agent.Bb.Set(MonoGameBbKeys.Position, ship.Position);
             ship.Agent.Bb.Set(MonoGameBbKeys.Velocity, ship.Velocity);
         }
+
+        ResolveAlliedMinimumSpacing();
     }
 
     public static Vector2 CalculateFormationDrift(ShipVisualState ship) => FormationDrift(ship);
 
+    public static Vector2 SmoothVelocity(Vector2 current, Vector2 desired, float responsiveness, float dt)
+    {
+        var t = 1f - MathF.Exp(-MathF.Max(0f, responsiveness) * MathF.Max(0f, dt));
+        return current + (desired - current) * Math.Clamp(t, 0f, 1f);
+    }
+
     private void CreateFleet()
     {
-        var dominionCount = _shipCount / 2;
+        var dominionCount = Math.Max(1, (int)MathF.Floor(_shipCount * (1f - CollectiveShipShare)));
         var collectiveCount = _shipCount - dominionCount;
         SpawnFaction(RtsFaction.Dominion, dominionCount, new Vector2(WorldWidth * 0.18f, WorldHeight * 0.5f), 1);
         SpawnFaction(RtsFaction.Collective, collectiveCount, new Vector2(WorldWidth * 0.82f, WorldHeight * 0.5f), -1);
@@ -272,7 +289,7 @@ public sealed class RtsDemoSimulation
                 Ai.Option("Attack", new Consideration((_, a) => ScoreAttack(a)), "Attack"),
                 Ai.Option("Advance", new Consideration((_, a) => ScoreAdvance(a)), "Advance"),
                 Ai.Option("HoldFormation", new Consideration((_, a) => ScoreHoldFormation(a)), "HoldFormation")
-            ], hysteresis: 0.03f, minCommitSeconds: 0.05f, tieEpsilon: 0.0001f);
+            ], hysteresis: ActionDecisionHysteresis, minCommitSeconds: ActionMinCommitSeconds, tieEpsilon: ActionTieEpsilon);
         }
     }
 
@@ -420,6 +437,63 @@ public sealed class RtsDemoSimulation
         }
 
         return ClampMagnitude(force, MaxSeparationSpeed);
+    }
+
+    private void ResolveAlliedMinimumSpacing()
+    {
+        for (var iteration = 0; iteration < AlliedSpacingIterations; iteration++)
+        {
+            for (var i = 0; i < _ships.Count; i++)
+            {
+                var a = _ships[i];
+                if (!a.Alive)
+                    continue;
+
+                for (var j = i + 1; j < _ships.Count; j++)
+                {
+                    var b = _ships[j];
+                    if (!b.Alive || b.Faction != a.Faction)
+                        continue;
+
+                    var minimumDistance = (a.SeparationRadius + b.SeparationRadius) * AlliedMinimumSpacingScale;
+                    var delta = b.Position - a.Position;
+                    var distanceSquared = delta.LengthSquared();
+                    var direction = DeterministicSeparationDirection(a, b);
+                    var distance = 0f;
+                    if (distanceSquared >= 0.0001f)
+                    {
+                        distance = MathF.Sqrt(distanceSquared);
+                        direction = delta / distance;
+                    }
+
+                    if (distance >= minimumDistance)
+                        continue;
+
+                    var perShipPush = MathF.Min((minimumDistance - distance) * 0.5f, MaxAlliedSpacingPushPerShip);
+                    if (perShipPush <= 0f)
+                        continue;
+
+                    a.Position = ClampToWorld(a.Position - direction * perShipPush);
+                    b.Position = ClampToWorld(b.Position + direction * perShipPush);
+                }
+            }
+        }
+
+        foreach (var ship in _ships)
+        {
+            if (!ship.Alive)
+                continue;
+
+            ship.Agent.Bb.Set(MonoGameBbKeys.Position, ship.Position);
+            World.SetPublic(ship.AgentId, new AgentSnapshot(ship.AgentId, (int)ship.Faction, new System.Numerics.Vector3(ship.Position.X, ship.Position.Y, 0f), true));
+        }
+    }
+
+    private static Vector2 DeterministicSeparationDirection(ShipVisualState a, ShipVisualState b)
+    {
+        var seed = (a.Index * 31 + b.Index * 17 + (a.Faction == RtsFaction.Dominion ? 3 : 11)) * 0.61803398875f;
+        var angle = (seed - MathF.Floor(seed)) * MathF.Tau;
+        return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
     }
 
     private static float EdgePressure(Vector2 position)
