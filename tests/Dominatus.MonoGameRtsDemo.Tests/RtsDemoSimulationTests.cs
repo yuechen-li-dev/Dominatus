@@ -17,6 +17,136 @@ public sealed class RtsDemoSimulationTests
         Assert.Equal(25, simulation.CollectiveAlive);
     }
 
+
+    [Fact]
+    public void DemoSimulation_CreatesClassDiverseFleets()
+    {
+        var simulation = RtsDemoSimulation.Create();
+
+        Assert.True(simulation.Ships.Where(s => s.Faction == RtsFaction.Dominion).Select(s => s.Class).Distinct().Count() > 1);
+        Assert.True(simulation.Ships.Where(s => s.Faction == RtsFaction.Collective).Select(s => s.Class).Distinct().Count() > 1);
+    }
+
+    [Fact]
+    public void DemoSimulation_HomePositionsAreAssigned()
+    {
+        var simulation = RtsDemoSimulation.Create();
+        var initialHomes = HomeSnapshot(simulation);
+
+        Assert.All(simulation.Ships, ship =>
+        {
+            Assert.True(ship.HomePosition.X > 0f);
+            Assert.True(ship.HomePosition.Y > 0f);
+            Assert.Equal(ship.HomePosition, ship.Position);
+        });
+
+        simulation.Step(0.25f);
+        simulation.Reset();
+
+        Assert.Equal(initialHomes, HomeSnapshot(simulation));
+    }
+
+    [Fact]
+    public void DemoSimulation_FormationDriftUsesHomeY()
+    {
+        var simulation = RtsDemoSimulation.Create(2);
+        var ship = simulation.Ships.First(s => s.Faction == RtsFaction.Dominion);
+        ship.Position = new Vector2(ship.HomePosition.X, ship.HomePosition.Y + 80f);
+
+        var drift = RtsDemoSimulation.CalculateFormationDrift(ship);
+
+        Assert.True(drift.Y < 0f, $"Expected formation drift to move upward toward home Y {ship.HomePosition.Y}, but drift was {drift}.");
+    }
+
+    [Fact]
+    public void DemoSimulation_ShipsDoNotClumpIntoSingleStack()
+    {
+        var simulation = RtsDemoSimulation.Create();
+
+        for (var i = 0; i < 160; i++)
+            simulation.Step(0.1f);
+
+        var nearIdenticalPairs = CountSameFactionPairsWithin(simulation, 4f);
+
+        Assert.True(nearIdenticalPairs < 12, $"Expected allied separation to prevent stack clumping, but found {nearIdenticalPairs} same-faction pairs within 4px.");
+    }
+
+    [Fact]
+    public void DemoSimulation_LaserFlashOccursWhenShipsFire()
+    {
+        var simulation = RtsDemoSimulation.Create();
+
+        var fired = RunUntil(simulation, 35f, 0.1f, () =>
+            simulation.Ships.Any(ship => ship.FiredThisFrame && ship.LaserTargetPos is not null));
+
+        Assert.True(fired, "At least one ship should record a one-frame laser flash when a shot lands.");
+    }
+
+    [Fact]
+    public void DemoSimulation_StillClosesIntoCombatAndDamagesShips()
+    {
+        var simulation = RtsDemoSimulation.Create();
+        var initialHull = simulation.Ships.Sum(s => s.Hull);
+
+        var damaged = RunUntil(simulation, 45f, 0.1f, () => simulation.Ships.Sum(s => s.Hull) < initialHull);
+
+        Assert.True(damaged);
+    }
+
+    [Fact]
+    public void DemoSimulation_TargetsRespectSensorRange()
+    {
+        var simulation = RtsDemoSimulation.Create(2);
+        var dominion = simulation.Ships.Single(s => s.Faction == RtsFaction.Dominion);
+        var collective = simulation.Ships.Single(s => s.Faction == RtsFaction.Collective);
+        dominion.Position = new Vector2(100f, 100f);
+        collective.Position = new Vector2(1800f, 900f);
+
+        simulation.UpdatePerception();
+
+        Assert.Null(dominion.TargetId);
+        Assert.Null(collective.TargetId);
+        Assert.False(dominion.Agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, true));
+        Assert.False(collective.Agent.Bb.GetOrDefault(RtsDemoKeys.EnemyInRange, true));
+        Assert.False(dominion.Agent.Bb.TryGet(RtsDemoKeys.TargetId, out _));
+        Assert.False(collective.Agent.Bb.TryGet(RtsDemoKeys.TargetId, out _));
+    }
+
+    [Fact]
+    public void RtsDemoSpatialGrid_FindsNearbyAndIgnoresFar()
+    {
+        var simulation = RtsDemoSimulation.Create(3);
+        var ships = simulation.Ships.ToArray();
+        ships[0].Position = new Vector2(100f, 100f);
+        ships[1].Position = new Vector2(130f, 100f);
+        ships[2].Position = new Vector2(900f, 900f);
+        var grid = new RtsDemoSpatialGrid(100f);
+
+        grid.Rebuild(ships);
+        var candidates = grid.QueryCandidateIds(ships[0].Position, 100f);
+
+        Assert.Contains(ships[0].AgentId, candidates);
+        Assert.Contains(ships[1].AgentId, candidates);
+        Assert.DoesNotContain(ships[2].AgentId, candidates);
+    }
+
+    [Fact]
+    public void RtsDemoSpatialGrid_DeterministicCandidateOrder()
+    {
+        var simulation = RtsDemoSimulation.Create(6);
+        foreach (var ship in simulation.Ships)
+            ship.Position = new Vector2(200f + ship.Index % 2, 200f + ship.Index % 3);
+        var grid = new RtsDemoSpatialGrid(100f);
+
+        grid.Rebuild(simulation.Ships.Reverse());
+        var first = grid.QueryCandidateIds(new Vector2(200f, 200f), 100f).Select(id => id.Value).ToArray();
+        grid.Rebuild(simulation.Ships);
+        var second = grid.QueryCandidateIds(new Vector2(200f, 200f), 100f).Select(id => id.Value).ToArray();
+
+        Assert.Equal(first.Order().ToArray(), first);
+        Assert.Equal(first, second);
+    }
+
     [Fact]
     public void DemoSimulation_UsesMonoGameBbPositionKeys()
     {
@@ -213,6 +343,26 @@ public sealed class RtsDemoSimulationTests
         return false;
     }
 
+    private static int CountSameFactionPairsWithin(RtsDemoSimulation simulation, float pixels)
+    {
+        var thresholdSquared = pixels * pixels;
+        var pairs = 0;
+        var alive = simulation.Ships.Where(s => s.Alive).ToArray();
+        for (var i = 0; i < alive.Length; i++)
+        {
+            for (var j = i + 1; j < alive.Length; j++)
+            {
+                if (alive[i].Faction == alive[j].Faction && Vector2.DistanceSquared(alive[i].Position, alive[j].Position) <= thresholdSquared)
+                    pairs++;
+            }
+        }
+
+        return pairs;
+    }
+
+    private static string HomeSnapshot(RtsDemoSimulation simulation)
+        => string.Join(";", simulation.Ships.Select(s => $"{s.AgentId.Value}:{s.Faction}:{s.Class}:{s.HomePosition.X:0.###},{s.HomePosition.Y:0.###}"));
+
     private static string Snapshot(RtsDemoSimulation simulation)
-        => string.Join(";", simulation.Ships.Select(s => $"{s.AgentId.Value}:{s.Faction}:{s.Position.X:0.###},{s.Position.Y:0.###}:{s.Hull:0.###}:{s.Alive}"));
+        => string.Join(";", simulation.Ships.Select(s => $"{s.AgentId.Value}:{s.Faction}:{s.Class}:{s.Position.X:0.###},{s.Position.Y:0.###}:{s.HomePosition.X:0.###},{s.HomePosition.Y:0.###}:{s.Hull:0.###}:{s.Alive}"));
 }

@@ -1,25 +1,53 @@
 # Dominatus.MonoGameRtsDemo
 
-Dominatus.MonoGameRtsDemo is a 1080p visual RTS-style fleet demo for the MonoGame connector. It is intentionally a visual proof of Dominatus behavioral AI at a larger scale than FishTank, not the authoritative RTSBenchmark CPU runner.
+Dominatus.MonoGameRtsDemo is a 1080p visual RTS-style fleet demo for the MonoGame connector. It is intentionally a readable visual proof of Dominatus behavioral AI at a larger scale than FishTank, not the authoritative RTSBenchmark CPU runner.
 
 ## Purpose
 
-The sample shows two fleets, Dominion and Collective, moving and fighting with one Dominatus `AiAgent` per ship. The default configuration creates 50 ships total: 25 Dominion and 25 Collective. That makes utility-driven behavior visible at a Smoke-scale agent count while keeping the renderer and simulation simple enough for a sample.
+The sample shows two class-diverse fleets, Dominion and Collective, moving and fighting with one Dominatus `AiAgent` per ship. The default configuration creates 50 ships total: 25 Dominion and 25 Collective. That makes utility-driven behavior visible at a Smoke-scale agent count while keeping the renderer and simulation simple enough for a sample.
 
-RTSBenchmark remains the benchmark authority for CPU measurements, deterministic benchmark reports, and benchmark correctness claims. This demo borrows RTS-inspired concepts but keeps a visual-friendly local simulation loop.
+RTSBenchmark remains the benchmark authority for CPU measurements, deterministic benchmark reports, and benchmark correctness claims. This demo ports the benchmark ship-class definitions and doctrine profiles for visual variety, but keeps a visual-friendly local simulation loop.
 
 ## Window and rendering
 
-The game opens a windowed 1920x1080 MonoGame DesktopGL surface and leaves the mouse cursor visible. Rendering avoids external art and the MonoGame content pipeline by generating a 1x1 white texture at runtime and drawing scaled rectangles:
+The game opens a windowed 1920x1080 MonoGame DesktopGL surface and leaves the mouse cursor visible. Rendering avoids external art and the MonoGame content pipeline by generating a 1x1 white texture at runtime and composing scaled rectangles:
 
-- blue rectangles: Dominion ships
-- red rectangles: Collective ships
-- dimmer/smaller rectangles: damaged ships
+- blue class-specific silhouettes: Dominion ships
+- red/orange class-specific silhouettes: Collective ships
+- dimmer silhouettes: damaged ships
 - white center pips: attacking ships
 - yellow bars: retreating ships
+- cyan laser flashes: Dominion shots
+- orange laser flashes: Collective shots
 - center line: fleet engagement boundary
 
+Ship classes have deliberately different rectangle compositions so the scene reads as an RTS battle instead of identical squares. Scouts are thin, drones are tiny, destroyers are long, carriers and hive arks are large, repair/regenerator classes use plus/corner motifs, and command/synapse ships use larger cross-like silhouettes.
+
 The HUD is written to the window title instead of a `SpriteFont`, avoiding fragile font/content dependencies in CI and headless environments.
+
+## Fleet composition
+
+Fleet setup is deterministic and class-aware. Dominion ships spawn around the left side/left third and Collective ships spawn around the right side/right third, centered vertically in wedge-like grid formations. Each ship stores a real 2D `HomePosition` used by formation drift.
+
+Dominion composition:
+
+- ScoutFrigate
+- MissileCorvette
+- RailgunDestroyer
+- Carrier
+- RepairTender
+- CommandCruiser
+
+Collective composition:
+
+- NeedleDrone
+- SporeFrigate
+- SynapseCruiser
+- Regenerator
+- Harvester
+- HiveArk
+
+Class definitions drive visual-demo hull, damage, attack range, sensor range, speed, cooldown, carrier/repair flags, and separation radius. The demo scales benchmark distances with a small pixel scale so combat ranges are readable on the 1920x1080 surface.
 
 ## Controls
 
@@ -45,16 +73,24 @@ The game update order is explicit:
 
 1. update sample-local perception on blackboards;
 2. let `DominatusGameComponent` tick the world through `base.Update`;
-3. resolve sample-local movement, cooldowns, damage, and deaths from the selected actions.
+3. resolve sample-local movement, cooldowns, damage, deaths, and laser fire flags from the selected actions.
 
 ## Behavior model
 
 Each ship has an HFSM with a root decision node and action states. The root node yields `Ai.Decide` over utility options:
 
-- `Advance`: close distance to the nearest enemy;
-- `Attack`: hold position and fire when an enemy is in range;
-- `Retreat`: move away when hull is low or the ship is threatened;
-- `HoldFormation`: low-priority fallback drift toward a faction staging band.
+- `Advance`: close distance to the nearest sensed enemy;
+- `Attack`: fire when an enemy is in class-specific attack range;
+- `Retreat`: move away when hull is low and a sensed enemy is close;
+- `HoldFormation`: low-priority fallback drift toward a faction staging band using the ship's 2D home Y.
+
+The demo still uses Dominatus concepts directly: `AiWorld`, `AiAgent`, HFSM states, `Ai.Decide`, `Ai.Option`, `Consideration`, blackboards, and action nodes. It does not replace behavior selection with manual loops.
+
+## Anti-clumping and perception
+
+The simulation rebuilds a deterministic spatial grid once per perception update. The grid is used to query nearby ships for class-specific sensor checks and allied separation candidates. Perception only assigns `TargetId` when an enemy is inside the ship's sensor range, and `EnemyInRange` only becomes true inside that ship's attack range.
+
+Movement combines the selected action velocity with a capped allied separation force. Separation is intentionally weaker than primary movement so fleets still close into combat, but attacking and holding ships keep a small drift that prevents them from stacking into one frozen-looking clump.
 
 The visual simulation is intentionally simple: no pathfinding, physics engine, RTS UI, networking, LLM calls, ECS, shaders, external sprites, or benchmark report runner.
 
@@ -77,8 +113,8 @@ Headless CI should build and test the deterministic simulation logic instead of 
 
 ## Future work
 
+- optional repair beam/action if it stays small and readable;
 - optional RTSBenchmark state adapter if a clean per-frame visual surface is added;
 - larger ship presets once visual profiling is available;
 - SpriteFont-backed debug text overlay;
-- trails/projectile lines;
 - profiler/stat overlay.
