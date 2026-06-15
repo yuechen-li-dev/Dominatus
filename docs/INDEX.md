@@ -69,6 +69,6 @@ This index separates user-facing documentation from release prep, development lo
 
 These are not first-stop user docs, but they are retained as implementation history.
 
-- [Release prep](release/RELEASE_0_2_PREP.md) and [post-0.2 prep](release/RELEASE_POST_0_2_PREP.md).
+- [Release prep](release/RELEASE_0_2_PREP.md), [post-0.2 prep](release/RELEASE_POST_0_2_PREP.md), and [NuGet Trusted Publishing](release/NUGET_TRUSTED_PUBLISHING.md).
 - [Development logs](DevLog/) — milestone logs, especially the LLM release wave.
 - [Primer examples](PrimerExamples/README.md) — source artifacts used to generate and validate `PRIMER.context` packets.
