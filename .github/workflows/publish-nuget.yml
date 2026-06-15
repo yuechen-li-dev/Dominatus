@@ -1,0 +1,81 @@
+name: Publish NuGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to publish"
+        required: true
+        default: "0.3.0"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-nuget
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, test, pack, publish
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Dominatus.slnx
+
+      - name: Build
+        run: dotnet build Dominatus.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Dominatus.slnx -c Release --no-build --verbosity normal
+
+      - name: Pack
+        run: |
+          mkdir -p artifacts/packages
+          dotnet pack src/Dominatus.Core/Dominatus.Core.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.OptFlow/Dominatus.OptFlow.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Ariadne.OptFlow/Ariadne.OptFlow.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Assets.Toml/Dominatus.Assets.Toml.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Llm.Context/Dominatus.Llm.Context.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Actuators.Standard/Dominatus.Actuators.Standard.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Actuators.HomeAssistant/Dominatus.Actuators.HomeAssistant.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Actuators.SemanticKernel/Dominatus.Actuators.SemanticKernel.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Server/Dominatus.Server.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.MonoGameConn/Dominatus.MonoGameConn.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.StrideConn/Dominatus.StrideConn.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+
+      - name: List packages
+        run: ls -la artifacts/packages
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-${{ inputs.version }}
+          path: artifacts/packages/*.nupkg
+
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Publish packages
+        run: |
+          dotnet nuget push "artifacts/packages/*.nupkg" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
