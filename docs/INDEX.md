@@ -72,3 +72,5 @@ These are not first-stop user docs, but they are retained as implementation hist
 - [Release prep](release/RELEASE_0_2_PREP.md), [post-0.2 prep](release/RELEASE_POST_0_2_PREP.md), and [NuGet Trusted Publishing](release/NUGET_TRUSTED_PUBLISHING.md).
 - [Development logs](DevLog/) — milestone logs, especially the LLM release wave.
 - [Primer examples](PrimerExamples/README.md) — source artifacts used to generate and validate `PRIMER.context` packets.
+
+- [Dominatus.Pay M0 provider-neutral payment actuators](actuators/ACTUATORS_PAYMENTS_M0.md)
