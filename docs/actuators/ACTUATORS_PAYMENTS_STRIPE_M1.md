@@ -2,6 +2,8 @@
 
 `Dominatus.Actuators.Payments.Stripe` is the Stripe backend adapter for the provider-neutral `IPaymentProvider` abstraction. M1 intentionally keeps the adapter boring: typed Dominatus payment commands are translated into Stripe-hosted Checkout Sessions, PaymentIntents, capture, refund, cancel, and status lookup calls.
 
+For cross-provider authoring doctrine, adapter checklists, platform-fee ownership, and Leviathan/application handoff guidance, see [Dominatus.Pay author guide](ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md).
+
 ## Supported M1 commands
 
 - `CreateCheckoutSessionCommand` creates a Stripe-hosted Checkout Session in `payment` mode with inline `line_items.price_data`.

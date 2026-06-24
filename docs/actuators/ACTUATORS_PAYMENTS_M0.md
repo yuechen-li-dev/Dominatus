@@ -2,6 +2,8 @@
 
 Dominatus.Pay is the first payment actuator contract for Dominatus. It gives agents typed commands for payment work while keeping payment processors interchangeable behind backend adapters.
 
+For authoring doctrine, future adapter rules, and Leviathan/application handoff guidance, see [Dominatus.Pay author guide](ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md).
+
 ## Purpose
 
 Agent workflows should not call Stripe, Square/Block, PayPal, or other provider SDKs directly. They should issue typed Dominatus actuation commands:
