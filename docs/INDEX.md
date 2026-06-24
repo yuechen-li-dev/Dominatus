@@ -27,6 +27,12 @@ This index separates user-facing documentation from release prep, development lo
 - [Semantic Kernel M0](actuators/ACTUATORS_SEMANTICKERNEL_M0.md), [M1](actuators/ACTUATORS_SEMANTICKERNEL_M1.md), [M2 MCP](actuators/ACTUATORS_SEMANTICKERNEL_M2_MCP.md), [M3 capability profiles](actuators/ACTUATORS_SEMANTICKERNEL_M3_CAPABILITY_PROFILES.md), and [M4 Graph profile](actuators/ACTUATORS_SEMANTICKERNEL_M4_GRAPH_PROFILE.md) — SK as a capability surface behind Dominatus policy.
 - [Package smoke](actuators/ACTUATORS_STANDARD_PACKAGE_SMOKE.md) — actuator package smoke notes.
 
+### Payment architecture docs
+
+- [Dominatus.Pay author guide](actuators/ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md) — author-facing payment doctrine, layer separation, adapter checklist, platform-fee rules, idempotency/status doctrine, webhook future seam, Leviathan handoff, anti-patterns, and roadmap.
+- [Dominatus.Pay M0 provider-neutral payment actuators](actuators/ACTUATORS_PAYMENTS_M0.md) — base payment primitives, fake provider, registry, idempotency, and policy notes.
+- [Dominatus.Pay M1 Stripe adapter](actuators/ACTUATORS_PAYMENTS_STRIPE_M1.md) — Stripe Checkout/PaymentIntent adapter, explicit platform-fee mapping, error sanitization, and gated live smoke tests.
+
 ## LLM, context, streaming, and provider routing
 
 - [LLM casting model](llm/LLM_CASTING_MODEL.md) — mental model for LLM integration boundaries.
@@ -72,7 +78,3 @@ These are not first-stop user docs, but they are retained as implementation hist
 - [Release prep](release/RELEASE_0_2_PREP.md), [post-0.2 prep](release/RELEASE_POST_0_2_PREP.md), and [NuGet Trusted Publishing](release/NUGET_TRUSTED_PUBLISHING.md).
 - [Development logs](DevLog/) — milestone logs, especially the LLM release wave.
 - [Primer examples](PrimerExamples/README.md) — source artifacts used to generate and validate `PRIMER.context` packets.
-
-- [Dominatus.Pay M0 provider-neutral payment actuators](actuators/ACTUATORS_PAYMENTS_M0.md)
-
-- [Dominatus.Pay M1 Stripe adapter](actuators/ACTUATORS_PAYMENTS_STRIPE_M1.md)
