@@ -302,3 +302,32 @@ Leviathan/application-owned roadmap candidates:
 - Business responses to normalized payment events.
 
 Keep revisiting this split before adding payment features. If a change makes Dominatus.Pay know who the merchant is, what fee should be charged, or what product UX should happen, it probably belongs in Leviathan or another application/control-plane layer instead.
+
+## M2 webhook/event seam decision
+
+M2 implemented Stripe webhook verification and normalized event ingestion without turning Dominatus.Pay into an application payment platform.
+
+Implemented seam:
+
+- `Dominatus.Actuators.Payments` owns `PaymentEventEnvelope`, `PaymentNormalizedEventKind`, `IPaymentEventDedupStore`, `InMemoryPaymentEventDedupStore`, and `PaymentWebhookIngestor`.
+- `Dominatus.Actuators.Payments.Stripe` owns `StripeWebhookOptions`, `StripeWebhookProcessingResult`, `StripeWebhookVerifier`, and conservative Stripe-to-Dominatus event mapping.
+- The Stripe verifier validates the exact raw request body plus `Stripe-Signature` and endpoint secret using Stripe.net before parsing/mapping.
+- Unknown verified provider events return `Kind = Unknown` / unsupported rather than being treated as signature failures.
+- Dedup is optional and provider-neutral; durable production persistence remains app-owned.
+
+EventBus boundary:
+
+- Core `AiEventBus` is per-agent runtime coordination, optimized for typed waiters in a Dominatus world/agent loop.
+- M2 does not automatically publish payment webhooks into `AiEventBus` because the provider adapter does not know which world, agent, mailbox, tenant, order, or business workflow owns the event.
+- Applications may explicitly bridge an accepted `PaymentEventEnvelope` into an `AiWorld`, mailbox, durable queue, or business service after verification and dedup.
+- Future provider adapters should expose verified normalized events and optional dedup, not app reactions.
+
+Future provider webhook checklist:
+
+- Verify provider signatures before parsing payloads.
+- Require exact raw request input and provider signature/header input.
+- Sanitize every failure path and never echo secrets/signatures/API keys/client secrets.
+- Map only provider events with a clear provider-neutral meaning.
+- Return unknown/unsupported verified events safely.
+- Keep duplicate-delivery protection provider-neutral and make durable stores app-owned.
+- Do not add endpoint hosting, tenant/merchant registry, dashboards, fulfillment, entitlement grants, or commercial policy to Dominatus.Pay.
