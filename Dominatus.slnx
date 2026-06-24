@@ -51,4 +51,6 @@
   <Project Path="tests/Dominatus.Template.HomeAssistantThermostat.Tests/Dominatus.Template.HomeAssistantThermostat.Tests.csproj" />
   <Project Path="src/Dominatus.Actuators.Payments/Dominatus.Actuators.Payments.csproj" />
   <Project Path="tests/Dominatus.Actuators.Payments.Tests/Dominatus.Actuators.Payments.Tests.csproj" />
+  <Project Path="src/Dominatus.Actuators.Payments.Stripe/Dominatus.Actuators.Payments.Stripe.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Payments.Stripe.Tests/Dominatus.Actuators.Payments.Stripe.Tests.csproj" />
 </Solution>

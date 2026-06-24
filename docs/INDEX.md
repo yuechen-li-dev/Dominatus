@@ -74,3 +74,5 @@ These are not first-stop user docs, but they are retained as implementation hist
 - [Primer examples](PrimerExamples/README.md) — source artifacts used to generate and validate `PRIMER.context` packets.
 
 - [Dominatus.Pay M0 provider-neutral payment actuators](actuators/ACTUATORS_PAYMENTS_M0.md)
+
+- [Dominatus.Pay M1 Stripe adapter](actuators/ACTUATORS_PAYMENTS_STRIPE_M1.md)

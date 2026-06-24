@@ -99,7 +99,7 @@ var command = new CreateCheckoutSessionCommand(
 
 ## Future live provider adapters
 
-Future packages can add Stripe, Square/Block, PayPal, or other adapters by implementing `IPaymentProvider`. Each adapter should be small and boring: translate typed commands to provider APIs, map results/errors back to Dominatus models, verify webhooks later, and keep secrets out of actuation errors and logs.
+The Stripe adapter exists in `Dominatus.Actuators.Payments.Stripe` for Checkout and PaymentIntent-backed flows. Future packages can add Square/Block, PayPal, or other adapters by implementing `IPaymentProvider`. Each adapter should be small and boring: translate typed commands to provider APIs, map results/errors back to Dominatus models, verify webhooks later, and keep secrets out of actuation errors and logs.
 
 Before implementing live adapters, verify current official provider docs, supported API versions, compliance obligations, idempotency semantics, platform-fee/marketplace rules, and webhook verification requirements.
 

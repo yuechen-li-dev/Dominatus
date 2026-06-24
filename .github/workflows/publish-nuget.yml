@@ -57,6 +57,7 @@ jobs:
           dotnet pack src/Dominatus.Server/Dominatus.Server.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.MonoGameConn/Dominatus.MonoGameConn.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.StrideConn/Dominatus.StrideConn.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Actuators.Payments.Stripe/Dominatus.Actuators.Payments.Stripe.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
 
       - name: List packages
         run: ls -la artifacts/packages
