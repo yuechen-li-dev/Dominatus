@@ -32,6 +32,7 @@ This index separates user-facing documentation from release prep, development lo
 - [Dominatus.Pay author guide](actuators/ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md) — author-facing payment doctrine, layer separation, adapter checklist, platform-fee rules, idempotency/status doctrine, webhook future seam, Leviathan handoff, anti-patterns, and roadmap.
 - [Dominatus.Pay M0 provider-neutral payment actuators](actuators/ACTUATORS_PAYMENTS_M0.md) — base payment primitives, fake provider, registry, idempotency, and policy notes.
 - [Dominatus.Pay M1 Stripe adapter](actuators/ACTUATORS_PAYMENTS_STRIPE_M1.md) — Stripe Checkout/PaymentIntent adapter, explicit platform-fee mapping, error sanitization, and gated live smoke tests.
+- [Dominatus.Pay M2 Stripe webhooks](actuators/ACTUATORS_PAYMENTS_STRIPE_M2_WEBHOOKS.md) — Stripe webhook signature verification, normalized payment events, idempotent ingestion primitives, and EventBus boundary decision.
 
 ## LLM, context, streaming, and provider routing
 
