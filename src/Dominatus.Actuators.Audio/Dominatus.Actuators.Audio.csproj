@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>Dominatus.Actuators.Audio</PackageId>
+    <Version>0.3.0</Version>
+    <Authors>Yuechen Li</Authors>
+    <Description>Provider-neutral audio actuator primitives for Dominatus, including deterministic fake audio generation and open metadata sidecars.</Description>
+    <PackageTags>ai;agent;actuator;audio;text-to-speech;dominatus</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" /></ItemGroup>
+  <ItemGroup><None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" /></ItemGroup>
+</Project>
