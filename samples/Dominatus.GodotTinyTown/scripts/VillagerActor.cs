@@ -9,23 +9,28 @@ public partial class VillagerActor : CharacterBody2D
 
     private TinyTownVillagerBrain? _brain;
     private Node2D? _visualRoot;
-    private Polygon2D? _placeholderBody;
     private PanelContainer? _statusPlate;
     private Label? _label;
+    private VillagerVisualController? _visualController;
     private string _villagerName = "Villager";
     private double _labelRefreshAccumulator;
     private string _lastLabelText = string.Empty;
+    private TinyTownFacingDirection _lastFacingDirection = TinyTownFacingDirection.Down;
+    private Vector2 _lastFacing = Vector2.Down;
+    private TinyTownVillagerPresentation? _lastPresentation;
 
     public override void _Ready()
     {
         _brain = GetNodeOrNull<TinyTownVillagerBrain>("Brain");
         _visualRoot = GetNodeOrNull<Node2D>("VisualRoot");
-        _placeholderBody = GetNodeOrNull<Polygon2D>("VisualRoot/Body");
         _statusPlate = GetNodeOrNull<PanelContainer>("StatusPlate");
         _label = GetNodeOrNull<Label>("StatusLabel");
 
         if (_brain is not null)
             _villagerName = _brain.VillagerName;
+
+        if (_visualRoot is not null)
+            _visualController = new VillagerVisualController(_visualRoot);
 
         if (_statusPlate is not null)
             _statusPlate.AddThemeStyleboxOverride("panel", StatusPlateStyle);
@@ -38,30 +43,37 @@ public partial class VillagerActor : CharacterBody2D
         }
     }
 
+    public TinyTownVisualStatus VisualStatus => _visualController?.Status
+        ?? new TinyTownVisualStatus(TinyTownVisualMode.FallbackShapes, TinyTownVisualMode.FallbackShapes, true, false);
+
+    public TinyTownVillagerPresentation? LastPresentation => _lastPresentation;
+
+    public void ConfigureVisuals(TinyTownArtProfile profile, TinyTownSpriteCatalog catalog)
+        => _visualController?.Configure(profile, catalog);
+
     public override void _Process(double delta)
     {
-        if (_brain?.Agent is null || _label is null || _placeholderBody is null || _statusPlate is null)
+        if (_brain?.Agent is null || _label is null || _statusPlate is null)
             return;
 
         var bb = _brain.Bb;
         var activity = bb.GetOrDefault(TinyTownKeys.CurrentActivity, "Idle");
         var phase = bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose");
+        var presentation = BuildPresentation(bb, activity, phase);
+        _lastPresentation = presentation;
+
         _labelRefreshAccumulator += delta;
         if (_labelRefreshAccumulator >= 0.10d || _lastLabelText.Length == 0)
         {
             _labelRefreshAccumulator = 0d;
-            _lastLabelText = $"{_villagerName}\n{ShortActivity(activity)} · {phase}\n{NeedsLine(bb)}";
+            _lastLabelText = $"{_villagerName}\n{ShortActivity(activity)} · {phase}\n{NeedsLine(presentation)}";
             _label.Text = _lastLabelText;
             var labelSize = _label.GetMinimumSize();
             _statusPlate.Size = labelSize + (TinyTownLayout.VillagerLabelPadding * 2f);
         }
 
         _statusPlate.Position = ComputePlateOffset();
-        _placeholderBody.Color = ActivityColor(activity);
-
-        // Future sprite-sheet work can replace the placeholder body under VisualRoot
-        // without changing the Dominatus brain or status plate behavior.
-        _visualRoot ??= GetNodeOrNull<Node2D>("VisualRoot");
+        _visualController?.Apply(presentation);
     }
 
     public string BuildDebugSummary()
@@ -75,27 +87,19 @@ public partial class VillagerActor : CharacterBody2D
             + $"{NeedsLine(bb)}";
     }
 
-    private static Color ActivityColor(string activity) => activity switch
-    {
-        "GoToWell" => new Color("5f9ecf"),
-        "DrinkAtWell" => new Color("2e6f95"),
-        "GoToMarket" => new Color("eea04f"),
-        "ShopAtMarket" => new Color("cb6d2e"),
-        "RestAtHome" => new Color("8a6c52"),
-        "ReturnHome" => new Color("9f8264"),
-        "TendGarden" => new Color("4f8b57"),
-        "Wander" => new Color("6c8da6"),
-        "Socialize" => new Color("b45f7b"),
-        "Idle / Think" => new Color("7b8ea2"),
-        _ => new Color("7f8f70")
-    };
-
     private static string NeedsLine(Dominatus.Core.Blackboard.Blackboard bb)
         => $"H{Pct(bb.GetOrDefault(TinyTownKeys.Hunger, 0f))} "
         + $"T{Pct(bb.GetOrDefault(TinyTownKeys.Thirst, 0f))} "
         + $"R{Pct(bb.GetOrDefault(TinyTownKeys.RestNeed, 0f))} "
         + $"J{Pct(bb.GetOrDefault(TinyTownKeys.JoyNeed, 0f))} "
         + $"S{Pct(bb.GetOrDefault(TinyTownKeys.SocialNeed, 0f))}";
+
+    private static string NeedsLine(TinyTownVillagerPresentation presentation)
+        => $"H{Pct(presentation.Hunger)} "
+        + $"T{Pct(presentation.Thirst)} "
+        + $"R{Pct(presentation.Rest)} "
+        + $"J{Pct(presentation.Joy)} "
+        + $"S{Pct(presentation.Social)}";
 
     private static string ShortActivity(string activity)
     {
@@ -163,6 +167,44 @@ public partial class VillagerActor : CharacterBody2D
         };
 
     private static int Pct(float value) => (int)MathF.Round(Math.Clamp(value, 0f, 1f) * 100f);
+
+    private TinyTownVillagerPresentation BuildPresentation(
+        Dominatus.Core.Blackboard.Blackboard bb,
+        string activity,
+        string phase)
+    {
+        var speed = Velocity.Length();
+        var facing = speed > 4f ? Velocity.Normalized() : _lastFacing;
+        var facingDirection = speed > 4f ? DetermineFacingDirection(Velocity) : _lastFacingDirection;
+
+        _lastFacing = facing;
+        _lastFacingDirection = facingDirection;
+
+        return new TinyTownVillagerPresentation
+        {
+            Name = _villagerName,
+            Personality = bb.GetOrDefault(TinyTownKeys.PersonalityName, "Villager"),
+            Activity = activity,
+            Phase = phase,
+            Velocity = Velocity,
+            Facing = facing,
+            FacingDirection = facingDirection,
+            Speed = speed,
+            Hunger = bb.GetOrDefault(TinyTownKeys.Hunger, 0f),
+            Thirst = bb.GetOrDefault(TinyTownKeys.Thirst, 0f),
+            Rest = bb.GetOrDefault(TinyTownKeys.RestNeed, 0f),
+            Joy = bb.GetOrDefault(TinyTownKeys.JoyNeed, 0f),
+            Social = bb.GetOrDefault(TinyTownKeys.SocialNeed, 0f)
+        };
+    }
+
+    private static TinyTownFacingDirection DetermineFacingDirection(Vector2 velocity)
+    {
+        if (MathF.Abs(velocity.X) > MathF.Abs(velocity.Y))
+            return velocity.X < 0f ? TinyTownFacingDirection.Left : TinyTownFacingDirection.Right;
+
+        return velocity.Y < 0f ? TinyTownFacingDirection.Up : TinyTownFacingDirection.Down;
+    }
 
     private Vector2 ComputePlateOffset()
     {

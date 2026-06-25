@@ -148,14 +148,22 @@ $observedTravelActivities = @($snapshot.observedTravelActivities | Where-Object 
 $nonEmergencyActivities = @($distinctObservedActivities | Where-Object { $_ -in @('ShopAtMarket', 'TendGarden', 'Socialize', 'Wander', 'Idle / Think') })
 $villagersWithPhaseVariety = @($villagers | Where-Object { @($_.observedPhases).Count -ge 2 })
 $highStressVillagers = @($villagers | Where-Object { [double]$_.maxNeed -ge 0.98 })
+$fallbackVillagers = @($villagers | Where-Object { $_.usingFallbackVisuals -eq $true })
 $logLines = Get-Content $logPath
 $errorLines = @($logLines | Where-Object { $_ -match '(^|\s)ERROR[: ]' -or $_ -match 'System\.ArgumentException:' })
 $duplicateLines = @($logLines | Where-Object { $_ -match 'ScriptTypeBiMap' -or $_ -match 'same key has already been added' })
 $averageNeedUrgency = [double]$snapshot.averageNeedUrgency
 $maxNeedUrgency = [double]$snapshot.maxNeedUrgency
+$visualMode = [string]$snapshot.visualMode
+$villagerVisualMode = [string]$snapshot.villagerVisualMode
+$destinationVisualMode = [string]$snapshot.destinationVisualMode
+$fallbackVisualsUsed = [bool]$snapshot.fallbackVisualsUsed
+$spriteAssetsLoaded = [int]$snapshot.spriteAssetsLoaded
+$missingAssetWarnings = [int]$snapshot.missingAssetWarnings
 
 Assert-Condition ([uint64]$snapshot.tickCount -gt 0) "TinyTown never ticked. tickCount=$($snapshot.tickCount)"
 Assert-Condition ([int]$snapshot.agentCount -eq 4) "Expected 4 agents, found $($snapshot.agentCount)"
+Assert-Condition (-not [string]::IsNullOrWhiteSpace($visualMode)) "Expected visualMode in TinyTown smoke snapshot."
 Assert-Condition ($movedVillagers.Count -ge 1) "Expected at least one villager to move more than 8 units."
 Assert-Condition ($navigationObservedVillagers.Count -ge 1) "Expected at least one villager to use navigation during the smoke run."
 Assert-Condition ($nanVillagers.Count -eq 0) "Detected NaN position/velocity values in TinyTown smoke snapshot."
@@ -170,6 +178,13 @@ Assert-Condition ($maxNeedUrgency -le 0.97) "Max need urgency too high at end of
 Assert-Condition ($highStressVillagers.Count -le 1) "Too many villagers ended the run near hard emergency."
 Assert-Condition ($duplicateLines.Count -eq 0) "Detected duplicate ScriptTypeBiMap registration evidence in run.log"
 Assert-Condition ($errorLines.Count -eq 0) "Detected unexpected ERROR lines in run.log"
+Assert-Condition ($visualMode -eq "FallbackShapes") "Default smoke should run in fallback mode, found visualMode=$visualMode"
+Assert-Condition ($villagerVisualMode -eq "FallbackShapes") "Expected fallback villager visuals by default, found $villagerVisualMode"
+Assert-Condition ($destinationVisualMode -eq "FallbackShapes") "Expected fallback destination visuals by default, found $destinationVisualMode"
+Assert-Condition ($fallbackVisualsUsed) "Expected fallback visuals to be in use when no external art is present."
+Assert-Condition ($fallbackVillagers.Count -eq $villagers.Count) "Expected all villagers to report fallback visuals in default smoke mode."
+Assert-Condition ($spriteAssetsLoaded -eq 0) "Default smoke should not require sprite assets, but snapshot reported $spriteAssetsLoaded loaded assets."
+Assert-Condition ($missingAssetWarnings -eq 0) "Fallback smoke should not log missing asset warnings, but snapshot reported $missingAssetWarnings."
 
 $screenshotMessage = if ((Test-Path $screenshotPath) -and $snapshot.screenshotSaved) {
     "Screenshot: $screenshotPath"
@@ -185,6 +200,7 @@ Write-Host "Smoke harness passed."
 Write-Host "Observed activities: $($distinctObservedActivities -join ', ')"
 Write-Host "Observed dwell activities: $($observedDwellActivities -join ', ')"
 Write-Host "Observed travel activities: $($observedTravelActivities -join ', ')"
+Write-Host "Visuals: mode=$visualMode villagers=$villagerVisualMode destinations=$destinationVisualMode fallback=$fallbackVisualsUsed spriteAssets=$spriteAssetsLoaded warnings=$missingAssetWarnings"
 Write-Host ("Need summary: average={0:N2} max={1:N2}" -f $averageNeedUrgency, $maxNeedUrgency)
 Write-Host "Artifacts:"
 Write-Host "  Log: $logPath"

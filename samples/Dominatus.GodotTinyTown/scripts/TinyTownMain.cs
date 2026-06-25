@@ -17,6 +17,7 @@ public partial class TinyTownMain : Node2D
     private const string SmokeEnv = "DOMINATUS_GODOT_SMOKE";
     private const string SmokeFramesEnv = "DOMINATUS_GODOT_SMOKE_FRAMES";
     private const string SmokeArtifactsEnv = "DOMINATUS_GODOT_SMOKE_ARTIFACTS";
+    private const string VisualModeEnv = "DOMINATUS_TINYTOWN_VISUAL_MODE";
 
     private TinyTownWorld? _world;
     private Label? _summaryLabel;
@@ -24,8 +25,11 @@ public partial class TinyTownMain : Node2D
     private Node? _villagersRoot;
     private Node? _destinationsRoot;
     private SmokeOptions? _smoke;
+    private TinyTownArtProfile _artProfile = new();
+    private TinyTownSpriteCatalog _spriteCatalog = new();
     private bool _smokeCompleted;
     private ulong _smokePhysicsFrames;
+    private readonly List<DestinationVisualController> _destinationVisualControllers = [];
     private readonly Dictionary<string, HashSet<string>> _observedActivities = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _observedPhases = new(StringComparer.Ordinal);
     private readonly HashSet<string> _observedTravelActivities = new(StringComparer.Ordinal);
@@ -37,6 +41,21 @@ public partial class TinyTownMain : Node2D
     private readonly Dictionary<string, float> _sumPhysicsStepDistance = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _physicsStepSamples = new(StringComparer.Ordinal);
 
+    [Export]
+    public TinyTownVisualMode VisualMode { get; set; } = TinyTownVisualMode.FallbackShapes;
+
+    [Export]
+    public string VillagerAtlasPath { get; set; } = "res://assets/external/villagers";
+
+    [Export]
+    public string DestinationAtlasPath { get; set; } = "res://assets/external/destinations";
+
+    [Export]
+    public Vector2I SpriteCellSize { get; set; } = new(32, 32);
+
+    [Export]
+    public bool UseAnimatedSprites { get; set; }
+
     public override void _Ready()
     {
         SetProcess(true);
@@ -47,8 +66,11 @@ public partial class TinyTownMain : Node2D
         _villagersRoot = GetNode<Node>("DominatusWorld/Villagers");
         _destinationsRoot = GetNode<Node>("DominatusWorld/Destinations");
         _smoke = SmokeOptions.TryCreate();
+        _artProfile = BuildArtProfile();
+        _spriteCatalog = new TinyTownSpriteCatalog();
 
         ConfigureLayout();
+        ConfigureVisualLayer();
 
         if (_smoke is null && DisplayServer.GetName().Contains("headless", StringComparison.OrdinalIgnoreCase))
         {
@@ -97,6 +119,7 @@ public partial class TinyTownMain : Node2D
 
         return $"Tick {world.TicksProcessed}\n"
             + $"Agents {world.World.Agents.Count}\n"
+            + $"Visuals {_artProfile.VisualMode} / {(VillagersUseFallbackVisuals() ? "fallback" : "sprites")}\n"
             + "Need scale 0 calm -> 1 urgent\n"
             + $"Average need {averageNeed:0.00}\n"
             + $"Max need {maxNeed:0.00}\n"
@@ -152,6 +175,12 @@ public partial class TinyTownMain : Node2D
             screenshotSaved,
             screenshotPath,
             screenshotError,
+            _artProfile.VisualMode.ToString(),
+            _spriteCatalog.SpriteAssetsLoaded,
+            _spriteCatalog.MissingAssetWarnings,
+            VillagersUseFallbackVisuals(),
+            ResolveVillagerVisualMode().ToString(),
+            ResolveDestinationVisualMode().ToString(),
             FlattenObserved(_observedActivities),
             _observedDwellActivities.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
             _observedTravelActivities.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
@@ -164,12 +193,16 @@ public partial class TinyTownMain : Node2D
     {
         var body = brain.GetParent() as CharacterBody2D
             ?? throw new InvalidOperationException("TinyTownVillagerBrain expects to be attached under a CharacterBody2D.");
+        var actor = body as VillagerActor;
         var bb = brain.Bb;
         var initialPosition = bb.GetOrDefault(TinyTownKeys.InitialPosition, body.GlobalPosition);
         var position = body.GlobalPosition;
         var navigation = _world is not null && _world.TryGetNavigationState(brain.AgentId, out var state)
             ? state
             : default;
+        var presentation = actor?.LastPresentation;
+        var visualStatus = actor?.VisualStatus
+            ?? new TinyTownVisualStatus(TinyTownVisualMode.FallbackShapes, TinyTownVisualMode.FallbackShapes, true, false);
         var sampleCount = _physicsStepSamples.TryGetValue(brain.VillagerName, out var count) ? count : 0;
         var totalStepDistance = _sumPhysicsStepDistance.TryGetValue(brain.VillagerName, out var total) ? total : 0f;
         var maxStepDistance = _maxPhysicsStepDistance.TryGetValue(brain.VillagerName, out var max) ? max : 0f;
@@ -185,6 +218,11 @@ public partial class TinyTownMain : Node2D
             bb.GetOrDefault(TinyTownKeys.LastDecisionWinner, string.Empty),
             bb.GetOrDefault(TinyTownKeys.LastDecisionScore, 0f),
             bb.GetOrDefault(TinyTownKeys.ActivityRemainingSeconds, 0f),
+            visualStatus.RequestedMode.ToString(),
+            visualStatus.ActiveMode.ToString(),
+            visualStatus.UsingFallback,
+            visualStatus.SpriteAssetLoaded,
+            (presentation?.FacingDirection ?? TinyTownFacingDirection.Down).ToString(),
             ToVec2(position),
             ToVec2(initialPosition),
             ToVec2(bb.GetOrDefault(TinyTownKeys.HomePosition, Vector2.Zero)),
@@ -208,6 +246,28 @@ public partial class TinyTownMain : Node2D
             OrderedObserved(_observedActivities, brain.VillagerName),
             OrderedObserved(_observedPhases, brain.VillagerName),
             OrderedActivityCounts(brain.VillagerName));
+    }
+
+    private TinyTownArtProfile BuildArtProfile()
+    {
+        var requestedMode = ResolveVisualModeOverride();
+        return new TinyTownArtProfile
+        {
+            VisualMode = requestedMode,
+            VillagerAtlasPath = VillagerAtlasPath,
+            DestinationAtlasPath = DestinationAtlasPath,
+            CellSize = SpriteCellSize,
+            UseAnimatedSprites = UseAnimatedSprites || requestedMode == TinyTownVisualMode.AnimatedSprites
+        };
+    }
+
+    private TinyTownVisualMode ResolveVisualModeOverride()
+    {
+        var raw = System.Environment.GetEnvironmentVariable(VisualModeEnv);
+        if (!string.IsNullOrWhiteSpace(raw) && Enum.TryParse<TinyTownVisualMode>(raw, true, out var parsed))
+            return parsed;
+
+        return VisualMode;
     }
 
     private void RecordMovementSamples(TinyTownWorld world)
@@ -395,6 +455,70 @@ public partial class TinyTownMain : Node2D
         }
     }
 
+    private void ConfigureVisualLayer()
+    {
+        if (_villagersRoot is not null)
+        {
+            foreach (var child in _villagersRoot.GetChildren())
+            {
+                if (child is VillagerActor actor)
+                    actor.ConfigureVisuals(_artProfile, _spriteCatalog);
+            }
+        }
+
+        _destinationVisualControllers.Clear();
+        if (_destinationsRoot is null)
+            return;
+
+        foreach (var child in _destinationsRoot.GetChildren())
+        {
+            if (child is not Marker2D marker)
+                continue;
+
+            var controller = new DestinationVisualController(marker);
+            controller.DiscoverFallbackItems();
+            controller.Configure(_artProfile, _spriteCatalog);
+            _destinationVisualControllers.Add(controller);
+        }
+    }
+
+    private bool VillagersUseFallbackVisuals()
+    {
+        if (_villagersRoot is null)
+            return true;
+
+        foreach (var child in _villagersRoot.GetChildren())
+        {
+            if (child is VillagerActor actor && actor.VisualStatus.UsingFallback)
+                return true;
+        }
+
+        foreach (var controller in _destinationVisualControllers)
+        {
+            if (controller.Status.UsingFallback)
+                return true;
+        }
+
+        return false;
+    }
+
+    private TinyTownVisualMode ResolveVillagerVisualMode()
+    {
+        if (_villagersRoot is null)
+            return TinyTownVisualMode.FallbackShapes;
+
+        foreach (var child in _villagersRoot.GetChildren())
+        {
+            if (child is VillagerActor actor)
+                return actor.VisualStatus.ActiveMode;
+        }
+
+        return TinyTownVisualMode.FallbackShapes;
+    }
+
+    private TinyTownVisualMode ResolveDestinationVisualMode()
+        => _destinationVisualControllers.FirstOrDefault()?.Status.ActiveMode ?? TinyTownVisualMode.FallbackShapes;
+
     private static LabelSettings CreateDebugLabelSettings()
     {
         return new LabelSettings
@@ -552,6 +676,12 @@ public sealed record TinyTownDebugSnapshot(
     bool ScreenshotSaved,
     string ScreenshotPath,
     string? ScreenshotError,
+    string VisualMode,
+    int SpriteAssetsLoaded,
+    int MissingAssetWarnings,
+    bool FallbackVisualsUsed,
+    string VillagerVisualMode,
+    string DestinationVisualMode,
     string[] ObservedActivities,
     string[] ObservedDwellActivities,
     string[] ObservedTravelActivities,
@@ -570,6 +700,11 @@ public sealed record TinyTownVillagerSnapshot(
     string LastDecisionWinner,
     float LastDecisionScore,
     float ActivityRemainingSeconds,
+    string RequestedVisualMode,
+    string ActiveVisualMode,
+    bool UsingFallbackVisuals,
+    bool SpriteAssetLoaded,
+    string FacingDirection,
     TinyTownVec2 Position,
     TinyTownVec2 InitialPosition,
     TinyTownVec2 HomePosition,

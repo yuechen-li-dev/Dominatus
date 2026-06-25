@@ -1,6 +1,6 @@
-# Dominatus.GodotConn M1 TinyTown Sample
+# Dominatus.GodotConn M1-M2 TinyTown Sample
 
-This document covers the M1.4 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
+This document covers the M1.4 through M2 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
 
 ## Purpose
 
@@ -226,6 +226,150 @@ Today `VisualRoot` contains only placeholder polygon visuals and a shadow. Later
 - world registration
 - actuation
 - the status plate logic
+
+## M2 sprite-ready visual layer
+
+M2 keeps the sample fully runnable with no external art while making the presentation boundary explicit.
+
+The separation is now:
+
+- `TinyTownVillagerBrain`: decisions, needs, target choice, activity phase
+- `Dominatus.GodotConn`: world ticking and navigation/actuation bridge
+- `VillagerActor` plus `VillagerVisualController`: villager presentation
+- `DestinationVisualController`: destination presentation
+- `TinyTownMain`: visual mode selection, art profile injection, smoke reporting
+
+Behavior code does not know whether a villager is rendered with fallback polygons, `Sprite2D`, or `AnimatedSprite2D`.
+
+### Sample-local visual types
+
+M2 adds sample-local types under `samples/Dominatus.GodotTinyTown/scripts`:
+
+- `TinyTownVisualMode`
+- `TinyTownArtProfile`
+- `TinyTownSpriteCatalog`
+- `TinyTownVillagerPresentation`
+- `TinyTownDestinationPresentation`
+- `VillagerVisualController`
+- `DestinationVisualController`
+
+These stay sample-local because they are art-socket concerns, not connector-core concerns.
+
+### Visual modes
+
+Supported modes:
+
+- `FallbackShapes`
+- `StaticSprites`
+- `AnimatedSprites`
+
+`FallbackShapes` is still the default for editor runs and smoke validation.
+
+`StaticSprites` tries to load `Texture2D` assets.
+
+`AnimatedSprites` tries to load villager `SpriteFrames` resources for directional animation. Destinations stay static in this mode unless future art work adds richer prop logic.
+
+If requested assets are absent:
+
+- TinyTown logs a clear warning
+- falls back to shapes
+- keeps running
+- still writes smoke artifacts
+
+### Behavior facts that drive presentation
+
+Villager presentation is now driven from a presentation record built out of behavior/runtime facts:
+
+- villager name
+- personality
+- activity
+- phase
+- velocity
+- derived facing vector
+- derived facing direction
+- speed
+- hunger
+- thirst
+- rest
+- joy
+- social
+
+This keeps the visual layer swappable without teaching the brain about sprites.
+
+### Fallback villager visuals
+
+Fallback villagers are a little more art-ready than the old plain square:
+
+- body block
+- head block
+- activity-colored accent band
+- facing indicator
+- existing status plate and label
+
+That keeps screenshots readable while remaining intentionally placeholder art.
+
+### Destination presentation boundary
+
+Destination markers now also use a visual controller boundary.
+
+Fallback destination markers remain code-free scene primitives, but the controller becomes the swap point for future prop sprites:
+
+- home markers
+- well marker
+- market marker
+- garden marker
+- readable nameplates
+
+Later sprite drops can replace those fallback visuals without changing the brains or navigation setup.
+
+### Art profile and asset folder
+
+`TinyTownMain` now owns the active `TinyTownArtProfile`.
+
+Editor-facing configuration is exposed as exported properties:
+
+- `VisualMode`
+- `VillagerAtlasPath`
+- `DestinationAtlasPath`
+- `SpriteCellSize`
+- `UseAnimatedSprites`
+
+Optional CLI/smoke override:
+
+- env var `DOMINATUS_TINYTOWN_VISUAL_MODE`
+
+Asset README:
+
+- `samples/Dominatus.GodotTinyTown/assets/README.md`
+
+Placeholder folders:
+
+- `samples/Dominatus.GodotTinyTown/assets/placeholders`
+- `samples/Dominatus.GodotTinyTown/assets/external`
+
+No third-party assets are committed in M2. Check license terms before adding any sprite sheets to the repository.
+
+### Current sprite lookup conventions
+
+Villager static sprite candidates:
+
+- `res://assets/external/villagers/<villager-name>.png`
+- `res://assets/external/villagers/<personality>.png`
+
+Villager animated sprite candidates:
+
+- `res://assets/external/villagers/<villager-name>.frames.tres`
+- `res://assets/external/villagers/<villager-name>.tres`
+- `res://assets/external/villagers/<personality>.frames.tres`
+
+Destination sprite candidates:
+
+- `res://assets/external/destinations/<kind>.png`
+- `res://assets/external/destinations/<name>.png`
+
+Lookup keys are normalized to lowercase kebab case.
+
+This is intentionally small and explicit rather than a full atlas or importer pipeline.
 
 ## Personality profiles
 
@@ -453,6 +597,12 @@ Top-level `tinytown-debug.json` fields now include:
 - `screenshotSaved`
 - `screenshotPath`
 - `screenshotError`
+- `visualMode`
+- `spriteAssetsLoaded`
+- `missingAssetWarnings`
+- `fallbackVisualsUsed`
+- `villagerVisualMode`
+- `destinationVisualMode`
 - `observedActivities[]`
 - `observedDwellActivities[]`
 - `observedTravelActivities[]`
@@ -472,6 +622,11 @@ Each villager entry includes:
 - `lastDecisionWinner`
 - `lastDecisionScore`
 - `activityRemainingSeconds`
+- `requestedVisualMode`
+- `activeVisualMode`
+- `usingFallbackVisuals`
+- `spriteAssetLoaded`
+- `facingDirection`
 - `position`
 - `initialPosition`
 - `homePosition`
@@ -502,6 +657,8 @@ Useful reading rules:
 
 - if `averageNeedUrgency` stays high, passive decay or cooldown suppression is too strong
 - if `maxNeedUrgency` frequently ends near `1.0`, recovery is too weak or interruption is too rare
+- if `visualMode` requests sprites but `fallbackVisualsUsed` stays true, the art socket is working but assets are absent or misnamed
+- if `missingAssetWarnings` rises, requested art paths are not resolving cleanly
 - if `observedDwellActivities[]` stays narrow, variety is being suppressed
 - if `activityCounts[]` collapse into only emergency loops, the economy has drifted backward
 - if `observedNavigationActive` is false for every villager, navigation intent is not being exercised
