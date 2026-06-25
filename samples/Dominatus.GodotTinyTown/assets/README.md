@@ -2,6 +2,8 @@
 
 TinyTown now includes sample-local sprite art for the M2.2 alpha-atlas integration path.
 
+M2.3 adds TOML sidecar metadata so the pixels stay in PNG and the semantic atlas layout stays in `*.sprite.toml`.
+
 Fallback visuals still remain safe and available if any sprite asset is missing or invalid.
 
 ## Files
@@ -11,9 +13,11 @@ Fallback visuals still remain safe and available if any sprite asset is missing 
 - cleaned alpha source sheet: `assets/sprites/tinytown_sprite_alpha.png`
 - local cleanup helper: `assets/sprites/chroma_key_extract.py`
 - preferred runtime atlas: `assets/sprites/tinytown_sprite_alpha.png`
+- preferred atlas metadata: `assets/sprites/tinytown_sprite_alpha.sprite.toml`
 - generated normalized atlases: `assets/sprites/generated`
 - runtime mode override: env var `DOMINATUS_TINYTOWN_VISUAL_MODE`
 - runtime atlas override: env var `DOMINATUS_TINYTOWN_ATLAS_PATH`
+- local preview command: `tools/Preview-SpriteAtlasToml.ps1`
 
 ## License rule
 
@@ -30,6 +34,69 @@ The intended semantic grid is `12 columns x 6 rows`.
 The preferred cleaned alpha atlas is `1440x720`, which yields `120x120` cells.
 
 The previous checkerboard-derived normalized atlas remains at `1776x888`, which yields `148x148` cells, but it is no longer the primary runtime path.
+
+## TOML atlas metadata
+
+TinyTown now keeps semantic sprite metadata in:
+
+- `assets/sprites/tinytown_sprite_alpha.sprite.toml`
+
+That sidecar defines:
+
+- the atlas image path and verified grid geometry
+- semantic entity IDs such as `maya`, `theo`, `lina`, `nia`, `well`, `market`, `garden`, `home`, and `social`
+- villager animation frame columns by facing direction
+- optional per-entity offsets, scale, and pivot
+- optional per-frame correction overrides under `[frames]`
+
+This lets you fix imperfect cuts and alignment in data without editing C# for every art pass.
+
+### Current schema shape
+
+The TinyTown sidecar uses:
+
+- `[atlas]` for `image`, `width`, `height`, `columns`, `rows`, `cell_width`, `cell_height`, and `default_pivot`
+- `[entities.<id>]` for semantic sprite records
+- `[entities.<id>.animations.<name>]` for villager frame lists and `fps`
+- `[frames."<id>"]` for optional named frame overrides
+
+Example villager:
+
+```toml
+[entities.maya]
+kind = "villager"
+display_name = "Maya"
+row = 0
+scale = 1.0
+offset_x = 0
+offset_y = 0
+
+[entities.maya.animations.down]
+frames = [0, 1, 2]
+fps = 6
+```
+
+Example static prop:
+
+```toml
+[entities.market]
+kind = "destination"
+display_name = "Market"
+row = 4
+col = 1
+scale = 1.0
+pivot = "bottom_center"
+```
+
+Example correction table:
+
+```toml
+[entities.market.correction]
+offset_y = -8
+scale = 0.9
+```
+
+Do not edit code for simple atlas correction if a TOML offset, pivot, scale, or frame override is enough.
 
 Rows `1-4` are villagers:
 
@@ -96,6 +163,10 @@ Destinations:
 
 `AnimatedSprites` cycles `walk1` and `walk2` while the villager is in `Travel` and moving above the walk threshold; otherwise it uses the facing-direction idle frame.
 
+TinyTown now prefers the sidecar metadata when the atlas image has a matching `.sprite.toml`.
+
+If the sidecar is missing or invalid, the sample falls back to the current hardcoded `12x6` TinyTown mapping before dropping to fallback shapes.
+
 ## Atlas preference and normalization behavior
 
 The original generated sheet and the chroma-key source sheet are intentionally preserved as-is.
@@ -155,6 +226,34 @@ Do not overwrite the original generated sheet or the magenta source sheet during
 Generated normalized atlases belong under `assets/sprites/generated`.
 
 Because this sample art is locally generated, keep any regenerated outputs aligned with the existing license caveat before committing them.
+
+## Previewing the atlas
+
+Generate a local verification overlay with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Preview-SpriteAtlasToml.ps1 `
+  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml `
+  -Out artifacts/godot-tinytown/tinytown-atlas-preview.png
+```
+
+The preview tool draws:
+
+- atlas grid lines
+- row and column labels
+- semantic entity labels over their cells
+- correction offset markers when corrections are defined
+
+Generated preview artifact:
+
+- `artifacts/godot-tinytown/tinytown-atlas-preview.png`
+
+Notes:
+
+- the preview tool is repo-local and does not run during normal builds
+- the old cleanup helper still uses Pillow for chroma-key extraction
+- the preview command does not require Pillow; it uses the repo-local .NET preview tool
+- if you later add Python-based helpers, prefer stdlib `tomllib` on Python 3.11+
 
 ## Replacing the atlas
 

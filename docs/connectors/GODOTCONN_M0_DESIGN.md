@@ -31,6 +31,13 @@ Movement doctrine for Godot connectors:
 - Godot owns spatial navigation, path following, per-frame velocity, and `MoveAndSlide()`.
 - `NavigationAgent2D` and `NavigationAgent3D` should be wrapped by typed actuators instead of reimplemented inside Dominatus graphs.
 
+Asset doctrine for Godot connectors:
+
+- pixels live in PNG or other image files
+- semantic atlas layout and correction data live in TOML
+- behavior code should not hardcode sprite sheet cuts when authored metadata can carry that information
+- TOML is the bridge that turns imperfect generated art into deterministic runtime data
+
 ## Success and failure modes
 
 Success in M0 looks like this:

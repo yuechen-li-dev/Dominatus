@@ -20,6 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Dominatus.Assets.Toml\Dominatus.Assets.Toml.csproj" />
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,161 @@
+[atlas]
+image = "tinytown_sprite_alpha.png"
+width = 1440
+height = 720
+columns = 12
+rows = 6
+cell_width = 120
+cell_height = 120
+default_pivot = "bottom_center"
+
+[entities.maya]
+kind = "villager"
+display_name = "Maya"
+row = 0
+scale = 1.0
+offset_x = 0
+offset_y = 0
+
+[entities.maya.animations.down]
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[entities.maya.animations.left]
+frames = [3, 4, 5]
+fps = 6
+loop = true
+
+[entities.maya.animations.right]
+frames = [6, 7, 8]
+fps = 6
+loop = true
+
+[entities.maya.animations.up]
+frames = [9, 10, 11]
+fps = 6
+loop = true
+
+[entities.theo]
+kind = "villager"
+display_name = "Theo"
+row = 1
+scale = 1.0
+offset_x = 0
+offset_y = 0
+
+[entities.theo.animations.down]
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[entities.theo.animations.left]
+frames = [3, 4, 5]
+fps = 6
+loop = true
+
+[entities.theo.animations.right]
+frames = [6, 7, 8]
+fps = 6
+loop = true
+
+[entities.theo.animations.up]
+frames = [9, 10, 11]
+fps = 6
+loop = true
+
+[entities.lina]
+kind = "villager"
+display_name = "Lina"
+row = 2
+scale = 1.0
+offset_x = 0
+offset_y = 0
+
+[entities.lina.animations.down]
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[entities.lina.animations.left]
+frames = [3, 4, 5]
+fps = 6
+loop = true
+
+[entities.lina.animations.right]
+frames = [6, 7, 8]
+fps = 6
+loop = true
+
+[entities.lina.animations.up]
+frames = [9, 10, 11]
+fps = 6
+loop = true
+
+[entities.nia]
+kind = "villager"
+display_name = "Nia"
+row = 3
+scale = 1.0
+offset_x = 0
+offset_y = 0
+
+[entities.nia.animations.down]
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[entities.nia.animations.left]
+frames = [3, 4, 5]
+fps = 6
+loop = true
+
+[entities.nia.animations.right]
+frames = [6, 7, 8]
+fps = 6
+loop = true
+
+[entities.nia.animations.up]
+frames = [9, 10, 11]
+fps = 6
+loop = true
+
+[entities.well]
+kind = "destination"
+display_name = "Well"
+row = 4
+col = 0
+scale = 1.0
+pivot = "bottom_center"
+
+[entities.market]
+kind = "destination"
+display_name = "Market"
+row = 4
+col = 1
+scale = 1.0
+pivot = "bottom_center"
+
+[entities.garden]
+kind = "destination"
+display_name = "Garden"
+row = 4
+col = 2
+scale = 1.0
+pivot = "bottom_center"
+
+[entities.home]
+kind = "destination"
+display_name = "Home"
+row = 4
+col = 3
+scale = 1.0
+pivot = "bottom_center"
+
+[entities.social]
+kind = "destination"
+display_name = "Social"
+row = 4
+col = 4
+scale = 1.0
+pivot = "bottom_center"

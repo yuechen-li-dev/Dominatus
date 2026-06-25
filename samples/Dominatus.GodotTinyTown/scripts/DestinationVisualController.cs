@@ -1,9 +1,12 @@
+using Dominatus.GodotConn.Assets;
 using Godot;
 
 namespace Dominatus.GodotTinyTown;
 
 public sealed class DestinationVisualController
 {
+    private static readonly Vector2 BaseSpritePosition = new(0f, -20f);
+
     private readonly Marker2D _marker;
     private readonly Node2D _visualRoot;
     private readonly List<CanvasItem> _fallbackItems = [];
@@ -28,7 +31,7 @@ public sealed class DestinationVisualController
             _visualRoot.AddChild(_sprite);
         _sprite.RegionEnabled = true;
         _sprite.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
-        _sprite.Position = new Vector2(0f, -20f);
+        _sprite.Position = BaseSpritePosition;
 
         _presentation = new TinyTownDestinationPresentation
         {
@@ -72,18 +75,20 @@ public sealed class DestinationVisualController
         var key = _presentation.Kind.ToString();
         if (_loadedSpriteKey != key)
         {
-            if (!_catalog!.TryGetDestinationSprite(_profile, _presentation, out var slice) || slice is null)
+            var entityId = TinyTownSpriteCatalog.ResolveDestinationEntityId(_presentation);
+            if (!_catalog!.TryGetDestinationSprite(_profile, entityId, _presentation, out var slice) || slice is null)
                 return false;
 
             _sprite.Texture = slice.Texture;
             _sprite.RegionRect = slice.RegionRect;
-            ApplySpriteScale(slice.RegionRect.Size);
+            ApplySpriteTransform(slice);
             _sprite.Modulate = Colors.White;
             _loadedSpriteKey = key;
         }
-        else if (_catalog!.TryGetDestinationSprite(_profile, _presentation, out var currentSlice) && currentSlice is not null)
+        else if (_catalog!.TryGetDestinationSprite(_profile, TinyTownSpriteCatalog.ResolveDestinationEntityId(_presentation), _presentation, out var currentSlice) && currentSlice is not null)
         {
             _sprite.RegionRect = currentSlice.RegionRect;
+            ApplySpriteTransform(currentSlice);
         }
 
         SetFallbackVisible(false);
@@ -92,16 +97,30 @@ public sealed class DestinationVisualController
         return true;
     }
 
-    private void ApplySpriteScale(Vector2 sourceSize)
+    private void ApplySpriteTransform(TinyTownAtlasSlice slice)
     {
+        var sourceSize = slice.RegionRect.Size;
         if (sourceSize.Y <= 0f)
         {
             _sprite.Scale = Vector2.One;
+            _sprite.Position = BaseSpritePosition + slice.Offset;
             return;
         }
 
-        var scale = _profile.DestinationTargetHeight / sourceSize.Y;
+        var scale = (_profile.DestinationTargetHeight / sourceSize.Y) * slice.Scale;
         _sprite.Scale = new Vector2(scale, scale);
+        _sprite.Position = BaseSpritePosition + ResolvePivotOffset(slice.Pivot, sourceSize, scale) + slice.Offset;
+    }
+
+    private static Vector2 ResolvePivotOffset(SpritePivot? pivot, Vector2 sourceSize, float scale)
+    {
+        return pivot switch
+        {
+            SpritePivot.BottomCenter => new Vector2(0f, -(sourceSize.Y * scale * 0.5f)),
+            SpritePivot.TopCenter => new Vector2(0f, sourceSize.Y * scale * 0.5f),
+            SpritePivot.TopLeft => new Vector2(sourceSize.X * scale * 0.5f, sourceSize.Y * scale * 0.5f),
+            _ => Vector2.Zero
+        };
     }
 
     private void SetFallbackVisible(bool visible)

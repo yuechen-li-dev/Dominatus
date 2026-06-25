@@ -1,9 +1,12 @@
+using Dominatus.GodotConn.Assets;
 using Godot;
 
 namespace Dominatus.GodotTinyTown;
 
 public sealed class VillagerVisualController
 {
+    private static readonly Vector2 BaseSpritePosition = new(0f, -17f);
+
     private readonly Node2D _visualRoot;
     private readonly CanvasItem? _shadow;
     private readonly Polygon2D _body;
@@ -31,7 +34,7 @@ public sealed class VillagerVisualController
             visualRoot.AddChild(_sprite);
         _sprite.RegionEnabled = true;
         _sprite.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
-        _sprite.Position = new Vector2(0f, -17f);
+        _sprite.Position = BaseSpritePosition;
     }
 
     public TinyTownVisualStatus Status => _status;
@@ -61,7 +64,8 @@ public sealed class VillagerVisualController
         if (_catalog is null)
             return false;
 
-        if (!_catalog.TryGetVillagerSprite(_profile, presentation, out var slice) || slice is null)
+        var entityId = TinyTownSpriteCatalog.ResolveVillagerEntityId(presentation);
+        if (!_catalog.TryGetVillagerSprite(_profile, entityId, presentation, out var slice) || slice is null)
             return false;
 
         var frameKey = $"{presentation.Name}|{presentation.Personality}|{presentation.FacingDirection}|{presentation.Phase}|{MathF.Round(presentation.Speed, 0)}";
@@ -72,7 +76,7 @@ public sealed class VillagerVisualController
         }
 
         _sprite.RegionRect = slice.RegionRect;
-        ApplySpriteScale(slice.RegionRect.Size);
+        ApplySpriteTransform(slice);
         SetFallbackVisible(false);
         _sprite.Visible = true;
         _sprite.Modulate = Colors.White;
@@ -80,16 +84,30 @@ public sealed class VillagerVisualController
         return true;
     }
 
-    private void ApplySpriteScale(Vector2 sourceSize)
+    private void ApplySpriteTransform(TinyTownAtlasSlice slice)
     {
+        var sourceSize = slice.RegionRect.Size;
         if (sourceSize.Y <= 0f)
         {
             _sprite.Scale = Vector2.One;
+            _sprite.Position = BaseSpritePosition + slice.Offset;
             return;
         }
 
-        var scale = _profile.VillagerTargetHeight / sourceSize.Y;
+        var scale = (_profile.VillagerTargetHeight / sourceSize.Y) * slice.Scale;
         _sprite.Scale = new Vector2(scale, scale);
+        _sprite.Position = BaseSpritePosition + ResolvePivotOffset(slice.Pivot, sourceSize, scale) + slice.Offset;
+    }
+
+    private static Vector2 ResolvePivotOffset(SpritePivot? pivot, Vector2 sourceSize, float scale)
+    {
+        return pivot switch
+        {
+            SpritePivot.BottomCenter => new Vector2(0f, -(sourceSize.Y * scale * 0.5f)),
+            SpritePivot.TopCenter => new Vector2(0f, sourceSize.Y * scale * 0.5f),
+            SpritePivot.TopLeft => new Vector2(sourceSize.X * scale * 0.5f, sourceSize.Y * scale * 0.5f),
+            _ => Vector2.Zero
+        };
     }
 
     private void ApplyFallback(TinyTownVillagerPresentation presentation, Color accentColor, float facingRotation)

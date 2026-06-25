@@ -518,6 +518,102 @@ Smoke JSON atlas fields now include:
 - `CheckerboardNormalized` when the retained M2.1 workaround atlas is used
 - `Fallback` when sprite mode could not secure a valid atlas and visuals dropped to shapes
 
+## M2.3 TOML sprite atlas metadata
+
+M2.3 moves TinyTown atlas semantics out of hardcoded row and column tables and into a TOML sidecar:
+
+- image pixels stay in `res://assets/sprites/tinytown_sprite_alpha.png`
+- semantic atlas metadata lives in `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml`
+- `Dominatus.Assets.Toml` handles parse, bind, and structured diagnostics
+- `Dominatus.GodotConn.Assets.SpriteAtlasTomlLoader` validates the authored atlas record and returns typed sprite metadata
+
+Why TOML instead of JSON:
+
+- Dominatus asset/data records are already authored as TOML
+- the repo already ships `Dominatus.Assets.Toml`
+- TOML keeps small semantic asset edits readable for humans and LLMs
+
+### Loader path
+
+The sprite metadata loader uses the existing TOML substrate rather than a new parser:
+
+- `TomlAssetLoader.LoadFile<T>(...)`
+- `IAssetValidator<T>`
+- `AssetValidation` diagnostics with source path and key path data
+
+The GodotConn-side loader adds sprite-specific validation for:
+
+- image existence
+- positive grid dimensions
+- image width and height matching `columns * cell_width` and `rows * cell_height`
+- entity row and column bounds
+- animation frame column bounds
+- frame override row and column bounds
+
+### Runtime preference order
+
+TinyTown now resolves sprite art in this order:
+
+1. matching `.sprite.toml` metadata beside the atlas image
+1. current hardcoded TinyTown `12x6` atlas mapping when TOML is missing or invalid
+1. previous atlas candidate fallback order
+1. `FallbackShapes`
+
+That means the old hardcoded mapping remains the safety net until the TOML path is present and valid.
+
+### Typed asset model
+
+Reusable GodotConn asset records now live under `src/Dominatus.GodotConn/Assets`:
+
+- `SpriteAtlasAsset`
+- `SpriteAtlasGrid`
+- `SpriteEntityAsset`
+- `SpriteAnimationAsset`
+- `SpriteFrameAsset`
+- `SpriteFrameRef`
+- `SpriteFrameCorrection`
+- `SpritePivot`
+- `SpriteAtlasTomlLoader`
+
+TinyTown consumes those typed records through `TinyTownSpriteCatalog`, then visual controllers apply:
+
+- region rect from row/column or frame override
+- animation `fps`
+- per-entity and per-frame `offset`
+- scale multiplier
+- pivot metadata
+
+### Preview tool
+
+Local preview command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Preview-SpriteAtlasToml.ps1 `
+  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml `
+  -Out artifacts/godot-tinytown/tinytown-atlas-preview.png
+```
+
+The preview overlay is generated locally under:
+
+- `artifacts/godot-tinytown/tinytown-atlas-preview.png`
+
+It draws the atlas grid, row and column labels, semantic entity labels, and correction markers so metadata changes can be checked visually before runtime smoke runs.
+
+### Smoke JSON additions
+
+TinyTown smoke snapshots now include TOML-aware atlas fields:
+
+- `atlasTomlPath`
+- `atlasTomlLoaded`
+- `atlasTomlWarnings[]`
+- `gridColumns`
+- `gridRows`
+- `spriteEntitiesLoaded`
+- `spriteAnimationsLoaded`
+- `correctedFramesUsed`
+
+When the alpha atlas sidecar loads successfully, `atlasSourceKind` reports TOML-backed values such as `TomlAlphaOriginal`.
+
 ## Personality profiles
 
 The sample keeps deterministic villager personalities:

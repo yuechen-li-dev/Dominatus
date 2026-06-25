@@ -1,3 +1,4 @@
+using Dominatus.GodotConn.Assets;
 using Godot;
 using System.Text;
 
@@ -5,13 +6,15 @@ namespace Dominatus.GodotTinyTown;
 
 public sealed class TinyTownSpriteCatalog
 {
-    private const int AtlasColumns = 12;
-    private const int AtlasRows = 6;
+    private const int FallbackAtlasColumns = 12;
+    private const int FallbackAtlasRows = 6;
 
     private readonly HashSet<string> _loggedWarnings = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AtlasTextureInfo> _atlasCache = new(StringComparer.Ordinal);
     private readonly HashSet<string> _loadedVillagerKeys = new(StringComparer.Ordinal);
     private readonly HashSet<string> _loadedDestinationKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _correctedFrameKeys = new(StringComparer.Ordinal);
+    private readonly List<string> _atlasTomlWarnings = [];
 
     public int MissingAssetWarnings { get; private set; }
 
@@ -21,11 +24,29 @@ public sealed class TinyTownSpriteCatalog
 
     public int DestinationSpritesLoaded => _loadedDestinationKeys.Count;
 
+    public int CorrectedFramesUsed => _correctedFrameKeys.Count;
+
+    public int SpriteEntitiesLoaded { get; private set; }
+
+    public int SpriteAnimationsLoaded { get; private set; }
+
     public string AtlasPath { get; private set; } = string.Empty;
+
+    public string AtlasTomlPath { get; private set; } = string.Empty;
+
+    public bool AtlasTomlLoaded { get; private set; }
+
+    public IReadOnlyList<string> AtlasTomlWarnings => _atlasTomlWarnings;
+
+    public int AtlasTomlWarningsCount => _atlasTomlWarnings.Count;
 
     public int AtlasWidth { get; private set; }
 
     public int AtlasHeight { get; private set; }
+
+    public int GridColumns { get; private set; }
+
+    public int GridRows { get; private set; }
 
     public int CellWidth { get; private set; }
 
@@ -43,11 +64,43 @@ public sealed class TinyTownSpriteCatalog
 
     public bool KeyColorRemoved { get; private set; }
 
-    public bool TryGetVillagerSprite(TinyTownArtProfile profile, TinyTownVillagerPresentation presentation, out TinyTownAtlasSlice? slice)
+    public static string ResolveVillagerEntityId(TinyTownVillagerPresentation presentation)
+    {
+        var name = Normalize(presentation.Name);
+        if (!string.IsNullOrWhiteSpace(name) && name != "default")
+            return name;
+
+        return Normalize(presentation.Personality);
+    }
+
+    public static string ResolveDestinationEntityId(TinyTownDestinationPresentation presentation)
+    {
+        return presentation.Kind switch
+        {
+            TinyTownDestinationKind.Well => "well",
+            TinyTownDestinationKind.Market => "market",
+            TinyTownDestinationKind.Garden => "garden",
+            TinyTownDestinationKind.Home => "home",
+            TinyTownDestinationKind.SocialSpot => "social",
+            _ => Normalize(presentation.Name)
+        };
+    }
+
+    public bool TryGetVillagerSprite(
+        TinyTownArtProfile profile,
+        string entityId,
+        TinyTownVillagerPresentation presentation,
+        out TinyTownAtlasSlice? slice)
     {
         slice = null;
         if (!TryLoadAtlas(profile.GetVillagerAtlasCandidates(), out var atlas))
             return false;
+
+        if (TryResolveMetadataVillagerSlice(profile, atlas, entityId, presentation, out slice))
+        {
+            RecordLoaded(_loadedVillagerKeys, entityId);
+            return true;
+        }
 
         if (!TryResolveVillagerRow(presentation, out var row))
         {
@@ -55,17 +108,27 @@ public sealed class TinyTownSpriteCatalog
             return false;
         }
 
-        var column = DirectionColumnStart(presentation.FacingDirection) + ResolveVillagerFrame(profile, presentation);
-        slice = new TinyTownAtlasSlice(atlas.Texture, BuildRegion(atlas, row, column));
-        RecordLoaded(_loadedVillagerKeys, $"{presentation.Name}|{presentation.Personality}");
+        var column = DirectionColumnStart(presentation.FacingDirection) + ResolveFallbackVillagerFrame(profile, presentation);
+        slice = CreateSlice(atlas, $"{entityId}|fallback|{presentation.FacingDirection}|{column}", BuildRegion(atlas, row, column), null, 0f);
+        RecordLoaded(_loadedVillagerKeys, entityId);
         return true;
     }
 
-    public bool TryGetDestinationSprite(TinyTownArtProfile profile, TinyTownDestinationPresentation presentation, out TinyTownAtlasSlice? slice)
+    public bool TryGetDestinationSprite(
+        TinyTownArtProfile profile,
+        string entityId,
+        TinyTownDestinationPresentation presentation,
+        out TinyTownAtlasSlice? slice)
     {
         slice = null;
         if (!TryLoadAtlas(profile.GetDestinationAtlasCandidates(), out var atlas))
             return false;
+
+        if (TryResolveMetadataDestinationSlice(atlas, entityId, out slice))
+        {
+            RecordLoaded(_loadedDestinationKeys, $"{entityId}|{presentation.Name}");
+            return true;
+        }
 
         if (!TryResolveDestinationCell(presentation.Kind, out var row, out var column))
         {
@@ -73,9 +136,93 @@ public sealed class TinyTownSpriteCatalog
             return false;
         }
 
-        slice = new TinyTownAtlasSlice(atlas.Texture, BuildRegion(atlas, row, column));
-        RecordLoaded(_loadedDestinationKeys, $"{presentation.Kind}|{presentation.Name}");
+        slice = CreateSlice(atlas, $"{entityId}|fallback", BuildRegion(atlas, row, column), null, 0f);
+        RecordLoaded(_loadedDestinationKeys, $"{entityId}|{presentation.Name}");
         return true;
+    }
+
+    private bool TryResolveMetadataVillagerSlice(
+        TinyTownArtProfile profile,
+        AtlasTextureInfo atlas,
+        string entityId,
+        TinyTownVillagerPresentation presentation,
+        out TinyTownAtlasSlice? slice)
+    {
+        slice = null;
+        if (atlas.Metadata is null || !atlas.Metadata.Entities.TryGetValue(entityId, out var entity))
+            return false;
+
+        var animationName = ResolveAnimationName(presentation.FacingDirection);
+        SpriteFrameRef? frame = null;
+        float animationFps = 0f;
+        if (entity.Animations.TryGetValue(animationName, out var animation) && animation.Frames.Count > 0)
+        {
+            var frameIndex = ResolveMetadataAnimationFrameIndex(profile, presentation, animation);
+            frame = animation.Frames[frameIndex];
+            animationFps = animation.Fps;
+        }
+        else if (entity.StaticFrame is not null)
+        {
+            frame = entity.StaticFrame;
+        }
+
+        if (frame is null)
+        {
+            WarnMetadataIssue(atlas, $"Entity '{entityId}' is missing animation '{animationName}' and has no static_frame.");
+            return false;
+        }
+
+        slice = CreateEntitySlice(atlas, entityId, frame, entity, animationFps);
+        return true;
+    }
+
+    private bool TryResolveMetadataDestinationSlice(
+        AtlasTextureInfo atlas,
+        string entityId,
+        out TinyTownAtlasSlice? slice)
+    {
+        slice = null;
+        if (atlas.Metadata is null || !atlas.Metadata.Entities.TryGetValue(entityId, out var entity) || entity.StaticFrame is null)
+            return false;
+
+        slice = CreateEntitySlice(atlas, entityId, entity.StaticFrame, entity, 0f);
+        return true;
+    }
+
+    private TinyTownAtlasSlice CreateEntitySlice(
+        AtlasTextureInfo atlas,
+        string entityId,
+        SpriteFrameRef frame,
+        SpriteEntityAsset entity,
+        float animationFps)
+    {
+        var correction = frame.Correction;
+        var region = correction?.SourceRectOverride ?? BuildRegion(atlas, frame.Row, frame.Col);
+        var scale = entity.Scale * (correction?.Scale ?? 1f);
+        var offset = entity.Offset + (correction?.Offset ?? Vector2.Zero);
+        var pivot = correction?.Pivot ?? entity.Pivot ?? atlas.Metadata?.DefaultPivot;
+        var slice = new TinyTownAtlasSlice(
+            atlas.Texture,
+            region,
+            offset,
+            scale,
+            pivot,
+            animationFps,
+            HasCorrection(entity, correction));
+
+        if (slice.HasCorrection)
+            _correctedFrameKeys.Add($"{atlas.Path}|{entityId}|{frame.FrameId ?? $"{frame.Row},{frame.Col}"}");
+
+        return slice;
+    }
+
+    private static bool HasCorrection(SpriteEntityAsset entity, SpriteFrameCorrection? correction)
+    {
+        return entity.Scale != 1f
+            || entity.Offset != Vector2.Zero
+            || entity.Correction is not null
+            || correction is not null
+            || entity.Pivot.HasValue;
     }
 
     private bool TryLoadAtlas(IReadOnlyList<string> atlasCandidates, out AtlasTextureInfo atlas)
@@ -97,7 +244,7 @@ public sealed class TinyTownSpriteCatalog
             firstCandidate ??= trimmedPath;
             if (_atlasCache.TryGetValue(trimmedPath, out atlas))
             {
-                UpdateDiagnostics(trimmedPath, atlas);
+                UpdateDiagnostics(atlas);
                 return true;
             }
 
@@ -105,11 +252,17 @@ public sealed class TinyTownSpriteCatalog
             if (texture is null)
                 continue;
 
-            var loadedTexture = texture.Value;
+            if (TryCreateTomlAtlas(trimmedPath, texture.Value, out atlas))
+            {
+                _atlasCache[trimmedPath] = atlas;
+                SpriteAssetsLoaded++;
+                UpdateDiagnostics(atlas);
+                return true;
+            }
 
-            var width = loadedTexture.Texture.GetWidth();
-            var height = loadedTexture.Texture.GetHeight();
-            if (width <= 0 || height <= 0 || width % AtlasColumns != 0 || height % AtlasRows != 0)
+            var width = texture.Value.Texture.GetWidth();
+            var height = texture.Value.Texture.GetHeight();
+            if (width <= 0 || height <= 0 || width % FallbackAtlasColumns != 0 || height % FallbackAtlasRows != 0)
             {
                 invalidCandidate = trimmedPath;
                 invalidWidth = width;
@@ -118,16 +271,23 @@ public sealed class TinyTownSpriteCatalog
             }
 
             atlas = new AtlasTextureInfo(
-                loadedTexture.Texture,
+                trimmedPath,
+                texture.Value.Texture,
                 width,
                 height,
-                width / AtlasColumns,
-                height / AtlasRows,
-                loadedTexture.AlphaDetected,
-                loadedTexture.TransparentPixelCount);
+                FallbackAtlasColumns,
+                FallbackAtlasRows,
+                width / FallbackAtlasColumns,
+                height / FallbackAtlasRows,
+                texture.Value.AlphaDetected,
+                texture.Value.TransparentPixelCount,
+                ResolveSourceKind(trimmedPath, metadataLoaded: false),
+                Metadata: null,
+                MetadataPath: GetMetadataPath(trimmedPath),
+                MetadataWarnings: []);
             _atlasCache[trimmedPath] = atlas;
             SpriteAssetsLoaded++;
-            UpdateDiagnostics(trimmedPath, atlas);
+            UpdateDiagnostics(atlas);
             return true;
         }
 
@@ -137,6 +297,40 @@ public sealed class TinyTownSpriteCatalog
             WarnMissing(firstCandidate, atlasCandidates, "atlas texture");
 
         return false;
+    }
+
+    private bool TryCreateTomlAtlas(string atlasPath, TextureLoadInfo texture, out AtlasTextureInfo atlas)
+    {
+        atlas = default;
+        var metadataPath = GetMetadataPath(atlasPath);
+        if (string.IsNullOrWhiteSpace(metadataPath) || !File.Exists(metadataPath))
+            return false;
+
+        var result = SpriteAtlasTomlLoader.LoadFile(metadataPath);
+        RecordTomlDiagnostics(metadataPath, result.Diagnostics);
+        if (!result.Success || result.Asset is null)
+            return false;
+
+        atlas = new AtlasTextureInfo(
+            atlasPath,
+            texture.Texture,
+            texture.Texture.GetWidth(),
+            texture.Texture.GetHeight(),
+            result.Asset.Grid.Columns,
+            result.Asset.Grid.Rows,
+            result.Asset.Grid.CellWidth,
+            result.Asset.Grid.CellHeight,
+            texture.AlphaDetected,
+            texture.TransparentPixelCount,
+            ResolveSourceKind(atlasPath, metadataLoaded: true),
+            result.Asset,
+            metadataPath,
+            result.Diagnostics
+                .Where(d => d.Severity != Dominatus.Assets.Toml.AssetDiagnosticSeverity.Info)
+                .Select(FormatDiagnostic)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray());
+        return true;
     }
 
     private static TextureLoadInfo? TryLoadTexture(string atlasPath)
@@ -227,7 +421,7 @@ public sealed class TinyTownSpriteCatalog
         };
     }
 
-    private static int ResolveVillagerFrame(TinyTownArtProfile profile, TinyTownVillagerPresentation presentation)
+    private static int ResolveFallbackVillagerFrame(TinyTownArtProfile profile, TinyTownVillagerPresentation presentation)
     {
         if (!string.Equals(presentation.Phase, "Travel", StringComparison.OrdinalIgnoreCase)
             || presentation.Speed <= profile.WalkSpeedThreshold)
@@ -240,31 +434,107 @@ public sealed class TinyTownSpriteCatalog
         return (int)(animationTick % 2L) + 1;
     }
 
+    private static int ResolveMetadataAnimationFrameIndex(
+        TinyTownArtProfile profile,
+        TinyTownVillagerPresentation presentation,
+        SpriteAnimationAsset animation)
+    {
+        if (animation.Frames.Count <= 1
+            || !string.Equals(presentation.Phase, "Travel", StringComparison.OrdinalIgnoreCase)
+            || presentation.Speed <= profile.WalkSpeedThreshold)
+        {
+            return 0;
+        }
+
+        if (animation.Fps <= 0f)
+            return Math.Clamp(ResolveFallbackVillagerFrame(profile, presentation), 0, animation.Frames.Count - 1);
+
+        var ticks = Time.GetTicksMsec() / 1000.0;
+        var frame = (int)Math.Floor(ticks * animation.Fps);
+        if (animation.Loop)
+            return PositiveModulo(frame, animation.Frames.Count);
+
+        return Math.Min(frame, animation.Frames.Count - 1);
+    }
+
+    private static int PositiveModulo(int value, int modulus)
+    {
+        var result = value % modulus;
+        return result < 0 ? result + modulus : result;
+    }
+
+    private static string ResolveAnimationName(TinyTownFacingDirection facing)
+    {
+        return facing switch
+        {
+            TinyTownFacingDirection.Left => "left",
+            TinyTownFacingDirection.Right => "right",
+            TinyTownFacingDirection.Up => "up",
+            _ => "down"
+        };
+    }
+
     private static bool IsImagePath(string value)
         => value.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
             || value.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
             || value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
             || value.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase);
 
-    private void UpdateDiagnostics(string atlasPath, AtlasTextureInfo atlas)
+    private void UpdateDiagnostics(AtlasTextureInfo atlas)
     {
-        AtlasPath = atlasPath;
+        AtlasPath = atlas.Path;
+        AtlasTomlPath = atlas.MetadataPath ?? string.Empty;
+        AtlasTomlLoaded = atlas.Metadata is not null;
+        _atlasTomlWarnings.Clear();
+        _atlasTomlWarnings.AddRange(atlas.MetadataWarnings);
         AtlasWidth = atlas.Width;
         AtlasHeight = atlas.Height;
+        GridColumns = atlas.GridColumns;
+        GridRows = atlas.GridRows;
         CellWidth = atlas.CellWidth;
         CellHeight = atlas.CellHeight;
-        AtlasSourceKind = ResolveSourceKind(atlasPath);
-        NormalizedAtlasUsed = AtlasSourceKind is TinyTownAtlasSourceKind.AlphaNormalized or TinyTownAtlasSourceKind.CheckerboardNormalized;
-        AlphaAtlasUsed = AtlasSourceKind is TinyTownAtlasSourceKind.AlphaOriginal or TinyTownAtlasSourceKind.AlphaNormalized;
+        AtlasSourceKind = atlas.SourceKind;
+        NormalizedAtlasUsed = atlas.SourceKind is TinyTownAtlasSourceKind.AlphaNormalized or TinyTownAtlasSourceKind.CheckerboardNormalized or TinyTownAtlasSourceKind.TomlAlphaNormalized or TinyTownAtlasSourceKind.TomlCheckerboardNormalized;
+        AlphaAtlasUsed = atlas.SourceKind is TinyTownAtlasSourceKind.AlphaOriginal or TinyTownAtlasSourceKind.AlphaNormalized or TinyTownAtlasSourceKind.TomlAlphaOriginal or TinyTownAtlasSourceKind.TomlAlphaNormalized;
         AlphaDetected = atlas.AlphaDetected;
         TransparentPixelCount = atlas.TransparentPixelCount;
         KeyColorRemoved = AlphaAtlasUsed;
+        SpriteEntitiesLoaded = atlas.Metadata?.Entities.Count ?? 0;
+        SpriteAnimationsLoaded = atlas.Metadata?.Entities.Values.Sum(entity => entity.Animations.Count) ?? 0;
     }
 
     private void RecordLoaded(HashSet<string> loadedSet, string key)
     {
         if (loadedSet.Add(key))
             SpriteAssetsLoaded++;
+    }
+
+    private void RecordTomlDiagnostics(string metadataPath, IReadOnlyList<Dominatus.Assets.Toml.AssetDiagnostic> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics.Where(d => d.Severity != Dominatus.Assets.Toml.AssetDiagnosticSeverity.Info))
+        {
+            var formatted = FormatDiagnostic(diagnostic);
+            if (_loggedWarnings.Add($"toml|{metadataPath}|{formatted}"))
+            {
+                _atlasTomlWarnings.Add(formatted);
+                if (diagnostic.Severity != Dominatus.Assets.Toml.AssetDiagnosticSeverity.Info)
+                {
+                    MissingAssetWarnings++;
+                    GD.PushWarning($"TinyTown sprite atlas metadata: {formatted}");
+                }
+            }
+        }
+    }
+
+    private void WarnMetadataIssue(AtlasTextureInfo atlas, string message)
+    {
+        var key = $"metadata-runtime|{atlas.MetadataPath}|{message}";
+        if (!_loggedWarnings.Add(key))
+            return;
+
+        MissingAssetWarnings++;
+        _atlasTomlWarnings.Add(message);
+        GD.PushWarning($"TinyTown sprite atlas metadata warning: {message}");
     }
 
     private void WarnMissing(string rootPath, IReadOnlyList<string> keys, string assetType)
@@ -294,7 +564,36 @@ public sealed class TinyTownSpriteCatalog
             return;
 
         MissingAssetWarnings++;
-        GD.PushWarning($"TinyTown atlas '{atlasPath}' has invalid size {width}x{height}. Expected a texture divisible by {AtlasColumns} columns and {AtlasRows} rows. Falling back to shapes.");
+        GD.PushWarning($"TinyTown atlas '{atlasPath}' has invalid size {width}x{height}. Expected a texture divisible by {FallbackAtlasColumns} columns and {FallbackAtlasRows} rows. Falling back to shapes.");
+    }
+
+    private static TinyTownAtlasSlice CreateSlice(
+        AtlasTextureInfo atlas,
+        string key,
+        Rect2 region,
+        SpritePivot? pivot,
+        float animationFps)
+        => new(atlas.Texture, region, Vector2.Zero, 1f, pivot, animationFps, false);
+
+    private static string GetMetadataPath(string atlasPath)
+    {
+        if (!IsImagePath(atlasPath))
+            return string.Empty;
+
+        var filePath = ProjectSettings.GlobalizePath(atlasPath);
+        return string.IsNullOrWhiteSpace(filePath)
+            ? string.Empty
+            : SpriteAtlasTomlLoader.GetMetadataPathForImage(filePath);
+    }
+
+    private static string FormatDiagnostic(Dominatus.Assets.Toml.AssetDiagnostic diagnostic)
+    {
+        var location = !string.IsNullOrWhiteSpace(diagnostic.SourcePath)
+            ? diagnostic.SourcePath
+            : "sprite atlas";
+        var line = diagnostic.Line is { } value ? $":{value}" : string.Empty;
+        var key = !string.IsNullOrWhiteSpace(diagnostic.KeyPath) ? $" [{diagnostic.KeyPath}]" : string.Empty;
+        return $"{diagnostic.Severity.ToString().ToLowerInvariant()} {diagnostic.Code}: {diagnostic.Message} ({location}{line}){key}";
     }
 
     private static string Normalize(string value)
@@ -343,38 +642,55 @@ public sealed class TinyTownSpriteCatalog
         return transparentPixels;
     }
 
-    private static TinyTownAtlasSourceKind ResolveSourceKind(string atlasPath)
+    private static TinyTownAtlasSourceKind ResolveSourceKind(string atlasPath, bool metadataLoaded)
     {
         return atlasPath switch
         {
-            TinyTownArtProfile.AlphaOriginalAtlasPath => TinyTownAtlasSourceKind.AlphaOriginal,
-            TinyTownArtProfile.AlphaNormalizedAtlasPath => TinyTownAtlasSourceKind.AlphaNormalized,
-            TinyTownArtProfile.CheckerboardNormalizedAtlasPath => TinyTownAtlasSourceKind.CheckerboardNormalized,
-            _ when atlasPath.Contains("sprite_alpha", StringComparison.OrdinalIgnoreCase) => TinyTownAtlasSourceKind.AlphaOriginal,
-            _ when atlasPath.Contains("atlas_alpha_normalized", StringComparison.OrdinalIgnoreCase) => TinyTownAtlasSourceKind.AlphaNormalized,
-            _ when atlasPath.Contains("atlas_normalized", StringComparison.OrdinalIgnoreCase) => TinyTownAtlasSourceKind.CheckerboardNormalized,
+            TinyTownArtProfile.AlphaOriginalAtlasPath => metadataLoaded ? TinyTownAtlasSourceKind.TomlAlphaOriginal : TinyTownAtlasSourceKind.AlphaOriginal,
+            TinyTownArtProfile.AlphaNormalizedAtlasPath => metadataLoaded ? TinyTownAtlasSourceKind.TomlAlphaNormalized : TinyTownAtlasSourceKind.AlphaNormalized,
+            TinyTownArtProfile.CheckerboardNormalizedAtlasPath => metadataLoaded ? TinyTownAtlasSourceKind.TomlCheckerboardNormalized : TinyTownAtlasSourceKind.CheckerboardNormalized,
+            _ when atlasPath.Contains("sprite_alpha", StringComparison.OrdinalIgnoreCase) => metadataLoaded ? TinyTownAtlasSourceKind.TomlAlphaOriginal : TinyTownAtlasSourceKind.AlphaOriginal,
+            _ when atlasPath.Contains("atlas_alpha_normalized", StringComparison.OrdinalIgnoreCase) => metadataLoaded ? TinyTownAtlasSourceKind.TomlAlphaNormalized : TinyTownAtlasSourceKind.AlphaNormalized,
+            _ when atlasPath.Contains("atlas_normalized", StringComparison.OrdinalIgnoreCase) => metadataLoaded ? TinyTownAtlasSourceKind.TomlCheckerboardNormalized : TinyTownAtlasSourceKind.CheckerboardNormalized,
             _ => TinyTownAtlasSourceKind.Fallback
         };
     }
 
     private readonly record struct AtlasTextureInfo(
+        string Path,
         Texture2D Texture,
         int Width,
         int Height,
+        int GridColumns,
+        int GridRows,
         int CellWidth,
         int CellHeight,
         bool AlphaDetected,
-        long TransparentPixelCount);
+        long TransparentPixelCount,
+        TinyTownAtlasSourceKind SourceKind,
+        SpriteAtlasAsset? Metadata,
+        string MetadataPath,
+        IReadOnlyList<string> MetadataWarnings);
 
     private readonly record struct TextureLoadInfo(Texture2D Texture, bool AlphaDetected, long TransparentPixelCount);
 }
 
-public sealed record TinyTownAtlasSlice(Texture2D Texture, Rect2 RegionRect);
+public sealed record TinyTownAtlasSlice(
+    Texture2D Texture,
+    Rect2 RegionRect,
+    Vector2 Offset,
+    float Scale,
+    SpritePivot? Pivot,
+    float AnimationFps,
+    bool HasCorrection);
 
 public enum TinyTownAtlasSourceKind
 {
     Fallback = 0,
     AlphaOriginal = 1,
     AlphaNormalized = 2,
-    CheckerboardNormalized = 3
+    CheckerboardNormalized = 3,
+    TomlAlphaOriginal = 4,
+    TomlAlphaNormalized = 5,
+    TomlCheckerboardNormalized = 6
 }
