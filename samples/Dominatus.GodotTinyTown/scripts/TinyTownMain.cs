@@ -32,6 +32,10 @@ public partial class TinyTownMain : Node2D
     private readonly HashSet<string> _observedDwellActivities = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, int>> _activityCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _lastObservedState = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Vector2> _lastPhysicsPositions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _maxPhysicsStepDistance = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _sumPhysicsStepDistance = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _physicsStepSamples = new(StringComparer.Ordinal);
 
     public override void _Ready()
     {
@@ -65,7 +69,12 @@ public partial class TinyTownMain : Node2D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (_world is null || _smoke is null || _smokeCompleted)
+        if (_world is null)
+            return;
+
+        RecordMovementSamples(_world);
+
+        if (_smoke is null || _smokeCompleted)
             return;
 
         _smokePhysicsFrames++;
@@ -158,6 +167,12 @@ public partial class TinyTownMain : Node2D
         var bb = brain.Bb;
         var initialPosition = bb.GetOrDefault(TinyTownKeys.InitialPosition, body.GlobalPosition);
         var position = body.GlobalPosition;
+        var navigation = _world is not null && _world.TryGetNavigationState(brain.AgentId, out var state)
+            ? state
+            : default;
+        var sampleCount = _physicsStepSamples.TryGetValue(brain.VillagerName, out var count) ? count : 0;
+        var totalStepDistance = _sumPhysicsStepDistance.TryGetValue(brain.VillagerName, out var total) ? total : 0f;
+        var maxStepDistance = _maxPhysicsStepDistance.TryGetValue(brain.VillagerName, out var max) ? max : 0f;
 
         return new TinyTownVillagerSnapshot(
             brain.VillagerName,
@@ -174,7 +189,16 @@ public partial class TinyTownMain : Node2D
             ToVec2(initialPosition),
             ToVec2(bb.GetOrDefault(TinyTownKeys.HomePosition, Vector2.Zero)),
             ToVec2(bb.GetOrDefault(TinyTownKeys.CurrentTargetPosition, Vector2.Zero)),
+            ToVec2(body.Velocity),
+            ToVec2(navigation.NextPathPosition),
             position.DistanceTo(initialPosition),
+            navigation.DistanceToTarget,
+            navigation.Speed,
+            navigation.NavigationActive,
+            navigation.NavigationFinished,
+            navigation.ObservedNavigationActive,
+            maxStepDistance,
+            sampleCount == 0 ? 0f : totalStepDistance / sampleCount,
             bb.GetOrDefault(TinyTownKeys.Hunger, 0f),
             bb.GetOrDefault(TinyTownKeys.Thirst, 0f),
             bb.GetOrDefault(TinyTownKeys.RestNeed, 0f),
@@ -184,6 +208,29 @@ public partial class TinyTownMain : Node2D
             OrderedObserved(_observedActivities, brain.VillagerName),
             OrderedObserved(_observedPhases, brain.VillagerName),
             OrderedActivityCounts(brain.VillagerName));
+    }
+
+    private void RecordMovementSamples(TinyTownWorld world)
+    {
+        foreach (var brain in world.VillagerBrains)
+        {
+            if (brain.GetParent() is not CharacterBody2D body)
+                continue;
+
+            var name = brain.VillagerName;
+            var current = body.GlobalPosition;
+            if (_lastPhysicsPositions.TryGetValue(name, out var previous))
+            {
+                var stepDistance = current.DistanceTo(previous);
+                _maxPhysicsStepDistance[name] = _maxPhysicsStepDistance.TryGetValue(name, out var priorMax)
+                    ? Math.Max(priorMax, stepDistance)
+                    : stepDistance;
+                _sumPhysicsStepDistance[name] = (_sumPhysicsStepDistance.TryGetValue(name, out var priorSum) ? priorSum : 0f) + stepDistance;
+                _physicsStepSamples[name] = (_physicsStepSamples.TryGetValue(name, out var priorCount) ? priorCount : 0) + 1;
+            }
+
+            _lastPhysicsPositions[name] = current;
+        }
     }
 
     private void RecordObservedBehavior(TinyTownWorld world)
@@ -527,7 +574,16 @@ public sealed record TinyTownVillagerSnapshot(
     TinyTownVec2 InitialPosition,
     TinyTownVec2 HomePosition,
     TinyTownVec2 TargetPosition,
+    TinyTownVec2 Velocity,
+    TinyTownVec2 PathNextPosition,
     float DistanceFromInitialPosition,
+    float DistanceToTarget,
+    float Speed,
+    bool NavigationActive,
+    bool NavigationFinished,
+    bool ObservedNavigationActive,
+    float MaxPhysicsStepDistance,
+    float AveragePhysicsStepDistance,
     float Hunger,
     float Thirst,
     float RestNeed,

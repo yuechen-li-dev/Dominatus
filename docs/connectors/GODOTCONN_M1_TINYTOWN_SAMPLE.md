@@ -1,6 +1,6 @@
 # Dominatus.GodotConn M1 TinyTown Sample
 
-This document covers the M1.3 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
+This document covers the M1.4 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
 
 ## Purpose
 
@@ -10,7 +10,7 @@ This document covers the M1.3 TinyTown pass for `samples/Dominatus.GodotTinyTown
 - `DominatusWorldNode` owns world ticking
 - `DominatusAgentNode` owns Dominatus agent registration
 - OptFlow plus UtilityLite choose villager behavior
-- typed movement actuation drives visible motion in-scene
+- typed movement intent drives visible motion in-scene
 
 The sample is still intentionally tiny. It is meant to be legible, deterministic, and tunable, not feature-complete.
 
@@ -37,6 +37,7 @@ TinyTownMain
 |- TownGround / TownSquare / path polygons
 |- DominatusWorld (TinyTownWorld : DominatusWorldNode)
 |  |- Destinations
+|  |- NavigationRegion
 |  |  |- MayaHome
 |  |  |- TheoHome
 |  |  |- LinaHome
@@ -46,6 +47,7 @@ TinyTownMain
 |  |  |- Garden
 |  |- Villagers
 |     |- Maya (VillagerActor)
+|     |  |- NavigationAgent2D
 |     |  |- VisualRoot
 |     |  |- StatusPlate
 |     |  |- Brain (TinyTownVillagerBrain : DominatusAgentNode)
@@ -73,6 +75,21 @@ Current constants:
 
 This keeps the town, labels, and debug panel inside the viewport and prevents the debug text from spilling into the editor gray gutter.
 
+## M1.4 movement conclusion
+
+The main cause of the old choppy look was not Godot physics cadence.
+
+The world was already ticking in `_PhysicsProcess`, but travel frames were still emitting `Move2DCommand` followed by `Ai.Wait(0.05f)`.
+
+That meant movement intent only refreshed about every `20 Hz`, and the old move handler applied velocity only when the actuation fired. The result was visible stepping at `1x`, especially near destination changes.
+
+M1.4 fixes that by separating:
+
+- Dominatus intent updates
+- Godot per-physics-frame movement
+
+Dominatus still decides the destination and activity. Godot now advances path following every physics frame through `NavigationAgent2D`, `CharacterBody2D.Velocity`, and `MoveAndSlide()`.
+
 ## How the world node works
 
 `TinyTownWorld` derives from `DominatusWorldNode`.
@@ -80,10 +97,12 @@ This keeps the town, labels, and debug panel inside the viewport and prevents th
 It:
 
 1. inherits world ticking from Godot `_PhysicsProcess`
-1. installs one shared `RegisteredMove2DActuationHandler`
-1. binds each villager `AgentId` to its `CharacterBody2D`
+1. installs one shared `RegisteredNavigationMove2DActuationHandler`
+1. binds each villager `AgentId` to its `CharacterBody2D` and `NavigationAgent2D`
+1. advances navigation movement every physics frame after the Dominatus world tick
+1. creates a minimal full-town `NavigationRegion2D` if the scene does not already provide one
 
-That shared handler matters because the world owns one actuator host while multiple villagers emit `Move2DCommand`.
+That shared handler matters because the world owns one actuator host while multiple villagers emit `NavigationMove2DCommand`.
 
 ## How the agent node works
 
@@ -93,7 +112,7 @@ On `_Ready()` it:
 
 1. attaches to `TinyTownWorld`
 1. calls `base._Ready()` so the Dominatus graph and `AiAgent` are created
-1. registers its body with the world move handler
+1. registers its body and `NavigationAgent2D` with the shared world navigation handler
 
 On `_ExitTree()` it unregisters from the move handler and then lets `DominatusAgentNode` unregister from the world.
 
@@ -296,7 +315,7 @@ Current cooldowns are longer than M1.2 to help variety:
 
 ## Deterministic targets and offsets
 
-The sample still uses deterministic placement rather than pathfinding:
+The sample still uses deterministic placement for intent targets:
 
 - well offsets
 - market offsets
@@ -306,16 +325,68 @@ The sample still uses deterministic placement rather than pathfinding:
 
 That keeps villagers from stacking on identical coordinates and makes the sample repeatable.
 
-## Movement actuation
+Godot navigation now handles the path from the current position to those deterministic slots.
 
-Movement still goes through the normal Dominatus actuation path:
+## M1.4 navigation movement
+
+Movement still goes through the normal Dominatus actuation path, but the command is now target-oriented instead of raw velocity-oriented:
 
 1. the villager frame computes a target point
-1. the frame emits `Ai.Act(new Move2DCommand(...))`
-1. the shared `RegisteredMove2DActuationHandler` resolves the sender `AgentId`
-1. the handler applies movement to the correct `CharacterBody2D`
+1. the frame emits `Ai.Act(new NavigationMove2DCommand(...))`
+1. the shared `RegisteredNavigationMove2DActuationHandler` resolves the sender `AgentId`
+1. the handler updates the bound `NavigationAgent2D.TargetPosition`
+1. `TinyTownWorld._PhysicsProcess(...)` calls the handler once per physics frame
+1. the handler calls `NavigationAgent2D.GetNextPathPosition()`
+1. the handler computes a desired velocity toward that path point
+1. the handler smooths velocity, writes `CharacterBody2D.Velocity`, and calls `MoveAndSlide()`
 
-The sample still deliberately avoids pathfinding and navigation systems.
+This follows the local Godot `4.7` guidance exactly: after setting `TargetPosition`, `GetNextPathPosition()` is used every physics frame to advance the internal navigation logic.
+
+### Navigation command
+
+`Dominatus.GodotConn` now exposes:
+
+- `NavigationMove2DCommand`
+- `RegisteredNavigationMove2DActuationHandler`
+
+Current command fields are:
+
+- `TargetPosition`
+- `Speed`
+- `ArrivalRadius`
+- `SlowdownRadius`
+- `StopOnArrival`
+
+### Smoothing and arrival
+
+The handler uses an exponential smoothing step:
+
+```text
+t = 1 - exp(-responsiveness * delta)
+velocity = velocity + (desired - velocity) * t
+```
+
+Current behavior:
+
+- movement is updated every physics frame
+- slowdown starts inside `SlowdownRadius`
+- a small minimum approach speed is preserved until the arrival threshold is crossed
+- arrival stops movement cleanly inside `ArrivalRadius`
+- finished navigation stops calling path updates, which avoids near-target jitter
+
+### Navigation region and future obstacles
+
+TinyTown now includes a simple `NavigationRegion2D` that covers the full town rectangle.
+
+That keeps M1.4 cozy and minimal while still demonstrating the right Godot-native pattern.
+
+Future obstacle work can add:
+
+- tighter navigation polygons
+- holes or split regions around square props
+- baked regions from scene geometry
+
+M1.4 does not turn `Dominatus.GodotConn` into a general navigation framework.
 
 ## Smoke harness
 
@@ -349,6 +420,9 @@ What it asserts:
 - `tickCount > 0`
 - `agentCount == 4`
 - at least one villager moves materially from spawn
+- at least one villager records navigation activity
+- no villager records `NaN` position or velocity
+- no villager shows huge per-physics-frame jumps
 - at least four distinct activities are observed
 - at least two travel activities are observed
 - at least two dwell activities are observed
@@ -402,7 +476,16 @@ Each villager entry includes:
 - `initialPosition`
 - `homePosition`
 - `targetPosition`
+- `velocity`
+- `pathNextPosition`
 - `distanceFromInitialPosition`
+- `distanceToTarget`
+- `speed`
+- `navigationActive`
+- `navigationFinished`
+- `observedNavigationActive`
+- `maxPhysicsStepDistance`
+- `averagePhysicsStepDistance`
 - `hunger`
 - `thirst`
 - `restNeed`
@@ -421,6 +504,9 @@ Useful reading rules:
 - if `maxNeedUrgency` frequently ends near `1.0`, recovery is too weak or interruption is too rare
 - if `observedDwellActivities[]` stays narrow, variety is being suppressed
 - if `activityCounts[]` collapse into only emergency loops, the economy has drifted backward
+- if `observedNavigationActive` is false for every villager, navigation intent is not being exercised
+- if `distanceToTarget` stalls near `arrivalRadius`, slowdown is too aggressive
+- if `maxPhysicsStepDistance` spikes, movement is jumping instead of gliding
 
 ## Tuning knobs
 
@@ -463,7 +549,9 @@ dotnet pack src/Dominatus.GodotConn/Dominatus.GodotConn.csproj -c Release
 
 ## Limitations
 
-- no pathfinding or obstacle avoidance
+- open-rectangle navigation only
+- no authored obstacle geometry yet
+- no advanced avoidance beyond stock `NavigationAgent2D`
 - no imported sprite sheets or art assets yet
 - no tilemap dependency
 - no inventory or economy simulation beyond utility needs
@@ -476,7 +564,16 @@ dotnet pack src/Dominatus.GodotConn/Dominatus.GodotConn.csproj -c Release
 - confirm the sample is running with Godot 4.7 .NET managed packages
 - confirm `DominatusWorld` remains present in the scene
 - confirm `Brain` remains a child of each villager body
+- confirm each villager still has a `NavigationAgent2D` child
+- confirm `NavigationRegion` remains present or `TinyTownWorld` can create it
 - confirm `TinyTownWorld` still forwards lifecycle calls to `DominatusWorldNode`
+
+### Movement still looks choppy at 1x
+
+- confirm movement is still going through `NavigationMove2DCommand`, not raw `Move2DCommand`
+- confirm `TinyTownWorld._PhysicsProcess(...)` still advances the registered navigation handler every frame
+- inspect `velocity`, `pathNextPosition`, `distanceToTarget`, and `maxPhysicsStepDistance` in `tinytown-debug.json`
+- if actors stop just outside a target, increase `ArrivalRadius` or reduce slowdown aggressiveness
 
 ### Villagers all keep choosing one thing
 
@@ -506,4 +603,5 @@ The M0 quickstart shows the smallest connector usage. TinyTown shows the next st
 - UtilityLite-authored OptFlow activity choice
 - blackboard facts reflected into Godot visuals
 - deterministic choose -> travel -> dwell behavior
+- Godot-native `NavigationAgent2D` path following under Dominatus intent
 - repeatable smoke artifacts and behavior checks

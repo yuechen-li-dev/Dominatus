@@ -10,6 +10,8 @@ This quickstart shows the smallest useful Godot 4 C# setup for Dominatus:
 
 For a complete runnable sample, see [GodotConn M1 TinyTown sample](GODOTCONN_M1_TINYTOWN_SAMPLE.md).
 
+If you want Godot-native path following instead of direct velocity control, prefer the navigation-aware pattern shown in TinyTown: emit a target-oriented command from Dominatus and let a `NavigationAgent2D`-backed actuator drive `CharacterBody2D` movement every physics frame.
+
 ## Install
 
 In a Godot 4 C# project, add a package reference to `Dominatus.GodotConn`.
@@ -103,6 +105,23 @@ Then emit animation commands from a frame:
 ```csharp
 yield return new Act(new PlayAnimationCommand("walk"));
 ```
+
+## Optional navigation-aware movement
+
+For agents that should move through Godot navigation instead of raw point-to-point velocity, register a shared handler that binds each `AgentId` to both a `CharacterBody2D` and a `NavigationAgent2D`, then emit a target command such as:
+
+```csharp
+yield return new Act(new NavigationMove2DCommand(
+    targetPosition,
+    Speed: 120f,
+    ArrivalRadius: 20f,
+    SlowdownRadius: 60f));
+```
+
+The important split is:
+
+- Dominatus decides the target
+- Godot decides the per-frame path following
 
 ## Mailbox bridge
 

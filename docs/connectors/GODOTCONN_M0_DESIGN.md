@@ -25,6 +25,12 @@ That means:
 - Dominatus owns behavior execution, HFSM state, blackboard facts, mailbox delivery, and typed actuation.
 - The connector should feel like a natural Godot node API, but it should not rename away Dominatus concepts.
 
+Movement doctrine for Godot connectors:
+
+- Dominatus owns behavior decisions and destination intent.
+- Godot owns spatial navigation, path following, per-frame velocity, and `MoveAndSlide()`.
+- `NavigationAgent2D` and `NavigationAgent3D` should be wrapped by typed actuators instead of reimplemented inside Dominatus graphs.
+
 ## Success and failure modes
 
 Success in M0 looks like this:
@@ -53,6 +59,8 @@ M0 adds:
 - `BlackboardGodotExtensions`
 - `Move2DCommand` + `Move2DActuationHandler`
 - `PlayAnimationCommand` + `PlayAnimationActuationHandler`
+
+Later milestones may also expose navigation-oriented movement actuators that keep the same doctrine: Dominatus picks the target, Godot performs the path-following work.
 
 ### `DominatusTickMode`
 
@@ -311,7 +319,7 @@ M0 does not include:
 - behavior tree skinning
 - editor tooling
 - ECS integration
-- navigation framework
+- navigation framework inside Dominatus itself
 - persistence/replay adapters
 - multiplayer or lockstep
 - large sample content

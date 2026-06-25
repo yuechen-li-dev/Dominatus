@@ -99,7 +99,11 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         base._Ready();
 
         if (WorldNode is TinyTownWorld world && GetParent() is CharacterBody2D body)
-            world.RegisterVillager(this, body);
+        {
+            var navigationAgent = body.GetNodeOrNull<NavigationAgent2D>("NavigationAgent2D")
+                ?? throw new InvalidOperationException("TinyTown villager bodies must provide a NavigationAgent2D child.");
+            world.RegisterVillager(this, body, navigationAgent);
+        }
     }
 
     public override void _ExitTree()
@@ -198,7 +202,11 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
             if (!TryArrive(target))
             {
                 EnterTravelPhase(ctx, intent);
-                yield return Ai.Act(new Move2DCommand(CreateVelocityTo(target)));
+                yield return Ai.Act(new NavigationMove2DCommand(
+                    target,
+                    ComputeMoveSpeed(),
+                    ArrivalDistance,
+                    MathF.Max(ArrivalDistance * 3f, 48f)));
                 yield return Ai.Wait(0.05f);
                 continue;
             }
@@ -207,7 +215,12 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
                 ctx.Bb.Set(TinyTownKeys.ActivityRemainingSeconds, ComputeDwellSeconds(intent));
 
             EnterDwellPhase(ctx, intent);
-            yield return Ai.Act(new Move2DCommand(Vector2.Zero));
+            yield return Ai.Act(new NavigationMove2DCommand(
+                target,
+                0f,
+                ArrivalDistance,
+                ArrivalDistance,
+                StopOnArrival: true));
             yield return Ai.Wait(0.05f);
         }
     }
@@ -467,14 +480,7 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
 
     private bool TryArrive(Vector2 target) => GetBody().GlobalPosition.DistanceTo(target) <= ArrivalDistance;
 
-    private Vector2 CreateVelocityTo(Vector2 target)
-    {
-        var from = GetBody().GlobalPosition;
-        var delta = target - from;
-        return delta.LengthSquared() <= 0.001f
-            ? Vector2.Zero
-            : delta.Normalized() * (MoveSpeed * Profile.MoveSpeedMultiplier);
-    }
+    private float ComputeMoveSpeed() => MoveSpeed * Profile.MoveSpeedMultiplier;
 
     private CharacterBody2D GetBody()
         => GetParent() as CharacterBody2D

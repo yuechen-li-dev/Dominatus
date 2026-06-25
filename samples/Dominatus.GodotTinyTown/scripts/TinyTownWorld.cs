@@ -7,19 +7,30 @@ namespace Dominatus.GodotTinyTown;
 
 public partial class TinyTownWorld : DominatusWorldNode
 {
-    private readonly RegisteredMove2DActuationHandler _moveHandler;
+    private static readonly Vector2[] TownNavigationVertices =
+    [
+        new Vector2(24f, 24f),
+        new Vector2(24f, 624f),
+        new Vector2(816f, 624f),
+        new Vector2(816f, 24f)
+    ];
+
+    private static readonly int[] TownNavigationPolygon = [0, 1, 2, 3];
+
+    private readonly RegisteredNavigationMove2DActuationHandler _navigationMoveHandler;
     private readonly Dictionary<AgentId, TinyTownVillagerBrain> _brains = new();
     private readonly Dictionary<string, CharacterBody2D> _villagerBodiesByName = new(StringComparer.Ordinal);
 
     public TinyTownWorld()
     {
-        _moveHandler = new RegisteredMove2DActuationHandler(this);
-        Actuators.Register(_moveHandler);
+        _navigationMoveHandler = new RegisteredNavigationMove2DActuationHandler(this);
+        Actuators.Register(_navigationMoveHandler);
     }
 
     public override void _Ready()
     {
         base._Ready();
+        EnsureNavigationRegion();
     }
 
     public override void _Process(double delta)
@@ -30,16 +41,18 @@ public partial class TinyTownWorld : DominatusWorldNode
     public override void _PhysicsProcess(double delta)
     {
         base._PhysicsProcess(delta);
+        _navigationMoveHandler.Advance((float)delta);
     }
 
-    public void RegisterVillager(TinyTownVillagerBrain brain, CharacterBody2D body)
+    public void RegisterVillager(TinyTownVillagerBrain brain, CharacterBody2D body, NavigationAgent2D navigationAgent)
     {
         ArgumentNullException.ThrowIfNull(brain);
         ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(navigationAgent);
 
         _brains[brain.AgentId] = brain;
         _villagerBodiesByName[brain.VillagerName] = body;
-        _moveHandler.Bind(brain.AgentId, body);
+        _navigationMoveHandler.Bind(brain.AgentId, body, navigationAgent);
     }
 
     public void UnregisterVillager(TinyTownVillagerBrain brain)
@@ -48,7 +61,7 @@ public partial class TinyTownWorld : DominatusWorldNode
 
         _brains.Remove(brain.AgentId);
         _villagerBodiesByName.Remove(brain.VillagerName);
-        _moveHandler.Unbind(brain.AgentId);
+        _navigationMoveHandler.Unbind(brain.AgentId);
     }
 
     public IReadOnlyCollection<TinyTownVillagerBrain> VillagerBrains => _brains.Values;
@@ -63,5 +76,30 @@ public partial class TinyTownWorld : DominatusWorldNode
 
         position = Vector2.Zero;
         return false;
+    }
+
+    public bool TryGetNavigationState(AgentId agentId, out NavigationMove2DStateSnapshot snapshot)
+        => _navigationMoveHandler.TryGetStateSnapshot(agentId, out snapshot);
+
+    private void EnsureNavigationRegion()
+    {
+        var region = GetNodeOrNull<NavigationRegion2D>("NavigationRegion");
+        if (region is null)
+        {
+            region = new NavigationRegion2D
+            {
+                Name = "NavigationRegion"
+            };
+
+            AddChild(region);
+        }
+
+        if (region.NavigationPolygon is not null)
+            return;
+
+        var navigationPolygon = new NavigationPolygon();
+        navigationPolygon.SetVertices(TownNavigationVertices);
+        navigationPolygon.AddPolygon(TownNavigationPolygon);
+        region.NavigationPolygon = navigationPolygon;
     }
 }

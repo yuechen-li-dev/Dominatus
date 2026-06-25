@@ -133,6 +133,14 @@ Assert-Condition (Test-Path $debugJsonPath) "Missing debug JSON artifact: $debug
 $snapshot = Get-Content $debugJsonPath -Raw | ConvertFrom-Json
 $villagers = @($snapshot.villagers)
 $movedVillagers = @($villagers | Where-Object { [double]$_.distanceFromInitialPosition -gt 8.0 })
+$navigationObservedVillagers = @($villagers | Where-Object { $_.observedNavigationActive -eq $true })
+$nanVillagers = @($villagers | Where-Object {
+    [double]::IsNaN([double]$_.position.x) -or
+    [double]::IsNaN([double]$_.position.y) -or
+    [double]::IsNaN([double]$_.velocity.x) -or
+    [double]::IsNaN([double]$_.velocity.y)
+})
+$largeJumpVillagers = @($villagers | Where-Object { [double]$_.maxPhysicsStepDistance -gt 18.0 })
 $dwellVillagers = @($villagers | Where-Object { $_.phase -eq "Dwell" })
 $distinctObservedActivities = @($snapshot.observedActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
 $observedDwellActivities = @($snapshot.observedDwellActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
@@ -149,6 +157,9 @@ $maxNeedUrgency = [double]$snapshot.maxNeedUrgency
 Assert-Condition ([uint64]$snapshot.tickCount -gt 0) "TinyTown never ticked. tickCount=$($snapshot.tickCount)"
 Assert-Condition ([int]$snapshot.agentCount -eq 4) "Expected 4 agents, found $($snapshot.agentCount)"
 Assert-Condition ($movedVillagers.Count -ge 1) "Expected at least one villager to move more than 8 units."
+Assert-Condition ($navigationObservedVillagers.Count -ge 1) "Expected at least one villager to use navigation during the smoke run."
+Assert-Condition ($nanVillagers.Count -eq 0) "Detected NaN position/velocity values in TinyTown smoke snapshot."
+Assert-Condition ($largeJumpVillagers.Count -eq 0) "Detected unexpectedly large per-physics-frame jumps in TinyTown smoke snapshot."
 Assert-Condition ($distinctObservedActivities.Count -ge 4) "Expected at least four distinct activities across the smoke run."
 Assert-Condition ($observedTravelActivities.Count -ge 2) "Expected travel activity variety in the smoke run."
 Assert-Condition ($observedDwellActivities.Count -ge 2) "Expected at least two dwell activities in the smoke run."

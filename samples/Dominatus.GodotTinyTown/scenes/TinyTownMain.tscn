@@ -46,6 +46,8 @@ polygon = PackedVector2Array(-38, -210, 38, -210, 38, 210, -38, 210)
 script = ExtResource("2")
 TickMode = 1
 
+[node name="NavigationRegion" type="NavigationRegion2D" parent="DominatusWorld"]
+
 [node name="Destinations" type="Node2D" parent="DominatusWorld"]
 
 [node name="MayaHome" type="Marker2D" parent="DominatusWorld/Destinations"]
@@ -265,6 +267,8 @@ horizontal_alignment = 1
 position = Vector2(194, 160)
 script = ExtResource("3")
 
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Maya"]
+
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Maya"]
 
 [node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Maya/VisualRoot"]
@@ -298,6 +302,8 @@ GardenMarkerPath = NodePath("../../../Destinations/Garden")
 [node name="Theo" type="CharacterBody2D" parent="DominatusWorld/Villagers"]
 position = Vector2(194, 274)
 script = ExtResource("3")
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Theo"]
 
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Theo"]
 
@@ -333,6 +339,8 @@ GardenMarkerPath = NodePath("../../../Destinations/Garden")
 position = Vector2(194, 390)
 script = ExtResource("3")
 
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Lina"]
+
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Lina"]
 
 [node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Lina/VisualRoot"]
@@ -366,6 +374,8 @@ GardenMarkerPath = NodePath("../../../Destinations/Garden")
 [node name="Nia" type="CharacterBody2D" parent="DominatusWorld/Villagers"]
 position = Vector2(194, 506)
 script = ExtResource("3")
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Nia"]
 
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Nia"]
 

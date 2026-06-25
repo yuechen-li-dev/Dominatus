@@ -13,6 +13,8 @@ public partial class VillagerActor : CharacterBody2D
     private PanelContainer? _statusPlate;
     private Label? _label;
     private string _villagerName = "Villager";
+    private double _labelRefreshAccumulator;
+    private string _lastLabelText = string.Empty;
 
     public override void _Ready()
     {
@@ -44,10 +46,16 @@ public partial class VillagerActor : CharacterBody2D
         var bb = _brain.Bb;
         var activity = bb.GetOrDefault(TinyTownKeys.CurrentActivity, "Idle");
         var phase = bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose");
+        _labelRefreshAccumulator += delta;
+        if (_labelRefreshAccumulator >= 0.10d || _lastLabelText.Length == 0)
+        {
+            _labelRefreshAccumulator = 0d;
+            _lastLabelText = $"{_villagerName}\n{ShortActivity(activity)} · {phase}\n{NeedsLine(bb)}";
+            _label.Text = _lastLabelText;
+            var labelSize = _label.GetMinimumSize();
+            _statusPlate.Size = labelSize + (TinyTownLayout.VillagerLabelPadding * 2f);
+        }
 
-        _label.Text = $"{_villagerName}\n{ShortActivity(activity)} · {phase}\n{NeedsLine(bb)}";
-        var labelSize = _label.GetMinimumSize();
-        _statusPlate.Size = labelSize + (TinyTownLayout.VillagerLabelPadding * 2f);
         _statusPlate.Position = ComputePlateOffset();
         _placeholderBody.Color = ActivityColor(activity);
 
