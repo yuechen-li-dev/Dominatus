@@ -45,6 +45,17 @@ internal static class AudioSidecarWriter
         return path;
     }
 
+    private static string? GetFileNamePortable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var normalized = path.Replace('\\', '/');
+        return Path.GetFileName(normalized);
+    }
+
     private static object? ToSidecarConditioning(VoiceConditioningRef? conditioning, AudioMetadataPolicy policy)
     {
         if (conditioning is null || conditioning.Kind == VoiceConditioningKind.None)
@@ -59,7 +70,7 @@ internal static class AudioSidecarWriter
             ["language"] = conditioning.Language,
             ["consentRef"] = conditioning.ConsentRef,
             ["rightsRef"] = conditioning.RightsRef,
-            ["referenceAudioFileName"] = string.IsNullOrWhiteSpace(conditioning.ReferenceAudioPath) ? null : Path.GetFileName(conditioning.ReferenceAudioPath),
+            ["referenceAudioFileName"] = GetFileNamePortable(conditioning.ReferenceAudioPath),
             ["referenceAudioPath"] = policy.IncludeVoiceReferencePathInMetadata ? conditioning.ReferenceAudioPath : null,
             ["metadata"] = conditioning.Metadata.Count == 0 ? null : conditioning.Metadata
         };
