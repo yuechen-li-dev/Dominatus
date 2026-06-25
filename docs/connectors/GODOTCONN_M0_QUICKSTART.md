@@ -8,6 +8,8 @@ This quickstart shows the smallest useful Godot 4 C# setup for Dominatus:
 1. return an `HfsmGraph`
 1. register a simple movement actuator
 
+For a complete runnable sample, see [GodotConn M1 TinyTown sample](GODOTCONN_M1_TINYTOWN_SAMPLE.md).
+
 ## Install
 
 In a Godot 4 C# project, add a package reference to `Dominatus.GodotConn`.
@@ -173,4 +175,4 @@ Prefer `NodePath` for durable references. Treat live node references as runtime-
 ### Package restores but the Godot project complains about managed version mismatch
 
 - align the project's Godot-managed package baseline with the engine version in use
-- M0 was validated against `GodotSharp` `4.4.1`
+- M0/M1 are validated against the Godot 4.7 managed package family

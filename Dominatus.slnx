@@ -11,6 +11,7 @@
   <Project Path="samples/Dominatus.SemanticKernelOrchestration/Dominatus.SemanticKernelOrchestration.csproj" />
   <Project Path="samples/Dominatus.SemanticKernelGraphAssistant/Dominatus.SemanticKernelGraphAssistant.csproj" />
   <Project Path="samples/Dominatus.TinyTown/Dominatus.TinyTown.csproj" />
+  <Project Path="samples/Dominatus.GodotTinyTown/Dominatus.GodotTinyTown.csproj" />
   <Project Path="samples/Dominatus.Assets.Toml.AriadneDialogue/Dominatus.Assets.Toml.AriadneDialogue.csproj" />
   <Project Path="tests/Dominatus.TinyTown.Tests/Dominatus.TinyTown.Tests.csproj" />
   <Project Path="src/Ariadne.Console/Ariadne.ConsoleApp.csproj" Id="4ffe8ebb-8ad5-4faa-bdad-afddf42b99e7" />

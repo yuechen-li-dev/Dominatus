@@ -301,7 +301,7 @@ An addon wrapper can still be added later if the project wants a drag-and-drop i
 
 ### Versioning note
 
-M0 is built against `GodotSharp` `4.4.1` as the tested baseline. Consuming Godot projects should keep their Godot-managed package versions aligned with their engine version. If a project standardizes on a different Godot 4.x package family, the connector package version may need to track that baseline in a later milestone.
+The connector is currently aligned to the Godot 4.7 managed package family (`GodotSharp` `4.7.0`, sample project using `Godot.NET.Sdk` `4.7.0`). Consuming Godot projects should keep their Godot-managed package versions aligned with their engine version. If a project standardizes on a different Godot 4.x package family, the connector package version may need to track that baseline in a later milestone.
 
 ## Non-goals
 
@@ -321,7 +321,7 @@ M0 does not include:
 
 Good M1 candidates:
 
-1. small `Guard Patrol 2D` sample project
+1. small Godot sample project proving scene-tree lifecycle in a real Godot 4.7 .NET scene
 1. richer state inspection and diagnostics hooks
 1. optional blackboard-change signaling
 1. small scene setup helper or installer node

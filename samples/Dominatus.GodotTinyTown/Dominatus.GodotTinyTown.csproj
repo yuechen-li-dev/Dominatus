@@ -1,0 +1,17 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Dominatus.GodotTinyTown</RootNamespace>
+    <AssemblyName>Dominatus.GodotTinyTown</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominatus.GodotConn\Dominatus.GodotConn.csproj" />
+    <ProjectReference Include="..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
+  </ItemGroup>
+
+</Project>
