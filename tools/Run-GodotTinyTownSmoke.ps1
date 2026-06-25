@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath,
-    [UInt64]$SmokeFrames = 120,
+    [UInt64]$SmokeFrames = 360,
+    [switch]$LongRun,
+    [UInt64]$LongRunSmokeFrames = 900,
     [string]$ArtifactsDir,
     [switch]$Headless,
     [switch]$CleanGodotCaches
@@ -18,7 +20,8 @@ $artifactsDir = [System.IO.Path]::GetFullPath($artifactsDir)
 $logPath = Join-Path $artifactsDir "run.log"
 $debugJsonPath = Join-Path $artifactsDir "tinytown-debug.json"
 $screenshotPath = Join-Path $artifactsDir "tinytown-screenshot.png"
-$quitAfterFrames = [Math]::Max([int]($SmokeFrames * 4), 300)
+$targetSmokeFrames = if ($LongRun) { $LongRunSmokeFrames } else { $SmokeFrames }
+$quitAfterFrames = [Math]::Max([int]($targetSmokeFrames * 4), 300)
 
 function Resolve-GodotBinary {
     param([string]$CliPath)
@@ -88,6 +91,7 @@ if ($CleanGodotCaches) {
 $version = & $godotBin --version
 Add-LogLine "Godot binary: $godotBin"
 Add-LogLine "Godot version: $version"
+Add-LogLine "Smoke frames: $targetSmokeFrames"
 Add-LogLine ""
 Add-LogLine "== dotnet build =="
 
@@ -105,7 +109,7 @@ $previousArtifacts = $env:DOMINATUS_GODOT_SMOKE_ARTIFACTS
 
 try {
     $env:DOMINATUS_GODOT_SMOKE = "1"
-    $env:DOMINATUS_GODOT_SMOKE_FRAMES = $SmokeFrames.ToString()
+    $env:DOMINATUS_GODOT_SMOKE_FRAMES = $targetSmokeFrames.ToString()
     $env:DOMINATUS_GODOT_SMOKE_ARTIFACTS = $artifactsDir
 
     $godotArgs = @('--path', $sampleDir, '--quit-after', $quitAfterFrames)
@@ -130,19 +134,29 @@ $snapshot = Get-Content $debugJsonPath -Raw | ConvertFrom-Json
 $villagers = @($snapshot.villagers)
 $movedVillagers = @($villagers | Where-Object { [double]$_.distanceFromInitialPosition -gt 8.0 })
 $dwellVillagers = @($villagers | Where-Object { $_.phase -eq "Dwell" })
-$allObservedActivities = @($snapshot.observedActivities)
-$distinctObservedActivities = @($allObservedActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+$distinctObservedActivities = @($snapshot.observedActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+$observedDwellActivities = @($snapshot.observedDwellActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+$observedTravelActivities = @($snapshot.observedTravelActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+$nonEmergencyActivities = @($distinctObservedActivities | Where-Object { $_ -in @('ShopAtMarket', 'TendGarden', 'Socialize', 'Wander', 'Idle / Think') })
 $villagersWithPhaseVariety = @($villagers | Where-Object { @($_.observedPhases).Count -ge 2 })
-$logText = Get-Content $logPath -Raw
+$highStressVillagers = @($villagers | Where-Object { [double]$_.maxNeed -ge 0.98 })
 $logLines = Get-Content $logPath
 $errorLines = @($logLines | Where-Object { $_ -match '(^|\s)ERROR[: ]' -or $_ -match 'System\.ArgumentException:' })
 $duplicateLines = @($logLines | Where-Object { $_ -match 'ScriptTypeBiMap' -or $_ -match 'same key has already been added' })
+$averageNeedUrgency = [double]$snapshot.averageNeedUrgency
+$maxNeedUrgency = [double]$snapshot.maxNeedUrgency
 
 Assert-Condition ([uint64]$snapshot.tickCount -gt 0) "TinyTown never ticked. tickCount=$($snapshot.tickCount)"
 Assert-Condition ([int]$snapshot.agentCount -eq 4) "Expected 4 agents, found $($snapshot.agentCount)"
 Assert-Condition ($movedVillagers.Count -ge 1) "Expected at least one villager to move more than 8 units."
-Assert-Condition ($distinctObservedActivities.Count -ge 2) "Expected at least two distinct activities across the smoke run."
+Assert-Condition ($distinctObservedActivities.Count -ge 4) "Expected at least four distinct activities across the smoke run."
+Assert-Condition ($observedTravelActivities.Count -ge 2) "Expected travel activity variety in the smoke run."
+Assert-Condition ($observedDwellActivities.Count -ge 2) "Expected at least two dwell activities in the smoke run."
+Assert-Condition ($nonEmergencyActivities.Count -ge 1) "Expected at least one non-emergency activity to appear."
 Assert-Condition (($dwellVillagers.Count -ge 1) -or ($villagersWithPhaseVariety.Count -ge 1)) "Expected at least one villager to enter a non-travel dwell phase."
+Assert-Condition ($averageNeedUrgency -le 0.62) "Average need urgency too high at end of smoke: $averageNeedUrgency"
+Assert-Condition ($maxNeedUrgency -le 0.97) "Max need urgency too high at end of smoke: $maxNeedUrgency"
+Assert-Condition ($highStressVillagers.Count -le 1) "Too many villagers ended the run near hard emergency."
 Assert-Condition ($duplicateLines.Count -eq 0) "Detected duplicate ScriptTypeBiMap registration evidence in run.log"
 Assert-Condition ($errorLines.Count -eq 0) "Detected unexpected ERROR lines in run.log"
 
@@ -157,6 +171,10 @@ else {
 }
 
 Write-Host "Smoke harness passed."
+Write-Host "Observed activities: $($distinctObservedActivities -join ', ')"
+Write-Host "Observed dwell activities: $($observedDwellActivities -join ', ')"
+Write-Host "Observed travel activities: $($observedTravelActivities -join ', ')"
+Write-Host ("Need summary: average={0:N2} max={1:N2}" -f $averageNeedUrgency, $maxNeedUrgency)
 Write-Host "Artifacts:"
 Write-Host "  Log: $logPath"
 Write-Host "  Debug JSON: $debugJsonPath"

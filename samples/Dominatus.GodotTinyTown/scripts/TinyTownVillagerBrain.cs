@@ -23,7 +23,8 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
     private static readonly StateId TendGardenState = StateId.Of("TendGarden");
     private static readonly StateId SocializeState = StateId.Of("Socialize");
     private static readonly StateId ReturnHomeState = StateId.Of("ReturnHome");
-    private static readonly DecisionPolicy ActivityPolicy = Utility.Policy(hysteresis: 0.08f, minCommitSeconds: 1.35f, tieEpsilon: 0.0001f);
+    private const float EmergencyInterruptThreshold = 0.965f;
+    private static readonly DecisionPolicy ActivityPolicy = Utility.Policy(hysteresis: 0.12f, minCommitSeconds: 3.25f, tieEpsilon: 0.0001f);
     private static readonly Vector2[] WellOffsets =
     [
         new Vector2(-18f, -16f),
@@ -53,6 +54,13 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         new Vector2(418f, 396f),
         new Vector2(592f, 366f)
     ];
+    private static readonly Vector2[] SocialSpots =
+    [
+        new Vector2(404f, 232f),
+        new Vector2(468f, 286f),
+        new Vector2(360f, 338f),
+        new Vector2(510f, 350f)
+    ];
 
     private VillagerProfile? _profile;
 
@@ -72,13 +80,13 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
     public NodePath GardenMarkerPath { get; set; } = new();
 
     [Export]
-    public float MoveSpeed { get; set; } = 82f;
+    public float MoveSpeed { get; set; } = 120f;
 
     [Export]
-    public float ArrivalDistance { get; set; } = 10f;
+    public float ArrivalDistance { get; set; } = 24f;
 
     [Export]
-    public float NeedTickSeconds { get; set; } = 0.35f;
+    public float NeedTickSeconds { get; set; } = 0.40f;
 
     [Export]
     public float DecisionHysteresis { get; set; } = 0.05f;
@@ -196,9 +204,7 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
             }
 
             if (ctx.Bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose") != "Dwell")
-            {
                 ctx.Bb.Set(TinyTownKeys.ActivityRemainingSeconds, ComputeDwellSeconds(intent));
-            }
 
             EnterDwellPhase(ctx, intent);
             yield return Ai.Act(new Move2DCommand(Vector2.Zero));
@@ -209,64 +215,68 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
     private IReadOnlyList<UtilityOption> BuildOptions(AiCtx ctx)
     {
         var profile = Profile;
-        var thirstNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.Thirst), 0.15f, 1f), 1.20f);
-        var hungerNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.Hunger), 0.15f, 1f), 1.15f);
-        var restNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.RestNeed), 0.10f, 1f), 1.25f);
-        var joyNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.JoyNeed), 0.20f, 1f), 1.10f);
-        var socialNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.SocialNeed), 0.15f, 1f), 1.12f);
+        var thirstNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.Thirst), 0.18f, 1f), 1.28f);
+        var hungerNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.Hunger), 0.18f, 1f), 1.18f);
+        var restNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.RestNeed), 0.14f, 1f), 1.30f);
+        var joyNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.JoyNeed), 0.24f, 1f), 1.08f);
+        var socialNeed = Utility.Pow(Utility.Remap(Utility.Bb(TinyTownKeys.SocialNeed), 0.20f, 1f), 1.10f);
         var calmNeeds = Utility.Not(Blend(
-            (Utility.Bb(TinyTownKeys.Hunger), 0.24f),
+            (Utility.Bb(TinyTownKeys.Hunger), 0.22f),
             (Utility.Bb(TinyTownKeys.Thirst), 0.24f),
             (Utility.Bb(TinyTownKeys.RestNeed), 0.24f),
-            (Utility.Bb(TinyTownKeys.JoyNeed), 0.14f),
-            (Utility.Bb(TinyTownKeys.SocialNeed), 0.14f)));
+            (Utility.Bb(TinyTownKeys.JoyNeed), 0.15f),
+            (Utility.Bb(TinyTownKeys.SocialNeed), 0.15f)));
 
         var drinkScore = CommitAware(TinyTownIntent.DrinkAtWell, Utility.Any(
-            Utility.All(Utility.Threshold(Utility.Bb(TinyTownKeys.Thirst), 0.92f), Constant(0.99f)),
+            Utility.All(Utility.Threshold(Utility.Bb(TinyTownKeys.Thirst), EmergencyInterruptThreshold), Constant(0.995f)),
             Blend(
-                (thirstNeed, 0.58f),
-                (Constant(profile.WellBias), 0.12f),
+                (thirstNeed, 0.62f),
+                (Constant(profile.WellBias), 0.10f),
                 (TargetProximity(() => ResolveDestinationOffset(TinyTownKeys.WellPosition, WellOffsets)), 0.10f),
-                (CooldownReady(TinyTownKeys.WellCooldownSeconds, 6f), 0.20f))));
+                (CooldownReady(TinyTownKeys.WellCooldownSeconds, 8f), 0.18f))));
 
         var marketScore = CommitAware(TinyTownIntent.ShopAtMarket, Blend(
-            (hungerNeed, 0.48f),
+            (hungerNeed, 0.44f),
             (Constant(profile.MarketBias), 0.20f),
-            (Constant(profile.SocialBias), 0.08f),
+            (Constant(profile.SocialBias), 0.12f),
+            (ModerateNeed(TinyTownKeys.JoyNeed, 0.25f, 0.78f), 0.08f),
             (TargetProximity(() => ResolveDestinationOffset(TinyTownKeys.MarketPosition, MarketOffsets)), 0.08f),
-            (CooldownReady(TinyTownKeys.MarketCooldownSeconds, 6f), 0.16f)));
+            (CooldownReady(TinyTownKeys.MarketCooldownSeconds, 8f), 0.08f)));
 
         var restScore = CommitAware(TinyTownIntent.RestAtHome, Utility.Any(
-            Utility.All(Utility.Threshold(Utility.Bb(TinyTownKeys.RestNeed), 0.90f), Constant(0.99f)),
+            Utility.All(Utility.Threshold(Utility.Bb(TinyTownKeys.RestNeed), EmergencyInterruptThreshold), Constant(0.995f)),
             Blend(
-                (restNeed, 0.58f),
-                (Constant(profile.RestBias), 0.16f),
+                (restNeed, 0.60f),
+                (Constant(profile.RestBias), 0.14f),
                 (Constant(profile.HomeBias), 0.12f),
-                (CooldownReady(TinyTownKeys.RestCooldownSeconds, 7f), 0.14f))));
+                (CooldownReady(TinyTownKeys.RestCooldownSeconds, 10f), 0.14f))));
 
         var gardenScore = CommitAware(TinyTownIntent.TendGarden, Blend(
-            (joyNeed, 0.42f),
-            (Constant(profile.GardenBias), 0.24f),
-            (ModerateNeed(TinyTownKeys.Hunger, 0.20f, 0.65f), 0.10f),
+            (joyNeed, 0.36f),
+            (Constant(profile.GardenBias), 0.26f),
+            (ModerateNeed(TinyTownKeys.Hunger, 0.18f, 0.68f), 0.12f),
+            (ModerateNeed(TinyTownKeys.RestNeed, 0.18f, 0.60f), 0.06f),
             (TargetProximity(() => ResolveDestinationOffset(TinyTownKeys.GardenPosition, GardenOffsets)), 0.08f),
-            (CooldownReady(TinyTownKeys.GardenCooldownSeconds, 6f), 0.16f)));
+            (CooldownReady(TinyTownKeys.GardenCooldownSeconds, 8f), 0.12f)));
 
         var wanderScore = CommitAware(TinyTownIntent.Wander, Blend(
-            (calmNeeds, 0.46f),
+            (calmNeeds, 0.50f),
             (Constant(profile.WanderBias), 0.32f),
-            (CooldownReady(TinyTownKeys.WanderCooldownSeconds, 4f), 0.22f)));
+            (ModerateNeed(TinyTownKeys.JoyNeed, 0.20f, 0.70f), 0.10f),
+            (CooldownReady(TinyTownKeys.WanderCooldownSeconds, 5f), 0.08f)));
 
         var socializeScore = CommitAware(TinyTownIntent.Socialize, Blend(
-            (socialNeed, 0.48f),
+            (socialNeed, 0.46f),
             (Constant(profile.SocialBias), 0.18f),
             (SocialBuddyAvailable(), 0.18f),
-            (CooldownReady(TinyTownKeys.SocialCooldownSeconds, 6f), 0.16f)));
+            (ModerateNeed(TinyTownKeys.JoyNeed, 0.22f, 0.80f), 0.08f),
+            (CooldownReady(TinyTownKeys.SocialCooldownSeconds, 8f), 0.10f)));
 
         var returnHomeScore = CommitAware(TinyTownIntent.ReturnHome, Blend(
-            (DistanceFromHome(), 0.46f),
-            (calmNeeds, 0.18f),
-            (Constant(profile.HomeBias), 0.22f),
-            (CooldownReady(TinyTownKeys.ReturnHomeCooldownSeconds, 5f), 0.14f)));
+            (DistanceFromHome(), 0.44f),
+            (calmNeeds, 0.20f),
+            (Constant(profile.HomeBias), 0.24f),
+            (CooldownReady(TinyTownKeys.ReturnHomeCooldownSeconds, 6f), 0.12f)));
 
         return
         [
@@ -327,36 +337,39 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
     {
         if (string.Equals(intentId, TinyTownIntent.DrinkAtWell.Id, StringComparison.Ordinal))
         {
-            LowerNeed(ctx, TinyTownKeys.Thirst, 0.18f);
-            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.03f);
+            LowerNeed(ctx, TinyTownKeys.Thirst, 0.16f);
+            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.015f);
         }
         else if (string.Equals(intentId, TinyTownIntent.ShopAtMarket.Id, StringComparison.Ordinal))
         {
-            LowerNeed(ctx, TinyTownKeys.Hunger, 0.14f);
-            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.06f);
+            LowerNeed(ctx, TinyTownKeys.Hunger, 0.12f);
+            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.05f);
+            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.02f);
         }
         else if (string.Equals(intentId, TinyTownIntent.RestAtHome.Id, StringComparison.Ordinal))
         {
-            LowerNeed(ctx, TinyTownKeys.RestNeed, 0.16f);
-            IncreaseNeed(ctx, TinyTownKeys.Hunger, 0.03f);
-            IncreaseNeed(ctx, TinyTownKeys.Thirst, 0.03f);
+            LowerNeed(ctx, TinyTownKeys.RestNeed, 0.12f * Profile.RestRecoveryMultiplier);
+            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.02f);
+            IncreaseNeed(ctx, TinyTownKeys.Hunger, 0.01f);
+            IncreaseNeed(ctx, TinyTownKeys.Thirst, 0.015f);
         }
         else if (string.Equals(intentId, TinyTownIntent.TendGarden.Id, StringComparison.Ordinal))
         {
-            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.16f);
-            LowerNeed(ctx, TinyTownKeys.Hunger, 0.04f);
-            IncreaseNeed(ctx, TinyTownKeys.RestNeed, 0.02f);
+            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.11f * Profile.GardenJoyMultiplier);
+            LowerNeed(ctx, TinyTownKeys.Hunger, 0.03f);
+            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.01f);
+            IncreaseNeed(ctx, TinyTownKeys.RestNeed, 0.01f);
         }
         else if (string.Equals(intentId, TinyTownIntent.Socialize.Id, StringComparison.Ordinal))
         {
-            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.18f);
-            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.06f);
+            LowerNeed(ctx, TinyTownKeys.SocialNeed, 0.12f * Profile.SocialRecoveryMultiplier);
+            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.05f);
         }
         else if (string.Equals(intentId, TinyTownIntent.Wander.Id, StringComparison.Ordinal)
             || string.Equals(intentId, TinyTownIntent.ReturnHome.Id, StringComparison.Ordinal))
         {
-            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.06f);
-            LowerNeed(ctx, TinyTownKeys.RestNeed, 0.04f);
+            LowerNeed(ctx, TinyTownKeys.JoyNeed, 0.03f);
+            LowerNeed(ctx, TinyTownKeys.RestNeed, 0.015f);
         }
     }
 
@@ -367,32 +380,32 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
 
         if (string.Equals(intentId, TinyTownIntent.DrinkAtWell.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.WellCooldownSeconds, 5.5f);
+            ctx.Bb.Set(TinyTownKeys.WellCooldownSeconds, 8.5f);
         }
         else if (string.Equals(intentId, TinyTownIntent.ShopAtMarket.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.MarketCooldownSeconds, 6.0f);
+            ctx.Bb.Set(TinyTownKeys.MarketCooldownSeconds, 9.0f);
         }
         else if (string.Equals(intentId, TinyTownIntent.RestAtHome.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.RestCooldownSeconds, 6.5f);
+            ctx.Bb.Set(TinyTownKeys.RestCooldownSeconds, 10.5f);
         }
         else if (string.Equals(intentId, TinyTownIntent.TendGarden.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.GardenCooldownSeconds, 6.0f);
+            ctx.Bb.Set(TinyTownKeys.GardenCooldownSeconds, 8.5f);
         }
         else if (string.Equals(intentId, TinyTownIntent.Socialize.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.SocialCooldownSeconds, 5.5f);
+            ctx.Bb.Set(TinyTownKeys.SocialCooldownSeconds, 8.5f);
         }
         else if (string.Equals(intentId, TinyTownIntent.Wander.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.WanderCooldownSeconds, 3.0f);
+            ctx.Bb.Set(TinyTownKeys.WanderCooldownSeconds, 4.0f);
             ctx.Bb.Set(TinyTownKeys.WanderIndex, ctx.Bb.GetOrDefault(TinyTownKeys.WanderIndex, 0) + 1);
         }
         else if (string.Equals(intentId, TinyTownIntent.ReturnHome.Id, StringComparison.Ordinal))
         {
-            ctx.Bb.Set(TinyTownKeys.ReturnHomeCooldownSeconds, 4.0f);
+            ctx.Bb.Set(TinyTownKeys.ReturnHomeCooldownSeconds, 5.0f);
         }
     }
 
@@ -445,13 +458,7 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
             return ctx.Bb.GetOrDefault(TinyTownKeys.HomePosition, Vector2.Zero);
         if (ReferenceEquals(intent, TinyTownIntent.Socialize))
         {
-            if (WorldNode is TinyTownWorld world
-                && world.TryGetVillagerPosition(ctx.Bb.GetOrDefault(TinyTownKeys.SocialBuddyName, string.Empty), out var buddyPosition))
-            {
-                return buddyPosition + SocialOffset(Profile.Index);
-            }
-
-            return ResolveDestinationOffset(TinyTownKeys.MarketPosition, MarketOffsets);
+            return SocialSpots[Profile.Index % SocialSpots.Length] + SocialOffset(Profile.Index) * 0.35f;
         }
 
         var wanderIndex = ctx.Bb.GetOrDefault(TinyTownKeys.WanderIndex, Profile.Index);
@@ -483,7 +490,7 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
             var phase = agent.Bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose");
             var score = baseScore.Eval(world, agent);
             if (!string.Equals(currentIntent, intent.Id, StringComparison.Ordinal))
-                return score;
+                return ShouldHoldCurrentCommit(agent.Bb) ? MathF.Min(score, 0.78f) : score;
 
             var commitFloor = phase switch
             {
@@ -494,6 +501,27 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
 
             return MathF.Max(score, commitFloor);
         });
+
+    private static bool ShouldHoldCurrentCommit(Blackboard bb)
+    {
+        var phase = bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose");
+        if (!string.Equals(phase, "Travel", StringComparison.Ordinal)
+            && !string.Equals(phase, "Dwell", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return CurrentEmergencyNeed(bb) < EmergencyInterruptThreshold;
+    }
+
+    private static float CurrentEmergencyNeed(Blackboard bb)
+    {
+        return Math.Max(
+            Math.Max(bb.GetOrDefault(TinyTownKeys.Thirst, 0f), bb.GetOrDefault(TinyTownKeys.Hunger, 0f)),
+            Math.Max(
+                Math.Max(bb.GetOrDefault(TinyTownKeys.RestNeed, 0f), bb.GetOrDefault(TinyTownKeys.JoyNeed, 0f)),
+                bb.GetOrDefault(TinyTownKeys.SocialNeed, 0f)));
+    }
 
     private Consideration Blend(params (Consideration Consideration, float Weight)[] parts)
         => Utility.Score((world, agent) =>
@@ -603,8 +631,9 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
     private float ComputeDwellSeconds(TinyTownIntent intent)
     {
         var cycle = Bb.GetOrDefault(TinyTownKeys.ActivityCycleIndex, 0);
-        var variation = ((Profile.Index + cycle + intent.Ordinal) % 3) * 0.35f;
-        return intent.MinDwellSeconds + variation;
+        var bucket = Math.Abs(Profile.Index + cycle + intent.Ordinal) % 4;
+        var t = bucket / 3f;
+        return Mathf.Lerp(intent.MinDwellSeconds, intent.MaxDwellSeconds, t);
     }
 
     private static Vector2 SocialOffset(int index)
@@ -638,17 +667,18 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         string DwellLabel,
         string TargetKind,
         float MinDwellSeconds,
+        float MaxDwellSeconds,
         float TravelCommitFloor,
         float DwellCommitFloor,
         int Ordinal)
     {
-        public static readonly TinyTownIntent DrinkAtWell = new("DrinkAtWell", "GoToWell", "DrinkAtWell", "Well", 1.85f, 0.68f, 0.74f, 0);
-        public static readonly TinyTownIntent ShopAtMarket = new("ShopAtMarket", "GoToMarket", "ShopAtMarket", "Market", 2.35f, 0.66f, 0.74f, 1);
-        public static readonly TinyTownIntent RestAtHome = new("RestAtHome", "ReturnHome", "RestAtHome", "Home", 3.20f, 0.72f, 0.82f, 2);
-        public static readonly TinyTownIntent TendGarden = new("TendGarden", "TendGarden", "TendGarden", "Garden", 3.10f, 0.66f, 0.72f, 3);
-        public static readonly TinyTownIntent Wander = new("Wander", "Wander", "Idle / Think", "Square", 1.10f, 0.60f, 0.68f, 4);
-        public static readonly TinyTownIntent Socialize = new("Socialize", "Socialize", "Socialize", "Villager", 2.25f, 0.66f, 0.74f, 5);
-        public static readonly TinyTownIntent ReturnHome = new("ReturnHome", "ReturnHome", "Idle / Think", "Home", 1.55f, 0.60f, 0.68f, 6);
+        public static readonly TinyTownIntent DrinkAtWell = new("DrinkAtWell", "GoToWell", "DrinkAtWell", "Well", 2.4f, 3.4f, 0.84f, 0.90f, 0);
+        public static readonly TinyTownIntent ShopAtMarket = new("ShopAtMarket", "GoToMarket", "ShopAtMarket", "Market", 2.8f, 4.0f, 0.82f, 0.88f, 1);
+        public static readonly TinyTownIntent RestAtHome = new("RestAtHome", "ReturnHome", "RestAtHome", "Home", 4.8f, 6.8f, 0.88f, 0.94f, 2);
+        public static readonly TinyTownIntent TendGarden = new("TendGarden", "TendGarden", "TendGarden", "Garden", 3.6f, 5.8f, 0.82f, 0.88f, 3);
+        public static readonly TinyTownIntent Wander = new("Wander", "Wander", "Idle / Think", "Square", 1.2f, 2.4f, 0.78f, 0.84f, 4);
+        public static readonly TinyTownIntent Socialize = new("Socialize", "Socialize", "Socialize", "Villager", 2.8f, 4.8f, 0.82f, 0.88f, 5);
+        public static readonly TinyTownIntent ReturnHome = new("ReturnHome", "ReturnHome", "Idle / Think", "Home", 1.8f, 3.0f, 0.78f, 0.84f, 6);
     }
 
     private sealed record VillagerProfile(
@@ -673,16 +703,19 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         float SocialBias,
         float HomeBias,
         float RestBias,
+        float RestRecoveryMultiplier,
+        float GardenJoyMultiplier,
+        float SocialRecoveryMultiplier,
         float MoveSpeedMultiplier)
     {
         public static VillagerProfile For(string villagerName)
             => villagerName switch
             {
-                "Maya" => new VillagerProfile("Maya", 0, "Social shopper", "Theo", 0.58f, 0.22f, 0.28f, 0.42f, 0.68f, 0.010f, 0.011f, 0.009f, 0.007f, 0.009f, 0.44f, 0.94f, 0.36f, 0.40f, 0.92f, 0.26f, 0.48f, 1.02f),
-                "Theo" => new VillagerProfile("Theo", 1, "Restless wanderer", "Maya", 0.26f, 0.64f, 0.24f, 0.36f, 0.34f, 0.009f, 0.014f, 0.008f, 0.008f, 0.008f, 0.88f, 0.40f, 0.26f, 0.96f, 0.34f, 0.18f, 0.36f, 1.08f),
-                "Lina" => new VillagerProfile("Lina", 2, "Quiet gardener", "Maya", 0.32f, 0.24f, 0.30f, 0.76f, 0.22f, 0.007f, 0.010f, 0.008f, 0.010f, 0.007f, 0.34f, 0.28f, 0.98f, 0.32f, 0.24f, 0.42f, 0.40f, 0.94f),
-                "Nia" => new VillagerProfile("Nia", 3, "Cozy homebody", "Theo", 0.24f, 0.18f, 0.66f, 0.28f, 0.20f, 0.009f, 0.009f, 0.011f, 0.006f, 0.007f, 0.26f, 0.30f, 0.34f, 0.16f, 0.18f, 0.96f, 0.96f, 0.90f),
-                _ => new VillagerProfile(villagerName, 0, "Villager", "Maya", 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 0.009f, 0.010f, 0.009f, 0.007f, 0.007f, 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 1f)
+                "Maya" => new VillagerProfile("Maya", 0, "Social shopper", "Theo", 0.48f, 0.24f, 0.30f, 0.38f, 0.56f, 0.0065f, 0.0070f, 0.0052f, 0.0048f, 0.0044f, 0.42f, 0.96f, 0.36f, 0.42f, 0.96f, 0.24f, 0.44f, 0.96f, 0.92f, 1.12f, 1.02f),
+                "Theo" => new VillagerProfile("Theo", 1, "Restless wanderer", "Maya", 0.30f, 0.56f, 0.22f, 0.34f, 0.30f, 0.0054f, 0.0078f, 0.0048f, 0.0058f, 0.0048f, 0.86f, 0.40f, 0.22f, 1.00f, 0.34f, 0.18f, 0.32f, 0.92f, 0.90f, 0.96f, 1.08f),
+                "Lina" => new VillagerProfile("Lina", 2, "Quiet gardener", "Maya", 0.34f, 0.22f, 0.28f, 0.62f, 0.22f, 0.0052f, 0.0062f, 0.0048f, 0.0064f, 0.0040f, 0.30f, 0.24f, 1.00f, 0.30f, 0.24f, 0.40f, 0.38f, 0.98f, 1.20f, 0.94f, 0.96f),
+                "Nia" => new VillagerProfile("Nia", 3, "Cozy homebody", "Theo", 0.24f, 0.18f, 0.56f, 0.26f, 0.18f, 0.0058f, 0.0058f, 0.0062f, 0.0040f, 0.0038f, 0.24f, 0.30f, 0.34f, 0.18f, 0.18f, 1.00f, 1.00f, 1.20f, 0.96f, 0.92f, 0.90f),
+                _ => new VillagerProfile(villagerName, 0, "Villager", "Maya", 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 0.0060f, 0.0060f, 0.0055f, 0.0048f, 0.0048f, 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 0.40f, 1.00f, 1.00f, 1.00f, 1f)
             };
     }
 }

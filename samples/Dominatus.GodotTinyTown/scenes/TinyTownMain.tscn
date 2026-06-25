@@ -8,14 +8,39 @@
 [node name="TinyTownMain" type="Node2D"]
 script = ExtResource("1")
 
-[node name="Background" type="Polygon2D" parent="."]
-color = Color(0.952941, 0.909804, 0.8, 1)
-polygon = PackedVector2Array(-40, -40, 920, -40, 920, 620, -40, 620)
+[node name="Backdrop" type="Polygon2D" parent="."]
+color = Color(0.945098, 0.901961, 0.811765, 1)
+polygon = PackedVector2Array(0, 0, 1152, 0, 1152, 648, 0, 648)
 
-[node name="Square" type="Polygon2D" parent="."]
-position = Vector2(430, 270)
-color = Color(0.709804, 0.831373, 0.643137, 1)
-polygon = PackedVector2Array(-250, -170, 250, -170, 250, 170, -250, 170)
+[node name="TownShadow" type="Polygon2D" parent="."]
+position = Vector2(30, 32)
+color = Color(0.270588, 0.223529, 0.176471, 0.12)
+polygon = PackedVector2Array(0, 0, 792, 0, 792, 600, 0, 600)
+
+[node name="TownGround" type="Polygon2D" parent="."]
+position = Vector2(24, 24)
+color = Color(0.878431, 0.831373, 0.733333, 1)
+polygon = PackedVector2Array(0, 0, 792, 0, 792, 600, 0, 600)
+
+[node name="TownSquare" type="Polygon2D" parent="."]
+position = Vector2(418, 322)
+color = Color(0.72549, 0.835294, 0.631373, 1)
+polygon = PackedVector2Array(-278, -190, 278, -190, 278, 190, -278, 190)
+
+[node name="NorthPath" type="Polygon2D" parent="."]
+position = Vector2(398, 172)
+color = Color(0.843137, 0.760784, 0.603922, 1)
+polygon = PackedVector2Array(-166, -20, 166, -20, 166, 20, -166, 20)
+
+[node name="SouthPath" type="Polygon2D" parent="."]
+position = Vector2(470, 444)
+color = Color(0.843137, 0.760784, 0.603922, 1)
+polygon = PackedVector2Array(-144, -18, 144, -18, 144, 18, -144, 18)
+
+[node name="HomeLane" type="Polygon2D" parent="."]
+position = Vector2(178, 322)
+color = Color(0.843137, 0.760784, 0.603922, 1)
+polygon = PackedVector2Array(-38, -210, 38, -210, 38, 210, -38, 210)
 
 [node name="DominatusWorld" type="Node" parent="."]
 script = ExtResource("2")
@@ -24,95 +49,242 @@ TickMode = 1
 [node name="Destinations" type="Node2D" parent="DominatusWorld"]
 
 [node name="MayaHome" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(152, 178)
+position = Vector2(160, 158)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/MayaHome"]
-color = Color(0.682353, 0.517647, 0.352941, 1)
-polygon = PackedVector2Array(-20, -16, 20, -16, 20, 16, -20, 16)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/MayaHome"]
+position = Vector2(4, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-26, -18, 26, -18, 26, 18, -26, 18)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/MayaHome"]
-position = Vector2(-24, -36)
+[node name="Base" type="Polygon2D" parent="DominatusWorld/Destinations/MayaHome"]
+position = Vector2(0, 6)
+color = Color(0.701961, 0.545098, 0.388235, 1)
+polygon = PackedVector2Array(-20, -14, 20, -14, 20, 14, -20, 14)
+
+[node name="Roof" type="Polygon2D" parent="DominatusWorld/Destinations/MayaHome"]
+color = Color(0.541176, 0.352941, 0.247059, 1)
+polygon = PackedVector2Array(-24, -6, 0, -26, 24, -6)
+
+[node name="Door" type="Polygon2D" parent="DominatusWorld/Destinations/MayaHome"]
+position = Vector2(0, 11)
+color = Color(0.368627, 0.247059, 0.164706, 1)
+polygon = PackedVector2Array(-4, -9, 4, -9, 4, 9, -4, 9)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/MayaHome"]
+offset_left = -30.0
+offset_top = -58.0
+offset_right = 46.0
+offset_bottom = -30.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/MayaHome/Nameplate"]
 text = "Maya Home"
+horizontal_alignment = 1
 
 [node name="TheoHome" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(152, 272)
+position = Vector2(160, 274)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/TheoHome"]
-color = Color(0.682353, 0.517647, 0.352941, 1)
-polygon = PackedVector2Array(-20, -16, 20, -16, 20, 16, -20, 16)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/TheoHome"]
+position = Vector2(4, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-26, -18, 26, -18, 26, 18, -26, 18)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/TheoHome"]
-position = Vector2(-22, -36)
+[node name="Base" type="Polygon2D" parent="DominatusWorld/Destinations/TheoHome"]
+position = Vector2(0, 6)
+color = Color(0.701961, 0.545098, 0.388235, 1)
+polygon = PackedVector2Array(-20, -14, 20, -14, 20, 14, -20, 14)
+
+[node name="Roof" type="Polygon2D" parent="DominatusWorld/Destinations/TheoHome"]
+color = Color(0.541176, 0.352941, 0.247059, 1)
+polygon = PackedVector2Array(-24, -6, 0, -26, 24, -6)
+
+[node name="Door" type="Polygon2D" parent="DominatusWorld/Destinations/TheoHome"]
+position = Vector2(0, 11)
+color = Color(0.368627, 0.247059, 0.164706, 1)
+polygon = PackedVector2Array(-4, -9, 4, -9, 4, 9, -4, 9)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/TheoHome"]
+offset_left = -30.0
+offset_top = -58.0
+offset_right = 47.0
+offset_bottom = -30.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/TheoHome/Nameplate"]
 text = "Theo Home"
+horizontal_alignment = 1
 
 [node name="LinaHome" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(152, 366)
+position = Vector2(160, 390)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/LinaHome"]
-color = Color(0.682353, 0.517647, 0.352941, 1)
-polygon = PackedVector2Array(-20, -16, 20, -16, 20, 16, -20, 16)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/LinaHome"]
+position = Vector2(4, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-26, -18, 26, -18, 26, 18, -26, 18)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/LinaHome"]
-position = Vector2(-20, -36)
+[node name="Base" type="Polygon2D" parent="DominatusWorld/Destinations/LinaHome"]
+position = Vector2(0, 6)
+color = Color(0.701961, 0.545098, 0.388235, 1)
+polygon = PackedVector2Array(-20, -14, 20, -14, 20, 14, -20, 14)
+
+[node name="Roof" type="Polygon2D" parent="DominatusWorld/Destinations/LinaHome"]
+color = Color(0.541176, 0.352941, 0.247059, 1)
+polygon = PackedVector2Array(-24, -6, 0, -26, 24, -6)
+
+[node name="Door" type="Polygon2D" parent="DominatusWorld/Destinations/LinaHome"]
+position = Vector2(0, 11)
+color = Color(0.368627, 0.247059, 0.164706, 1)
+polygon = PackedVector2Array(-4, -9, 4, -9, 4, 9, -4, 9)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/LinaHome"]
+offset_left = -27.0
+offset_top = -58.0
+offset_right = 42.0
+offset_bottom = -30.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/LinaHome/Nameplate"]
 text = "Lina Home"
+horizontal_alignment = 1
 
 [node name="NiaHome" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(152, 460)
+position = Vector2(160, 506)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/NiaHome"]
-color = Color(0.682353, 0.517647, 0.352941, 1)
-polygon = PackedVector2Array(-20, -16, 20, -16, 20, 16, -20, 16)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/NiaHome"]
+position = Vector2(4, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-26, -18, 26, -18, 26, 18, -26, 18)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/NiaHome"]
-position = Vector2(-17, -36)
+[node name="Base" type="Polygon2D" parent="DominatusWorld/Destinations/NiaHome"]
+position = Vector2(0, 6)
+color = Color(0.701961, 0.545098, 0.388235, 1)
+polygon = PackedVector2Array(-20, -14, 20, -14, 20, 14, -20, 14)
+
+[node name="Roof" type="Polygon2D" parent="DominatusWorld/Destinations/NiaHome"]
+color = Color(0.541176, 0.352941, 0.247059, 1)
+polygon = PackedVector2Array(-24, -6, 0, -26, 24, -6)
+
+[node name="Door" type="Polygon2D" parent="DominatusWorld/Destinations/NiaHome"]
+position = Vector2(0, 11)
+color = Color(0.368627, 0.247059, 0.164706, 1)
+polygon = PackedVector2Array(-4, -9, 4, -9, 4, 9, -4, 9)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/NiaHome"]
+offset_left = -24.0
+offset_top = -58.0
+offset_right = 34.0
+offset_bottom = -30.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/NiaHome/Nameplate"]
 text = "Nia Home"
+horizontal_alignment = 1
 
 [node name="Well" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(394, 156)
+position = Vector2(398, 154)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/Well"]
-color = Color(0.513726, 0.709804, 0.862745, 1)
-polygon = PackedVector2Array(-24, -24, 24, -24, 24, 24, -24, 24)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/Well"]
+position = Vector2(4, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-27, -27, 27, -27, 27, 27, -27, 27)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/Well"]
-position = Vector2(-16, -44)
+[node name="Basin" type="Polygon2D" parent="DominatusWorld/Destinations/Well"]
+color = Color(0.419608, 0.666667, 0.843137, 1)
+polygon = PackedVector2Array(-24, -20, 24, -20, 24, 20, -24, 20)
+
+[node name="Water" type="Polygon2D" parent="DominatusWorld/Destinations/Well"]
+position = Vector2(0, -2)
+color = Color(0.772549, 0.901961, 0.984314, 1)
+polygon = PackedVector2Array(-15, -10, 15, -10, 15, 10, -15, 10)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/Well"]
+offset_left = -22.0
+offset_top = -58.0
+offset_right = 22.0
+offset_bottom = -30.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/Well/Nameplate"]
 text = "Well"
+horizontal_alignment = 1
 
 [node name="Market" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(676, 248)
+position = Vector2(676, 250)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/Market"]
-color = Color(0.964706, 0.698039, 0.419608, 1)
-polygon = PackedVector2Array(-28, -24, 28, -24, 28, 24, -28, 24)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/Market"]
+position = Vector2(5, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-35, -26, 35, -26, 35, 26, -35, 26)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/Market"]
-position = Vector2(-25, -44)
+[node name="Stall" type="Polygon2D" parent="DominatusWorld/Destinations/Market"]
+position = Vector2(0, 8)
+color = Color(0.909804, 0.611765, 0.301961, 1)
+polygon = PackedVector2Array(-30, -16, 30, -16, 30, 16, -30, 16)
+
+[node name="Awning" type="Polygon2D" parent="DominatusWorld/Destinations/Market"]
+position = Vector2(0, -10)
+color = Color(0.988235, 0.823529, 0.529412, 1)
+polygon = PackedVector2Array(-34, -10, 34, -10, 26, 10, -26, 10)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/Market"]
+offset_left = -29.0
+offset_top = -62.0
+offset_right = 29.0
+offset_bottom = -34.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/Market/Nameplate"]
 text = "Market"
+horizontal_alignment = 1
 
 [node name="Garden" type="Marker2D" parent="DominatusWorld/Destinations"]
-position = Vector2(512, 432)
+position = Vector2(516, 450)
 
-[node name="Patch" type="Polygon2D" parent="DominatusWorld/Destinations/Garden"]
-color = Color(0.466667, 0.709804, 0.560784, 1)
-polygon = PackedVector2Array(-30, -24, 30, -24, 30, 24, -30, 24)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Destinations/Garden"]
+position = Vector2(5, 5)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-35, -26, 35, -26, 35, 26, -35, 26)
 
-[node name="Label" type="Label" parent="DominatusWorld/Destinations/Garden"]
-position = Vector2(-23, -44)
+[node name="Bed" type="Polygon2D" parent="DominatusWorld/Destinations/Garden"]
+position = Vector2(0, 6)
+color = Color(0.45098, 0.709804, 0.47451, 1)
+polygon = PackedVector2Array(-30, -18, 30, -18, 30, 18, -30, 18)
+
+[node name="Rows" type="Polygon2D" parent="DominatusWorld/Destinations/Garden"]
+position = Vector2(0, 6)
+color = Color(0.301961, 0.521569, 0.317647, 1)
+polygon = PackedVector2Array(-18, -18, -10, -18, -10, 18, -18, 18, 10, 18, 10, -18, 18, -18, 18, 18)
+
+[node name="Nameplate" type="PanelContainer" parent="DominatusWorld/Destinations/Garden"]
+offset_left = -28.0
+offset_top = -62.0
+offset_right = 28.0
+offset_bottom = -34.0
+
+[node name="NameLabel" type="Label" parent="DominatusWorld/Destinations/Garden/Nameplate"]
 text = "Garden"
+horizontal_alignment = 1
 
 [node name="Villagers" type="Node2D" parent="DominatusWorld"]
 
 [node name="Maya" type="CharacterBody2D" parent="DominatusWorld/Villagers"]
-position = Vector2(182, 178)
+position = Vector2(194, 160)
 script = ExtResource("3")
 
-[node name="Visual" type="Polygon2D" parent="DominatusWorld/Villagers/Maya"]
-color = Color(0.423529, 0.658824, 0.862745, 1)
-polygon = PackedVector2Array(-10, -10, 10, -10, 10, 10, -10, 10)
+[node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Maya"]
 
-[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Maya"]
-position = Vector2(-26, -42)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Maya/VisualRoot"]
+position = Vector2(2, 13)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-11, -4, 11, -4, 11, 4, -11, 4)
+
+[node name="Body" type="Polygon2D" parent="DominatusWorld/Villagers/Maya/VisualRoot"]
+color = Color(0.423529, 0.658824, 0.862745, 1)
+polygon = PackedVector2Array(-11, -11, 11, -11, 11, 11, -11, 11)
+
+[node name="StatusPlate" type="PanelContainer" parent="DominatusWorld/Villagers/Maya"]
+offset_left = -52.0
+offset_top = -86.0
+offset_right = 52.0
+offset_bottom = -26.0
+
+[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Maya/StatusPlate"]
 text = "Maya"
+horizontal_alignment = 1
 
 [node name="Brain" type="Node" parent="DominatusWorld/Villagers/Maya"]
 script = ExtResource("4")
@@ -124,16 +296,29 @@ MarketMarkerPath = NodePath("../../../Destinations/Market")
 GardenMarkerPath = NodePath("../../../Destinations/Garden")
 
 [node name="Theo" type="CharacterBody2D" parent="DominatusWorld/Villagers"]
-position = Vector2(182, 272)
+position = Vector2(194, 274)
 script = ExtResource("3")
 
-[node name="Visual" type="Polygon2D" parent="DominatusWorld/Villagers/Theo"]
-color = Color(0.94902, 0.690196, 0.419608, 1)
-polygon = PackedVector2Array(-10, -10, 10, -10, 10, 10, -10, 10)
+[node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Theo"]
 
-[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Theo"]
-position = Vector2(-26, -42)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Theo/VisualRoot"]
+position = Vector2(2, 13)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-11, -4, 11, -4, 11, 4, -11, 4)
+
+[node name="Body" type="Polygon2D" parent="DominatusWorld/Villagers/Theo/VisualRoot"]
+color = Color(0.94902, 0.690196, 0.419608, 1)
+polygon = PackedVector2Array(-11, -11, 11, -11, 11, 11, -11, 11)
+
+[node name="StatusPlate" type="PanelContainer" parent="DominatusWorld/Villagers/Theo"]
+offset_left = -52.0
+offset_top = -86.0
+offset_right = 52.0
+offset_bottom = -26.0
+
+[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Theo/StatusPlate"]
 text = "Theo"
+horizontal_alignment = 1
 
 [node name="Brain" type="Node" parent="DominatusWorld/Villagers/Theo"]
 script = ExtResource("4")
@@ -145,16 +330,29 @@ MarketMarkerPath = NodePath("../../../Destinations/Market")
 GardenMarkerPath = NodePath("../../../Destinations/Garden")
 
 [node name="Lina" type="CharacterBody2D" parent="DominatusWorld/Villagers"]
-position = Vector2(182, 366)
+position = Vector2(194, 390)
 script = ExtResource("3")
 
-[node name="Visual" type="Polygon2D" parent="DominatusWorld/Villagers/Lina"]
-color = Color(0.839216, 0.65098, 0.741176, 1)
-polygon = PackedVector2Array(-10, -10, 10, -10, 10, 10, -10, 10)
+[node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Lina"]
 
-[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Lina"]
-position = Vector2(-26, -42)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Lina/VisualRoot"]
+position = Vector2(2, 13)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-11, -4, 11, -4, 11, 4, -11, 4)
+
+[node name="Body" type="Polygon2D" parent="DominatusWorld/Villagers/Lina/VisualRoot"]
+color = Color(0.839216, 0.65098, 0.741176, 1)
+polygon = PackedVector2Array(-11, -11, 11, -11, 11, 11, -11, 11)
+
+[node name="StatusPlate" type="PanelContainer" parent="DominatusWorld/Villagers/Lina"]
+offset_left = -52.0
+offset_top = -86.0
+offset_right = 52.0
+offset_bottom = -26.0
+
+[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Lina/StatusPlate"]
 text = "Lina"
+horizontal_alignment = 1
 
 [node name="Brain" type="Node" parent="DominatusWorld/Villagers/Lina"]
 script = ExtResource("4")
@@ -166,16 +364,29 @@ MarketMarkerPath = NodePath("../../../Destinations/Market")
 GardenMarkerPath = NodePath("../../../Destinations/Garden")
 
 [node name="Nia" type="CharacterBody2D" parent="DominatusWorld/Villagers"]
-position = Vector2(182, 460)
+position = Vector2(194, 506)
 script = ExtResource("3")
 
-[node name="Visual" type="Polygon2D" parent="DominatusWorld/Villagers/Nia"]
-color = Color(0.576471, 0.780392, 0.498039, 1)
-polygon = PackedVector2Array(-10, -10, 10, -10, 10, 10, -10, 10)
+[node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Nia"]
 
-[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Nia"]
-position = Vector2(-26, -42)
+[node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Nia/VisualRoot"]
+position = Vector2(2, 13)
+color = Color(0.121569, 0.101961, 0.0784314, 0.18)
+polygon = PackedVector2Array(-11, -4, 11, -4, 11, 4, -11, 4)
+
+[node name="Body" type="Polygon2D" parent="DominatusWorld/Villagers/Nia/VisualRoot"]
+color = Color(0.576471, 0.780392, 0.498039, 1)
+polygon = PackedVector2Array(-11, -11, 11, -11, 11, 11, -11, 11)
+
+[node name="StatusPlate" type="PanelContainer" parent="DominatusWorld/Villagers/Nia"]
+offset_left = -52.0
+offset_top = -86.0
+offset_right = 52.0
+offset_bottom = -26.0
+
+[node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Nia/StatusPlate"]
 text = "Nia"
+horizontal_alignment = 1
 
 [node name="Brain" type="Node" parent="DominatusWorld/Villagers/Nia"]
 script = ExtResource("4")
@@ -186,10 +397,34 @@ WellMarkerPath = NodePath("../../../Destinations/Well")
 MarketMarkerPath = NodePath("../../../Destinations/Market")
 GardenMarkerPath = NodePath("../../../Destinations/Garden")
 
-[node name="DebugLabel" type="Label" parent="."]
-offset_left = 620.0
-offset_top = 28.0
-offset_right = 895.0
-offset_bottom = 256.0
-theme_override_font_sizes/font_size = 16
-text = "TinyTown debug"
+[node name="Hud" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DebugPanel" type="PanelContainer" parent="Hud"]
+offset_left = 840.0
+offset_top = 24.0
+offset_right = 1128.0
+offset_bottom = 624.0
+
+[node name="Margin" type="MarginContainer" parent="Hud/DebugPanel"]
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="Hud/DebugPanel/Margin"]
+theme_override_constants/separation = 10
+
+[node name="TitleLabel" type="Label" parent="Hud/DebugPanel/Margin/VBox"]
+text = "Dominatus TinyTown"
+
+[node name="SummaryLabel" type="Label" parent="Hud/DebugPanel/Margin/VBox"]
+text = "Summary"
+
+[node name="DebugLabel" type="Label" parent="Hud/DebugPanel/Margin/VBox"]
+text = "Debug"

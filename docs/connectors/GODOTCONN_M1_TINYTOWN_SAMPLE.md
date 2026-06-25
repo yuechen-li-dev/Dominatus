@@ -1,45 +1,40 @@
 # Dominatus.GodotConn M1 TinyTown Sample
 
-This document now covers the M1.2 richer-utility pass for `samples/Dominatus.GodotTinyTown`.
+This document covers the M1.3 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
 
 ## Purpose
 
-`samples/Dominatus.GodotTinyTown` is the first real Godot-scene proof that `Dominatus.GodotConn` works in the path that matters:
+`samples/Dominatus.GodotTinyTown` is the small, real Godot 4.7 .NET sample that proves the connector in the path that matters:
 
 - Godot owns the scene tree and lifecycle
 - `DominatusWorldNode` owns world ticking
 - `DominatusAgentNode` owns Dominatus agent registration
-- OptFlow authors the villager activity choice in readable Dominatus terms
-- typed movement actuation drives visible movement in-scene
+- OptFlow plus UtilityLite choose villager behavior
+- typed movement actuation drives visible motion in-scene
 
-The sample is intentionally tiny and cozy. It is not trying to be a game. It is trying to make the bridge legible.
+The sample is still intentionally tiny. It is meant to be legible, deterministic, and tunable, not feature-complete.
 
 ## Validated Godot version
 
-Local validation for M1 used:
+Local validation used:
 
 - `4.7.stable.mono.official.5b4e0cb0f`
-
-That version was observed from:
-
-```powershell
-& 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe' --version
-```
 
 ## Sample location
 
 - Godot project: `samples/Dominatus.GodotTinyTown`
 - C# project: `samples/Dominatus.GodotTinyTown/Dominatus.GodotTinyTown.csproj`
 - Main scene: `samples/Dominatus.GodotTinyTown/scenes/TinyTownMain.tscn`
+- Smoke harness: `tools/Run-GodotTinyTownSmoke.ps1`
 
 ## Scene tree overview
 
-The main scene is a normal Godot `Node2D` scene:
+The scene is a normal Godot `Node2D` scene with a fixed HUD:
 
 ```text
 TinyTownMain
-|- Background
-|- Square
+|- Backdrop
+|- TownGround / TownSquare / path polygons
 |- DominatusWorld (TinyTownWorld : DominatusWorldNode)
 |  |- Destinations
 |  |  |- MayaHome
@@ -51,30 +46,44 @@ TinyTownMain
 |  |  |- Garden
 |  |- Villagers
 |     |- Maya (VillagerActor)
-|     |  |- Visual
-|     |  |- StatusLabel
+|     |  |- VisualRoot
+|     |  |- StatusPlate
 |     |  |- Brain (TinyTownVillagerBrain : DominatusAgentNode)
 |     |- Theo ...
 |     |- Lina ...
 |     |- Nia ...
-|- DebugLabel
+|- Hud
+   |- DebugPanel
 ```
 
-The important structural choice is that `DominatusWorld` is the ancestor of both the destination markers and the villager brains. That keeps world discovery explicit and boring in a good way.
+The important structural choice stays the same: `DominatusWorld` remains the explicit shared ancestor for destination markers and villager brains.
+
+## Layout model
+
+M1.3 adds a small shared layout model in `TinyTownLayout.cs`.
+
+Current constants:
+
+- viewport: `1152 x 648`
+- town rect: left `792 x 600`
+- debug panel: right `288 x 600`
+- villager visual size: `22 x 22`
+- villager status plate offset: `(-52, -86)`
+- villager status plate padding: `(10, 8)`
+
+This keeps the town, labels, and debug panel inside the viewport and prevents the debug text from spilling into the editor gray gutter.
 
 ## How the world node works
 
 `TinyTownWorld` derives from `DominatusWorldNode`.
 
-It does three things:
+It:
 
-1. inherits normal `AiWorld` ticking from Godot `_PhysicsProcess`
+1. inherits world ticking from Godot `_PhysicsProcess`
 1. installs one shared `RegisteredMove2DActuationHandler`
-1. binds each villager's `AgentId` to its `CharacterBody2D`
+1. binds each villager `AgentId` to its `CharacterBody2D`
 
-That shared handler matters because the world owns one `ActuatorHost`, while the sample has multiple villagers issuing the same `Move2DCommand` type.
-
-With Godot 4.7 .NET, the concrete scene script should forward lifecycle methods to the connector base class when that base class lives in another assembly. `TinyTownWorld` now explicitly overrides `_Ready()`, `_Process(...)`, and `_PhysicsProcess(...)` and calls `base` for each path so the real `DominatusWorldNode` tick logic stays bound to the script Godot instances from the scene.
+That shared handler matters because the world owns one actuator host while multiple villagers emit `Move2DCommand`.
 
 ## How the agent node works
 
@@ -82,79 +91,49 @@ Each villager brain derives from `DominatusAgentNode`.
 
 On `_Ready()` it:
 
-1. attaches to the scene's `TinyTownWorld`
-1. calls `base._Ready()` so the Dominatus graph and `AiAgent` are built
-1. registers its body with the shared move handler
+1. attaches to `TinyTownWorld`
+1. calls `base._Ready()` so the Dominatus graph and `AiAgent` are created
+1. registers its body with the world move handler
 
-On `_ExitTree()` it unregisters from the shared handler and then lets `DominatusAgentNode` unregister from the world.
+On `_ExitTree()` it unregisters from the move handler and then lets `DominatusAgentNode` unregister from the world.
 
-That gives the sample a real proof of the intended lifecycle:
+## UtilityLite usage
 
-- register on `_Ready()`
-- unregister on `_ExitTree()`
-- do not manually tick agents
+The sample still uses real `Dominatus.UtilityLite` helpers rather than a sample-only scoring API:
 
-## Where OptFlow and UtilityLite are used
+- `Utility.Option(...)`
+- `Utility.Slot(...)`
+- `Utility.Policy(...)`
+- `Utility.Score(...)`
+- `Utility.Bb(...)`
+- `Utility.Remap(...)`
+- `Utility.Pow(...)`
+- `Utility.Threshold(...)`
+- `Utility.All(...)`
+- `Utility.Any(...)`
+- `Utility.Not(...)`
 
-The sample uses OptFlow at the decision surface instead of hand-rolling state selection, and M1.2 layers `Dominatus.UtilityLite` on top of that surface so the utility math stays human-readable.
+Sample-local helpers are still intentionally small:
 
-`TinyTownVillagerBrain` has a root Dominatus frame that repeatedly evaluates a readable choice set:
-
-- `DrinkAtWell`
-- `ShopAtMarket`
-- `RestAtHome`
-- `TendGarden`
-- `Wander`
-- `Socialize`
-- `ReturnHome`
-
-The root frame uses `Ai.Decide(...)` with a real UtilityLite-authored decision surface. The current blackboard need levels, per-villager personality weights, proximity, and cooldowns drive utility.
-
-This stays transparent: OptFlow is choosing Dominatus states, not hiding them.
-
-### UtilityLite helpers used
-
-The sample uses actual `Dominatus.UtilityLite` helpers, not a parallel homegrown scoring API.
-
-- `Utility.Option(...)` for readable decision slots
-- `Utility.Slot(...)` for the villager decision slot id
-- `Utility.Policy(...)` for the decision policy shape
-- `Utility.Score(...)` for sample-local weighted blend adapters
-- `Utility.Bb(...)` for direct blackboard-backed need considerations
-- `Utility.Remap(...)` to normalize need bands
-- `Utility.Pow(...)` to curve urgency upward near the high end
-- `Utility.Threshold(...)` for urgent-need override checks
-- `Utility.All(...)`, `Utility.Any(...)`, and `Utility.Not(...)` to compose multi-factor considerations
-
-M1.2 adds only tiny sample-local adapters on top of those helpers:
-
-- a weighted blend helper for readable scored averages
-- commit-aware score flooring while a villager is already traveling or dwelling
-
-`Dominatus.UtilityLite` itself was not redesigned for this milestone.
+- weighted blend helpers for readable averages
+- commit-aware score flooring
+- cooldown, proximity, and moderate-need helpers
 
 ## Activity lifecycle
 
-M1.2 changes the villager loop from a bounce-prone "pick and immediately reevaluate" pattern into an explicit activity lifecycle:
+Villagers use an explicit choose -> travel -> dwell loop:
 
-1. choose an intent through UtilityLite-backed `Ai.Decide(...)`
+1. choose an intent with UtilityLite-backed `Ai.Decide(...)`
 1. travel toward a deterministic target point
-1. on arrival, dwell for a short deterministic duration
-1. update needs during dwell
-1. apply cooldowns and reconsider only after the dwell phase completes
+1. dwell for an activity-specific deterministic duration after arrival
+1. recover needs during dwell
+1. apply cooldowns and then reconsider
 
-That means the readable surface is now:
-
-- decide intent
-- travel
-- do the thing
-- reconsider
-
-instead of rapidly oscillating between markers every few frames.
+That keeps the sample readable and avoids rapid marker bouncing.
 
 ## Blackboard facts
 
-The sample keeps its visible facts on the Dominatus blackboard:
+The sample keeps visible state on the Dominatus blackboard:
 
 - `PersonalityName`
 - `SocialBuddyName`
@@ -173,146 +152,226 @@ The sample keeps its visible facts on the Dominatus blackboard:
 - `SocialNeed`
 - `ActivityRemainingSeconds`
 - per-activity cooldown timers
-- `HomePosition`
-- `WellPosition`
-- `MarketPosition`
-- `GardenPosition`
+- destination positions
 
-The brain updates these values directly, and the Godot-facing actor script reads them back for visuals.
-
-Need scale is now explicit and consistent:
+Need scale is explicit and consistent:
 
 - `0` means calm / satisfied
 - `1` means urgent
 
-The compact labels use:
+## M1.3 visual polish
 
-- `H` = hunger need
-- `T` = thirst need
-- `R` = rest need
-- `J` = joy need
-- `S` = social need
+The scene now aims to read like a designed prototype rather than loose debug geometry.
+
+### Debug panel
+
+The old floating white text is replaced by a fixed right-side panel showing:
+
+- title: `Dominatus TinyTown`
+- tick count
+- agent count
+- need scale reminder
+- average and max need urgency
+- observed travel and dwell activity sets
+- compact per-villager status lines
+
+### Destination markers
+
+Markers are still placeholder geometry, but they now read as town places:
+
+- homes: roof, base, and door silhouette
+- well: basin plus water inset
+- market: stall plus awning
+- garden: bed plus row accents
+- nameplates: light label plates above markers
+
+### Villager labels
+
+In-world villager labels are intentionally compact:
+
+```text
+Maya
+Social · Dwell
+H58 T34 R38 J45 S63
+```
+
+The heavy detail stays in the right panel instead of cluttering the world space.
+
+### Sprite-sheet readiness
+
+`VillagerActor` now treats `VisualRoot` as the swap point for future visual work.
+
+Today `VisualRoot` contains only placeholder polygon visuals and a shadow. Later work can replace those children with `Sprite2D` or `AnimatedSprite2D` without changing:
+
+- the Dominatus brain
+- world registration
+- actuation
+- the status plate logic
 
 ## Personality profiles
 
-The sample keeps deterministic per-villager personalities instead of runtime randomness:
+The sample keeps deterministic villager personalities:
 
 - Maya: social shopper
 - Theo: restless wanderer
 - Lina: quiet gardener
 - Nia: cozy homebody
 
-Those profiles affect:
+Profiles affect:
 
 - initial needs
 - passive need drift
 - movement pace
-- preference weights for market, well, garden, home, socializing, and wandering
+- preference weights
+- recovery multipliers for rest, socializing, and gardening
 
-## Anti-bounce / commitment model
+## Utility economy model
 
-M1.2 adds multiple simple anti-bounce layers:
+M1.3 retunes the utility economy to make long runs calmer and more varied.
 
-- `Utility.Policy(...)` with hysteresis and minimum commit seconds
-- a commit-aware score floor while the villager is already in `Travel` or `Dwell`
-- per-activity cooldown timers after a completed dwell
-- urgent-need threshold overrides for cases such as severe thirst or rest need
+### Need interpretation
 
-This is intentionally simple. It keeps the sample readable while still allowing interruptions when a need becomes truly urgent.
+- `0` = calm
+- `1` = urgent
 
-## Destination offsets
+### Min-commit and hysteresis
 
-To keep villagers from stacking on the exact same marker:
+Current decision policy:
 
-- Well uses deterministic standing offsets
-- Market uses deterministic standing offsets
-- Garden uses deterministic tending offsets
-- Home stays unique per villager
-- Socialize targets a buddy-relative offset instead of the buddy's exact position
-- Wander uses deterministic town-square points
+- hysteresis: `0.12`
+- min-commit: `3.25s`
 
-There is still no pathfinding or collision system. The point is legibility, not navigation sophistication.
+That is combined with commit-aware score floors while already traveling or dwelling.
+
+### Emergency interruption threshold
+
+Current hard emergency threshold:
+
+- `0.965`
+
+Villagers normally finish their visible travel or dwell commitment. They only break commitment when a need becomes truly extreme.
+
+### Dwell ranges
+
+Current deterministic dwell ranges:
+
+- `DrinkAtWell`: `2.4s` to `3.4s`
+- `ShopAtMarket`: `2.8s` to `4.0s`
+- `RestAtHome`: `4.8s` to `6.8s`
+- `TendGarden`: `3.6s` to `5.8s`
+- `Socialize`: `2.8s` to `4.8s`
+- `Wander`: `1.2s` to `2.4s`
+- `ReturnHome`: `1.8s` to `3.0s`
+
+### Passive decay
+
+Passive need drift is slower than M1.2:
+
+- thirst still rises fastest
+- hunger rises steadily but not explosively
+- rest rises more slowly
+- joy and social drift slowly enough that personalities stay visible
+
+### Recovery
+
+Dwell recovery is intentionally stronger than passive decay:
+
+- drinking strongly reduces thirst
+- resting can bring rest need near calm
+- market reduces hunger and gives light social / joy relief
+- garden strongly improves joy and slightly helps hunger
+- socialize strongly improves social need and improves joy
+
+### Cooldowns
+
+Current cooldowns are longer than M1.2 to help variety:
+
+- drink: about `8.5s`
+- market: about `9.0s`
+- rest: about `10.5s`
+- garden: about `8.5s`
+- socialize: about `8.5s`
+- wander: about `4.0s`
+- return home: about `5.0s`
+
+## Deterministic targets and offsets
+
+The sample still uses deterministic placement rather than pathfinding:
+
+- well offsets
+- market offsets
+- garden offsets
+- square wander points
+- fixed socialize meeting spots
+
+That keeps villagers from stacking on identical coordinates and makes the sample repeatable.
 
 ## Movement actuation
 
-Movement goes through the normal Dominatus actuation path:
+Movement still goes through the normal Dominatus actuation path:
 
-1. a villager frame computes a target point
+1. the villager frame computes a target point
 1. the frame emits `Ai.Act(new Move2DCommand(...))`
-1. `TinyTownWorld`'s shared `RegisteredMove2DActuationHandler` resolves the sender `AgentId`
+1. the shared `RegisteredMove2DActuationHandler` resolves the sender `AgentId`
 1. the handler applies movement to the correct `CharacterBody2D`
 
-The sample deliberately avoids navigation and pathfinding. Villagers move in straight lines toward simple markers.
-
-## Visual state and debug output
-
-The sample exposes Dominatus behavior back to Godot in two visible ways.
-
-Per villager:
-
-- a `Label` shows villager name, personality, current activity, phase, and compact need meters
-- a `Polygon2D` changes color by activity
-- deterministic label offsets reduce overlap around shared destinations
-
-Scene-wide:
-
-- `DebugLabel` shows world tick count
-- agent count
-- explicit note that needs use `0 = calm, 1 = urgent`
-- each villager's current activity, phase, need meters, and current utility winner
-
-That makes the behavior legible even in a very simple scene.
-
-## Run from Godot editor
-
-1. Open Godot 4.7 .NET.
-1. Import or open `samples/Dominatus.GodotTinyTown`.
-1. Let Godot restore/build the C# project if prompted.
-1. Run `TinyTownMain.tscn` or run the project.
-
-The main scene is already configured in `project.godot`.
+The sample still deliberately avoids pathfinding and navigation systems.
 
 ## Smoke harness
 
-Use the repeatable local smoke harness:
+Preferred smoke command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
   -GodotPath 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe'
 ```
 
+Default smoke length is now `360` frames.
+
+Optional long run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
+  -GodotPath 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe' `
+  -LongRun
+```
+
+That uses `900` frames by default.
+
 What it writes:
 
 - `artifacts/godot-tinytown/run.log`
 - `artifacts/godot-tinytown/tinytown-debug.json`
-- `artifacts/godot-tinytown/tinytown-screenshot.png` when the renderer supports it
+- `artifacts/godot-tinytown/tinytown-screenshot.png`
 
 What it asserts:
 
 - `tickCount > 0`
 - `agentCount == 4`
 - at least one villager moves materially from spawn
-- at least two distinct activities are observed across the smoke run
-- at least one villager enters a dwell phase during the smoke run
-- no duplicate `ScriptTypeBiMap` / `same key has already been added` evidence in the run log
+- at least four distinct activities are observed
+- at least two travel activities are observed
+- at least two dwell activities are observed
+- at least one non-emergency activity is observed
+- at least one villager reaches dwell
+- acceptable end-state `averageNeedUrgency`
+- acceptable end-state `maxNeedUrgency`
+- no broad all-villagers-near-max collapse
+- no duplicate `ScriptTypeBiMap` evidence
 - no unexpected Godot `ERROR` lines
 
 Useful options:
 
-- `-SmokeFrames 180`
+- `-SmokeFrames 360`
+- `-LongRun`
+- `-LongRunSmokeFrames 900`
 - `-Headless`
 - `-CleanGodotCaches`
 - `-GodotPath <path>`
 
-The harness uses sample-controlled smoke environment variables:
-
-- `DOMINATUS_GODOT_SMOKE=1`
-- `DOMINATUS_GODOT_SMOKE_FRAMES=120`
-- `DOMINATUS_GODOT_SMOKE_ARTIFACTS=<absolute artifacts path>`
-
 ## Debug JSON
 
-`tinytown-debug.json` includes:
+Top-level `tinytown-debug.json` fields now include:
 
 - `godotVersion`
 - `tickCount`
@@ -320,6 +379,11 @@ The harness uses sample-controlled smoke environment variables:
 - `screenshotSaved`
 - `screenshotPath`
 - `screenshotError`
+- `observedActivities[]`
+- `observedDwellActivities[]`
+- `observedTravelActivities[]`
+- `averageNeedUrgency`
+- `maxNeedUrgency`
 - `villagers[]`
 
 Each villager entry includes:
@@ -344,77 +408,94 @@ Each villager entry includes:
 - `restNeed`
 - `joyNeed`
 - `socialNeed`
+- `maxNeed`
 - `observedActivities[]`
 - `observedPhases[]`
+- `activityCounts[]`
 
-Top-level JSON now also includes:
+### Interpreting the JSON
 
-- `observedActivities[]`
+Useful reading rules:
 
-## CLI / headless validation
+- if `averageNeedUrgency` stays high, passive decay or cooldown suppression is too strong
+- if `maxNeedUrgency` frequently ends near `1.0`, recovery is too weak or interruption is too rare
+- if `observedDwellActivities[]` stays narrow, variety is being suppressed
+- if `activityCounts[]` collapse into only emergency loops, the economy has drifted backward
 
-Build the C# project:
+## Tuning knobs
+
+Future authors should prefer tuning these in roughly this order:
+
+- dwell duration ranges
+- passive need decay
+- per-activity recovery
+- cooldown lengths
+- personality weights
+- hysteresis and min-commit
+- destination offsets and meeting points
+
+## Run from Godot editor
+
+1. Open Godot 4.7 .NET.
+1. Open `samples/Dominatus.GodotTinyTown`.
+1. Let Godot build the C# project if prompted.
+1. Run `TinyTownMain.tscn` or run the project.
+
+## CLI validation
+
+Build sample project:
 
 ```powershell
 dotnet build samples/Dominatus.GodotTinyTown/Dominatus.GodotTinyTown.csproj
 ```
 
-Headless open/quit smoke:
+Build connector:
 
 ```powershell
-& 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe' --headless --path 'C:\Users\yuech\source\repos\Dominatus\samples\Dominatus.GodotTinyTown' --quit
+dotnet build src/Dominatus.GodotConn/Dominatus.GodotConn.csproj
 ```
 
-Short headless runtime smoke:
+Pack connector:
 
 ```powershell
-& 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe' --headless --path 'C:\Users\yuech\source\repos\Dominatus\samples\Dominatus.GodotTinyTown' --quit-after 120
+dotnet pack src/Dominatus.GodotConn/Dominatus.GodotConn.csproj -c Release
 ```
-
-The harness is the preferred smoke path because it also captures artifacts and validates invariants. By default it uses a normal local run so it can save a viewport screenshot. If you pass `-Headless`, the same smoke JSON still works, but on the local 4.7 mono headless run Godot does not expose a usable viewport screenshot texture, so the JSON records that limitation instead of producing a PNG.
 
 ## Limitations
 
 - no pathfinding or obstacle avoidance
-- no imported art assets
-- no custom inspector UI
-- no persistence/replay-safe scene reference layer beyond the general `NodePath` guidance from M0
-- no Godot test harness project
+- no imported sprite sheets or art assets yet
+- no tilemap dependency
+- no inventory or economy simulation beyond utility needs
+- no persistence or replay
 
 ## Troubleshooting
 
 ### Villagers do not move
 
 - confirm the sample is running with Godot 4.7 .NET managed packages
-- confirm `DominatusWorld` is present in the scene
-- confirm the brain node remains a child of each villager body
-- confirm `TinyTownWorld` still forwards `_Ready()`, `_Process(...)`, and `_PhysicsProcess(...)` to `DominatusWorldNode`
+- confirm `DominatusWorld` remains present in the scene
+- confirm `Brain` remains a child of each villager body
+- confirm `TinyTownWorld` still forwards lifecycle calls to `DominatusWorldNode`
 
 ### Villagers all keep choosing one thing
 
-- check the debug JSON `lastDecisionWinner`, `phase`, cooldown fields, and observed activities
-- remember that needs are urgency values where `1` is bad, not good
-- if a villager keeps repeating the same action, inspect whether its need still stays dominant after the dwell completes
-- if you tune weights, prefer small profile or cooldown adjustments over replacing the UtilityLite surface with hand-written branch logic
+- inspect `lastDecisionWinner`, `phase`, cooldown fields, observed sets, and `activityCounts`
+- remember that needs are urgency values where `1` is bad
+- tune decay, recovery, or cooldowns before replacing the utility surface with branch logic
 
 ### Brain cannot find the world
 
 - the sample expects `DominatusWorld` to remain the ancestor for the villager subtree
-- if you rearrange the scene, update `WorldPath` accordingly
+- if you rearrange the scene tree, update `WorldPath`
 
-### Duplicate `ScriptTypeBiMap` registration or other external-script reload weirdness
+### Duplicate `ScriptTypeBiMap` registration or other reload weirdness
 
 - close the Godot editor
-- remove generated C# state:
-  - `samples/Dominatus.GodotTinyTown/.godot/mono/temp`
-  - `samples/Dominatus.GodotTinyTown/.godot/global_script_class_cache.cfg`
-  - sample `bin/` and `obj/` if present
-- reopen the project and rebuild
-- prefer the smoke harness or an external `dotnet build` when validating connector changes
-
-### The scene opens headlessly but does not stop
-
-- use the smoke harness, or use `--quit` / `--quit-after 120` for manual command-line smoke validation
+- remove generated state under `.godot/mono/temp`
+- remove `.godot/global_script_class_cache.cfg`
+- remove sample `bin/` and `obj/` if needed
+- reopen and rebuild
 
 ## Relationship to the M0 quickstart
 
@@ -422,6 +503,7 @@ The M0 quickstart shows the smallest connector usage. TinyTown shows the next st
 
 - one real Godot scene
 - multiple agents sharing one world
-- OptFlow-authored UtilityLite activity choice
-- blackboard facts reflected back into Godot visuals
-- deterministic choose -> travel -> dwell activity loops
+- UtilityLite-authored OptFlow activity choice
+- blackboard facts reflected into Godot visuals
+- deterministic choose -> travel -> dwell behavior
+- repeatable smoke artifacts and behavior checks
