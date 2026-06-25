@@ -262,6 +262,46 @@ Notes:
 - the preview command does not require Pillow; it uses the repo-local .NET preview tool
 - if you later add Python-based helpers, prefer stdlib `tomllib` on Python 3.11+
 
+## TinyTown hand-off note
+
+If another model is picking this up, start here:
+
+- sprite image: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.png`
+- current runtime TOML: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml`
+- future-facing SpriteForge fixture: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.spriteforge.toml`
+- runtime consumer today: `samples/Dominatus.GodotTinyTown` through `src/Dominatus.GodotConn/Assets/SpriteAtlasTomlLoader.cs`
+- preview wrapper: `tools/Preview-SpriteAtlasToml.ps1`
+- smoke harness: `tools/Run-GodotTinyTownSmoke.ps1`
+
+Preview regeneration:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Preview-SpriteAtlasToml.ps1 `
+  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml `
+  -Out artifacts/godot-tinytown/tinytown-atlas-preview.png
+```
+
+Smoke regeneration with sprite visuals:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
+  -GodotPath 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe' `
+  -VisualMode AnimatedSprites
+```
+
+What is still imperfect:
+
+- villager frame trimming is still conservative; most frames still use whole-cell bounds
+- destination scale/offset values are best-effort, not final pixel-perfect placements
+- the runtime still maps all homes to one shared `home` entity instead of per-home art variants
+- the SpriteForge sidecar is clearer now, but it is still a fixture, not the live runtime source
+
+What to tune next:
+
+- refine per-frame `offset_*` and `source_rect_*` values in `tinytown_sprite_alpha.sprite.toml`
+- compare the preview overlay with `artifacts/godot-tinytown/tinytown-screenshot.png`
+- if a correction is only for future SpriteForge migration, mirror the semantic intent into `.spriteforge.toml` after the runtime TOML is stable
+
 ## Replacing the atlas
 
 You can point the sample at another atlas by:

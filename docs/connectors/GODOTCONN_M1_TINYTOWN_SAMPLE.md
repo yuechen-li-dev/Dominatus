@@ -78,8 +78,9 @@ Current constants:
 - town rect: left `792 x 600`
 - debug panel: right `288 x 600`
 - villager visual size: `22 x 22`
-- villager status plate offset: `(-52, -86)`
+- villager status plate rule: centered plate with bottom anchored above the sprite at about `-44`
 - villager status plate padding: `(10, 8)`
+- destination label rule: centered plate below the marker at about `+34`
 
 This keeps the town, labels, and debug panel inside the viewport and prevents the debug text from spilling into the editor gray gutter.
 
@@ -210,7 +211,7 @@ Markers are still placeholder geometry, but they now read as town places:
 - well: basin plus water inset
 - market: stall plus awning
 - garden: bed plus row accents
-- nameplates: light label plates above markers
+- nameplates: light label plates below markers
 
 ### Villager labels
 

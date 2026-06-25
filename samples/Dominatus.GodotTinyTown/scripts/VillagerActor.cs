@@ -72,7 +72,7 @@ public partial class VillagerActor : CharacterBody2D
             _statusPlate.Size = labelSize + (TinyTownLayout.VillagerLabelPadding * 2f);
         }
 
-        _statusPlate.Position = ComputePlateOffset();
+        _statusPlate.Position = TinyTownLayout.ComputeVillagerPlatePosition(_statusPlate.Size, GlobalPosition);
         _visualController?.Apply(presentation);
     }
 
@@ -220,15 +220,4 @@ public partial class VillagerActor : CharacterBody2D
         return velocity.Y < 0f ? TinyTownFacingDirection.Up : TinyTownFacingDirection.Down;
     }
 
-    private Vector2 ComputePlateOffset()
-    {
-        var offset = TinyTownLayout.VillagerLabelOffset;
-        if (GlobalPosition.X < 250f)
-            offset.X += 36f;
-
-        if (GlobalPosition.Y > 470f)
-            offset.Y -= 10f;
-
-        return offset;
-    }
 }

@@ -41,7 +41,12 @@ public sealed class DestinationVisualController
         };
 
         if (_nameLabel is not null)
+        {
             _nameLabel.Text = _presentation.Name;
+            _nameLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+
+        UpdateNameplateLayout();
     }
 
     public TinyTownDestinationPresentation Presentation => _presentation;
@@ -58,6 +63,7 @@ public sealed class DestinationVisualController
 
     public void Apply()
     {
+        UpdateNameplateLayout();
         if (_profile.EffectiveDestinationMode != TinyTownVisualMode.FallbackShapes
             && _catalog is not null
             && TryUseSprite())
@@ -130,6 +136,19 @@ public sealed class DestinationVisualController
 
         if (_nameplate is not null)
             _nameplate.Visible = true;
+    }
+
+    private void UpdateNameplateLayout()
+    {
+        if (_nameplate is null || _nameLabel is null)
+            return;
+
+        var labelSize = _nameLabel.GetMinimumSize();
+        var width = MathF.Max(TinyTownLayout.DestinationLabelMinWidth, labelSize.X + (TinyTownLayout.DestinationLabelPadding.X * 2f));
+        var height = labelSize.Y + (TinyTownLayout.DestinationLabelPadding.Y * 2f);
+        _nameplate.Size = new Vector2(width, height);
+        _nameLabel.Position = TinyTownLayout.DestinationLabelPadding;
+        _nameplate.Position = TinyTownLayout.ComputeDestinationLabelPosition(_nameplate.Size, _marker.GlobalPosition);
     }
 
     private static Node2D EnsureVisualRoot(Marker2D marker)
