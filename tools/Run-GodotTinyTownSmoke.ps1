@@ -6,7 +6,10 @@ param(
     [UInt64]$LongRunSmokeFrames = 900,
     [string]$ArtifactsDir,
     [switch]$Headless,
-    [switch]$CleanGodotCaches
+    [switch]$CleanGodotCaches,
+    [ValidateSet('FallbackShapes', 'StaticSprites', 'AnimatedSprites')]
+    [string]$VisualMode = 'FallbackShapes',
+    [string]$AtlasPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,11 +109,20 @@ Add-LogLine "== godot smoke run =="
 $previousSmoke = $env:DOMINATUS_GODOT_SMOKE
 $previousFrames = $env:DOMINATUS_GODOT_SMOKE_FRAMES
 $previousArtifacts = $env:DOMINATUS_GODOT_SMOKE_ARTIFACTS
+$previousVisualMode = $env:DOMINATUS_TINYTOWN_VISUAL_MODE
+$previousAtlasPath = $env:DOMINATUS_TINYTOWN_ATLAS_PATH
 
 try {
     $env:DOMINATUS_GODOT_SMOKE = "1"
     $env:DOMINATUS_GODOT_SMOKE_FRAMES = $targetSmokeFrames.ToString()
     $env:DOMINATUS_GODOT_SMOKE_ARTIFACTS = $artifactsDir
+    $env:DOMINATUS_TINYTOWN_VISUAL_MODE = $VisualMode
+    if ($AtlasPath) {
+        $env:DOMINATUS_TINYTOWN_ATLAS_PATH = $AtlasPath
+    }
+    else {
+        Remove-Item Env:DOMINATUS_TINYTOWN_ATLAS_PATH -ErrorAction SilentlyContinue
+    }
 
     $godotArgs = @('--path', $sampleDir, '--quit-after', $quitAfterFrames)
     if ($Headless) {
@@ -126,6 +138,8 @@ finally {
     $env:DOMINATUS_GODOT_SMOKE = $previousSmoke
     $env:DOMINATUS_GODOT_SMOKE_FRAMES = $previousFrames
     $env:DOMINATUS_GODOT_SMOKE_ARTIFACTS = $previousArtifacts
+    $env:DOMINATUS_TINYTOWN_VISUAL_MODE = $previousVisualMode
+    $env:DOMINATUS_TINYTOWN_ATLAS_PATH = $previousAtlasPath
 }
 
 Assert-Condition (Test-Path $debugJsonPath) "Missing debug JSON artifact: $debugJsonPath"
@@ -155,10 +169,18 @@ $duplicateLines = @($logLines | Where-Object { $_ -match 'ScriptTypeBiMap' -or $
 $averageNeedUrgency = [double]$snapshot.averageNeedUrgency
 $maxNeedUrgency = [double]$snapshot.maxNeedUrgency
 $visualMode = [string]$snapshot.visualMode
+$atlasPath = [string]$snapshot.atlasPath
+$atlasWidth = [int]$snapshot.atlasWidth
+$atlasHeight = [int]$snapshot.atlasHeight
+$cellWidth = [int]$snapshot.cellWidth
+$cellHeight = [int]$snapshot.cellHeight
+$normalizedAtlasUsed = [bool]$snapshot.normalizedAtlasUsed
 $villagerVisualMode = [string]$snapshot.villagerVisualMode
 $destinationVisualMode = [string]$snapshot.destinationVisualMode
 $fallbackVisualsUsed = [bool]$snapshot.fallbackVisualsUsed
 $spriteAssetsLoaded = [int]$snapshot.spriteAssetsLoaded
+$villagerSpritesLoaded = [int]$snapshot.villagerSpritesLoaded
+$destinationSpritesLoaded = [int]$snapshot.destinationSpritesLoaded
 $missingAssetWarnings = [int]$snapshot.missingAssetWarnings
 
 Assert-Condition ([uint64]$snapshot.tickCount -gt 0) "TinyTown never ticked. tickCount=$($snapshot.tickCount)"
@@ -178,13 +200,27 @@ Assert-Condition ($maxNeedUrgency -le 0.97) "Max need urgency too high at end of
 Assert-Condition ($highStressVillagers.Count -le 1) "Too many villagers ended the run near hard emergency."
 Assert-Condition ($duplicateLines.Count -eq 0) "Detected duplicate ScriptTypeBiMap registration evidence in run.log"
 Assert-Condition ($errorLines.Count -eq 0) "Detected unexpected ERROR lines in run.log"
-Assert-Condition ($visualMode -eq "FallbackShapes") "Default smoke should run in fallback mode, found visualMode=$visualMode"
-Assert-Condition ($villagerVisualMode -eq "FallbackShapes") "Expected fallback villager visuals by default, found $villagerVisualMode"
-Assert-Condition ($destinationVisualMode -eq "FallbackShapes") "Expected fallback destination visuals by default, found $destinationVisualMode"
-Assert-Condition ($fallbackVisualsUsed) "Expected fallback visuals to be in use when no external art is present."
-Assert-Condition ($fallbackVillagers.Count -eq $villagers.Count) "Expected all villagers to report fallback visuals in default smoke mode."
-Assert-Condition ($spriteAssetsLoaded -eq 0) "Default smoke should not require sprite assets, but snapshot reported $spriteAssetsLoaded loaded assets."
-Assert-Condition ($missingAssetWarnings -eq 0) "Fallback smoke should not log missing asset warnings, but snapshot reported $missingAssetWarnings."
+Assert-Condition ($visualMode -eq $VisualMode) "Expected visualMode=$VisualMode, found $visualMode"
+if ($VisualMode -eq "FallbackShapes") {
+    Assert-Condition ($villagerVisualMode -eq "FallbackShapes") "Expected fallback villager visuals by default, found $villagerVisualMode"
+    Assert-Condition ($destinationVisualMode -eq "FallbackShapes") "Expected fallback destination visuals by default, found $destinationVisualMode"
+    Assert-Condition ($fallbackVisualsUsed) "Expected fallback visuals to be in use when no art atlas is requested."
+    Assert-Condition ($fallbackVillagers.Count -eq $villagers.Count) "Expected all villagers to report fallback visuals in fallback smoke mode."
+    Assert-Condition ($spriteAssetsLoaded -eq 0) "Fallback smoke should not require sprite assets, but snapshot reported $spriteAssetsLoaded loaded assets."
+    Assert-Condition ($missingAssetWarnings -eq 0) "Fallback smoke should not log missing asset warnings, but snapshot reported $missingAssetWarnings."
+}
+else {
+    Assert-Condition ($villagerVisualMode -eq $VisualMode) "Expected villager visual mode $VisualMode, found $villagerVisualMode"
+    Assert-Condition ($destinationVisualMode -eq "StaticSprites") "Expected destination visuals to use static sprites, found $destinationVisualMode"
+    Assert-Condition (-not $fallbackVisualsUsed) "Sprite smoke should not fall back when a valid atlas is present."
+    Assert-Condition ($fallbackVillagers.Count -eq 0) "Expected no villager fallback visuals in sprite mode."
+    Assert-Condition ($spriteAssetsLoaded -gt 0) "Sprite smoke expected atlas-backed visuals, but snapshot reported $spriteAssetsLoaded loaded sprite assets."
+    Assert-Condition ($villagerSpritesLoaded -ge 4) "Expected all four villager rows to resolve, found $villagerSpritesLoaded."
+    Assert-Condition ($destinationSpritesLoaded -ge 3) "Expected destination prop sprites to resolve, found $destinationSpritesLoaded."
+    Assert-Condition ($missingAssetWarnings -eq 0) "Sprite smoke should not log missing asset warnings, but snapshot reported $missingAssetWarnings."
+    Assert-Condition ($atlasWidth -gt 0 -and $atlasHeight -gt 0) "Sprite smoke expected atlas dimensions, found ${atlasWidth}x${atlasHeight}."
+    Assert-Condition ($cellWidth -gt 0 -and $cellHeight -gt 0) "Sprite smoke expected cell dimensions, found ${cellWidth}x${cellHeight}."
+}
 
 $screenshotMessage = if ((Test-Path $screenshotPath) -and $snapshot.screenshotSaved) {
     "Screenshot: $screenshotPath"
@@ -201,6 +237,7 @@ Write-Host "Observed activities: $($distinctObservedActivities -join ', ')"
 Write-Host "Observed dwell activities: $($observedDwellActivities -join ', ')"
 Write-Host "Observed travel activities: $($observedTravelActivities -join ', ')"
 Write-Host "Visuals: mode=$visualMode villagers=$villagerVisualMode destinations=$destinationVisualMode fallback=$fallbackVisualsUsed spriteAssets=$spriteAssetsLoaded warnings=$missingAssetWarnings"
+Write-Host "Atlas: path=$atlasPath size=${atlasWidth}x${atlasHeight} cell=${cellWidth}x${cellHeight} normalized=$normalizedAtlasUsed villagerSprites=$villagerSpritesLoaded destinationSprites=$destinationSpritesLoaded"
 Write-Host ("Need summary: average={0:N2} max={1:N2}" -f $averageNeedUrgency, $maxNeedUrgency)
 Write-Host "Artifacts:"
 Write-Host "  Log: $logPath"

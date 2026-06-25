@@ -24,7 +24,7 @@ public partial class VillagerActor : CharacterBody2D
         _brain = GetNodeOrNull<TinyTownVillagerBrain>("Brain");
         _visualRoot = GetNodeOrNull<Node2D>("VisualRoot");
         _statusPlate = GetNodeOrNull<PanelContainer>("StatusPlate");
-        _label = GetNodeOrNull<Label>("StatusLabel");
+        _label = GetNodeOrNull<Label>("StatusPlate/StatusLabel");
 
         if (_brain is not null)
             _villagerName = _brain.VillagerName;

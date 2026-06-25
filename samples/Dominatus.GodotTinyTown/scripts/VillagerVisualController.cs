@@ -1,5 +1,4 @@
 using Godot;
-using System.Linq;
 
 namespace Dominatus.GodotTinyTown;
 
@@ -12,13 +11,11 @@ public sealed class VillagerVisualController
     private readonly Polygon2D _accent;
     private readonly Polygon2D _facingIndicator;
     private readonly Sprite2D _sprite;
-    private readonly AnimatedSprite2D _animatedSprite;
 
     private TinyTownArtProfile _profile = new();
     private TinyTownSpriteCatalog? _catalog;
     private TinyTownVisualStatus _status = new(TinyTownVisualMode.FallbackShapes, TinyTownVisualMode.FallbackShapes, true, false);
     private string _loadedSpriteKey = string.Empty;
-    private string _loadedFramesKey = string.Empty;
 
     public VillagerVisualController(Node2D visualRoot)
     {
@@ -32,10 +29,9 @@ public sealed class VillagerVisualController
         _sprite = visualRoot.GetNodeOrNull<Sprite2D>("Sprite2D") ?? new Sprite2D { Name = "Sprite2D", Centered = true, Visible = false };
         if (_sprite.GetParent() is null)
             visualRoot.AddChild(_sprite);
-
-        _animatedSprite = visualRoot.GetNodeOrNull<AnimatedSprite2D>("AnimatedSprite2D") ?? new AnimatedSprite2D { Name = "AnimatedSprite2D", Centered = true, Visible = false };
-        if (_animatedSprite.GetParent() is null)
-            visualRoot.AddChild(_animatedSprite);
+        _sprite.RegionEnabled = true;
+        _sprite.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+        _sprite.Position = new Vector2(0f, -17f);
     }
 
     public TinyTownVisualStatus Status => _status;
@@ -45,7 +41,6 @@ public sealed class VillagerVisualController
         _profile = profile ?? new TinyTownArtProfile();
         _catalog = catalog;
         _loadedSpriteKey = string.Empty;
-        _loadedFramesKey = string.Empty;
         _status = new(_profile.EffectiveVillagerMode, TinyTownVisualMode.FallbackShapes, true, false);
     }
 
@@ -53,75 +48,54 @@ public sealed class VillagerVisualController
     {
         var accentColor = ActivityColor(presentation.Activity);
         var facingRotation = FacingRotation(presentation.FacingDirection);
-        var useAnimated = _profile.EffectiveVillagerMode == TinyTownVisualMode.AnimatedSprites;
-        var useStatic = _profile.EffectiveVillagerMode == TinyTownVisualMode.StaticSprites;
+        var useSprite = _profile.EffectiveVillagerMode is TinyTownVisualMode.AnimatedSprites or TinyTownVisualMode.StaticSprites;
 
-        if (useAnimated && TryUseAnimatedSprites(presentation, accentColor, facingRotation))
-            return;
-
-        if (useStatic && TryUseStaticSprite(presentation, accentColor, facingRotation))
+        if (useSprite && TryUseAtlasSprite(presentation))
             return;
 
         ApplyFallback(presentation, accentColor, facingRotation);
     }
 
-    private bool TryUseAnimatedSprites(TinyTownVillagerPresentation presentation, Color accentColor, float facingRotation)
+    private bool TryUseAtlasSprite(TinyTownVillagerPresentation presentation)
     {
         if (_catalog is null)
             return false;
 
-        var key = $"{presentation.Name}|{presentation.Personality}";
-        if (_loadedFramesKey != key)
-        {
-            if (!_catalog.TryLoadVillagerFrames(_profile, presentation, out var frames) || frames is null)
-                return false;
+        if (!_catalog.TryGetVillagerSprite(_profile, presentation, out var slice) || slice is null)
+            return false;
 
-            _animatedSprite.SpriteFrames = frames;
-            _loadedFramesKey = key;
+        var frameKey = $"{presentation.Name}|{presentation.Personality}|{presentation.FacingDirection}|{presentation.Phase}|{MathF.Round(presentation.Speed, 0)}";
+        if (_loadedSpriteKey != frameKey || !ReferenceEquals(_sprite.Texture, slice.Texture))
+        {
+            _sprite.Texture = slice.Texture;
+            _loadedSpriteKey = frameKey;
         }
 
+        _sprite.RegionRect = slice.RegionRect;
+        ApplySpriteScale(slice.RegionRect.Size);
         SetFallbackVisible(false);
-        _sprite.Visible = false;
-        _animatedSprite.Visible = true;
-        _animatedSprite.Modulate = accentColor.Lightened(0.12f);
-        _animatedSprite.Rotation = 0f;
-        PlayDirectionalAnimation(presentation.FacingDirection, presentation.Speed);
-        _status = new(_profile.EffectiveVillagerMode, TinyTownVisualMode.AnimatedSprites, false, true);
+        _sprite.Visible = true;
+        _sprite.Modulate = Colors.White;
+        _status = new(_profile.EffectiveVillagerMode, _profile.EffectiveVillagerMode, false, true);
         return true;
     }
 
-    private bool TryUseStaticSprite(TinyTownVillagerPresentation presentation, Color accentColor, float facingRotation)
+    private void ApplySpriteScale(Vector2 sourceSize)
     {
-        if (_catalog is null)
-            return false;
-
-        var key = $"{presentation.Name}|{presentation.Personality}";
-        if (_loadedSpriteKey != key)
+        if (sourceSize.Y <= 0f)
         {
-            if (!_catalog.TryLoadVillagerTexture(_profile, presentation, out var texture) || texture is null)
-                return false;
-
-            _sprite.Texture = texture;
-            _loadedSpriteKey = key;
+            _sprite.Scale = Vector2.One;
+            return;
         }
 
-        SetFallbackVisible(false);
-        _animatedSprite.Visible = false;
-        _sprite.Visible = true;
-        _sprite.Modulate = accentColor.Lightened(0.18f);
-        _sprite.FlipH = presentation.FacingDirection == TinyTownFacingDirection.Left;
-        _sprite.Rotation = presentation.FacingDirection is TinyTownFacingDirection.Up or TinyTownFacingDirection.Down
-            ? 0f
-            : 0f;
-        _status = new(_profile.EffectiveVillagerMode, TinyTownVisualMode.StaticSprites, false, true);
-        return true;
+        var scale = _profile.VillagerTargetHeight / sourceSize.Y;
+        _sprite.Scale = new Vector2(scale, scale);
     }
 
     private void ApplyFallback(TinyTownVillagerPresentation presentation, Color accentColor, float facingRotation)
     {
         SetFallbackVisible(true);
         _sprite.Visible = false;
-        _animatedSprite.Visible = false;
         _body.Color = accentColor;
         _head.Color = HeadColorFor(presentation.Personality);
         _accent.Color = accentColor.Darkened(0.18f);
@@ -140,44 +114,6 @@ public sealed class VillagerVisualController
         _head.Visible = visible;
         _accent.Visible = visible;
         _facingIndicator.Visible = visible;
-    }
-
-    private void PlayDirectionalAnimation(TinyTownFacingDirection facing, float speed)
-    {
-        if (_animatedSprite.SpriteFrames is null)
-            return;
-
-        var preferred = facing switch
-        {
-            TinyTownFacingDirection.Up => "walk_up",
-            TinyTownFacingDirection.Left => "walk_left",
-            TinyTownFacingDirection.Right => "walk_right",
-            _ => "walk_down"
-        };
-
-        var idleFallback = facing switch
-        {
-            TinyTownFacingDirection.Up => "idle_up",
-            TinyTownFacingDirection.Left => "idle_left",
-            TinyTownFacingDirection.Right => "idle_right",
-            _ => "idle_down"
-        };
-
-        var animationName = speed > 4f ? preferred : idleFallback;
-        if (!_animatedSprite.SpriteFrames.HasAnimation(animationName))
-        {
-            animationName = _animatedSprite.SpriteFrames.GetAnimationNames().FirstOrDefault() ?? string.Empty;
-        }
-
-        if (string.IsNullOrWhiteSpace(animationName))
-            return;
-
-        if (_animatedSprite.Animation != animationName)
-            _animatedSprite.Play(animationName);
-        else if (!_animatedSprite.IsPlaying())
-            _animatedSprite.Play();
-
-        _animatedSprite.SpeedScale = speed > 4f ? 1f : 0.4f;
     }
 
     private static Polygon2D CreateBody(Node parent)

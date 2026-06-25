@@ -263,11 +263,11 @@ Supported modes:
 - `StaticSprites`
 - `AnimatedSprites`
 
-`FallbackShapes` is still the default for editor runs and smoke validation.
+`FallbackShapes` remains the safe fallback mode.
 
-`StaticSprites` tries to load `Texture2D` assets.
+`StaticSprites` renders a single idle frame from the atlas.
 
-`AnimatedSprites` tries to load villager `SpriteFrames` resources for directional animation. Destinations stay static in this mode unless future art work adds richer prop logic.
+`AnimatedSprites` uses the same atlas with `Sprite2D.RegionRect` frame selection. Villagers switch between idle and walk frames based on facing, phase, and speed. Destinations stay static in this mode.
 
 If requested assets are absent:
 
@@ -337,6 +337,7 @@ Editor-facing configuration is exposed as exported properties:
 Optional CLI/smoke override:
 
 - env var `DOMINATUS_TINYTOWN_VISUAL_MODE`
+- env var `DOMINATUS_TINYTOWN_ATLAS_PATH`
 
 Asset README:
 
@@ -347,29 +348,124 @@ Placeholder folders:
 - `samples/Dominatus.GodotTinyTown/assets/placeholders`
 - `samples/Dominatus.GodotTinyTown/assets/external`
 
-No third-party assets are committed in M2. Check license terms before adding any sprite sheets to the repository.
+The committed TinyTown sprite art is a local generated sample sheet, not third-party licensed art.
 
-### Current sprite lookup conventions
+## M2.1 local sprite atlas integration
 
-Villager static sprite candidates:
+M2.1 replaces the old per-file sprite lookup convention with one sample-local atlas:
 
-- `res://assets/external/villagers/<villager-name>.png`
-- `res://assets/external/villagers/<personality>.png`
+- source sheet: `res://assets/sprites/tinytown_sprite.png`
+- normalized runtime atlas: `res://assets/sprites/generated/tinytown_atlas_normalized.png`
 
-Villager animated sprite candidates:
+Inspection result for the source sheet:
 
-- `res://assets/external/villagers/<villager-name>.frames.tres`
-- `res://assets/external/villagers/<villager-name>.tres`
-- `res://assets/external/villagers/<personality>.frames.tres`
+- original size: `1774x887`
+- format: opaque `24bpp` RGB
+- transparency: none
+- divisibility: not divisible by `12x6`
+- background: checkerboard baked into pixels
 
-Destination sprite candidates:
+Normalization result:
 
-- `res://assets/external/destinations/<kind>.png`
-- `res://assets/external/destinations/<name>.png`
+- derived atlas path: `res://assets/sprites/generated/tinytown_atlas_normalized.png`
+- normalized size: `1776x888`
+- cell geometry: `148x148`
+- original file remains untouched
+- border-connected checkerboard is removed into transparency
 
-Lookup keys are normalized to lowercase kebab case.
+### Atlas grid semantics
 
-This is intentionally small and explicit rather than a full atlas or importer pipeline.
+Rows `1-4` are villagers:
+
+- Maya
+- Theo
+- Lina
+- Nia
+
+Each villager row uses `12` cells:
+
+- `1-3`: down `idle`, `walk1`, `walk2`
+- `4-6`: left `idle`, `walk1`, `walk2`
+- `7-9`: right `idle`, `walk1`, `walk2`
+- `10-12`: up `idle`, `walk1`, `walk2`
+
+Rows `5-6` are props/icons.
+
+Current destination mapping:
+
+- `Well` -> row `5`, col `1`
+- `Market` -> row `5`, col `2`
+- `Garden` -> row `5`, col `3`
+- `Home` -> row `5`, col `4`
+- `SocialSpot` -> row `5`, col `5`
+
+### Runtime behavior
+
+Villager rows are resolved by canonical villager name first, then by personality:
+
+- Maya / social shopper -> row `0`
+- Theo / restless wanderer -> row `1`
+- Lina / quiet gardener -> row `2`
+- Nia / cozy homebody -> row `3`
+
+Direction groups:
+
+- down -> start col `0`
+- left -> start col `3`
+- right -> start col `6`
+- up -> start col `9`
+
+Frame selection:
+
+- `StaticSprites` always uses the direction idle frame
+- `AnimatedSprites` uses idle unless the villager is in `Travel` and moving above the walk threshold
+- while traveling, the renderer alternates `walk1` and `walk2` with `Sprite2D.RegionRect`
+
+Texture handling:
+
+- nearest filtering is set on the live `Sprite2D`
+- mipmaps stay disabled on the atlas import sidecar
+- repeat is not used
+
+### Default selection and fallback
+
+If no visual mode override is supplied:
+
+- TinyTown prefers `AnimatedSprites` when the normalized atlas exists
+- otherwise it stays on `FallbackShapes`
+
+If an atlas is missing or invalid:
+
+- TinyTown logs one warning
+- the requesting visual controller falls back to shapes
+- the sample keeps running
+
+### Sprite smoke
+
+Fallback smoke:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
+  -SmokeFrames 360 `
+  -VisualMode FallbackShapes
+```
+
+Sprite smoke:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
+  -SmokeFrames 360 `
+  -VisualMode AnimatedSprites
+```
+
+Optional atlas override:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
+  -SmokeFrames 360 `
+  -VisualMode AnimatedSprites `
+  -AtlasPath 'res://assets/sprites/generated/tinytown_atlas_normalized.png'
+```
 
 ## Personality profiles
 
@@ -583,6 +679,8 @@ Useful options:
 - `-SmokeFrames 360`
 - `-LongRun`
 - `-LongRunSmokeFrames 900`
+- `-VisualMode FallbackShapes|StaticSprites|AnimatedSprites`
+- `-AtlasPath <res://...>`
 - `-Headless`
 - `-CleanGodotCaches`
 - `-GodotPath <path>`
@@ -598,7 +696,15 @@ Top-level `tinytown-debug.json` fields now include:
 - `screenshotPath`
 - `screenshotError`
 - `visualMode`
+- `atlasPath`
+- `atlasWidth`
+- `atlasHeight`
+- `cellWidth`
+- `cellHeight`
+- `normalizedAtlasUsed`
 - `spriteAssetsLoaded`
+- `villagerSpritesLoaded`
+- `destinationSpritesLoaded`
 - `missingAssetWarnings`
 - `fallbackVisualsUsed`
 - `villagerVisualMode`
@@ -657,7 +763,8 @@ Useful reading rules:
 
 - if `averageNeedUrgency` stays high, passive decay or cooldown suppression is too strong
 - if `maxNeedUrgency` frequently ends near `1.0`, recovery is too weak or interruption is too rare
-- if `visualMode` requests sprites but `fallbackVisualsUsed` stays true, the art socket is working but assets are absent or misnamed
+- if `visualMode` requests sprites but `fallbackVisualsUsed` stays true, the atlas is missing, invalid, or not mapping cleanly
+- if `atlasWidth` or `cellWidth` are `0`, the atlas never loaded successfully
 - if `missingAssetWarnings` rises, requested art paths are not resolving cleanly
 - if `observedDwellActivities[]` stays narrow, variety is being suppressed
 - if `activityCounts[]` collapse into only emergency loops, the economy has drifted backward
@@ -709,7 +816,7 @@ dotnet pack src/Dominatus.GodotConn/Dominatus.GodotConn.csproj -c Release
 - open-rectangle navigation only
 - no authored obstacle geometry yet
 - no advanced avoidance beyond stock `NavigationAgent2D`
-- no imported sprite sheets or art assets yet
+- no advanced blending or authored sprite animation resources
 - no tilemap dependency
 - no inventory or economy simulation beyond utility needs
 - no persistence or replay

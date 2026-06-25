@@ -26,6 +26,9 @@ public sealed class DestinationVisualController
         _sprite = _visualRoot.GetNodeOrNull<Sprite2D>("Sprite2D") ?? new Sprite2D { Name = "Sprite2D", Centered = true, Visible = false };
         if (_sprite.GetParent() is null)
             _visualRoot.AddChild(_sprite);
+        _sprite.RegionEnabled = true;
+        _sprite.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+        _sprite.Position = new Vector2(0f, -20f);
 
         _presentation = new TinyTownDestinationPresentation
         {
@@ -69,18 +72,36 @@ public sealed class DestinationVisualController
         var key = _presentation.Kind.ToString();
         if (_loadedSpriteKey != key)
         {
-            if (!_catalog!.TryLoadDestinationTexture(_profile, _presentation, out var texture) || texture is null)
+            if (!_catalog!.TryGetDestinationSprite(_profile, _presentation, out var slice) || slice is null)
                 return false;
 
-            _sprite.Texture = texture;
+            _sprite.Texture = slice.Texture;
+            _sprite.RegionRect = slice.RegionRect;
+            ApplySpriteScale(slice.RegionRect.Size);
             _sprite.Modulate = Colors.White;
             _loadedSpriteKey = key;
+        }
+        else if (_catalog!.TryGetDestinationSprite(_profile, _presentation, out var currentSlice) && currentSlice is not null)
+        {
+            _sprite.RegionRect = currentSlice.RegionRect;
         }
 
         SetFallbackVisible(false);
         _sprite.Visible = true;
         _status = new(_profile.EffectiveDestinationMode, TinyTownVisualMode.StaticSprites, false, true);
         return true;
+    }
+
+    private void ApplySpriteScale(Vector2 sourceSize)
+    {
+        if (sourceSize.Y <= 0f)
+        {
+            _sprite.Scale = Vector2.One;
+            return;
+        }
+
+        var scale = _profile.DestinationTargetHeight / sourceSize.Y;
+        _sprite.Scale = new Vector2(scale, scale);
     }
 
     private void SetFallbackVisible(bool visible)
