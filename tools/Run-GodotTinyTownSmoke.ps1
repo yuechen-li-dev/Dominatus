@@ -194,10 +194,47 @@ $villagerSpritesLoaded = [int]$snapshot.villagerSpritesLoaded
 $destinationSpritesLoaded = [int]$snapshot.destinationSpritesLoaded
 $correctedFramesUsed = [int]$snapshot.correctedFramesUsed
 $missingAssetWarnings = [int]$snapshot.missingAssetWarnings
+$audioBridgeEnabled = [bool]$snapshot.audioBridgeEnabled
+$audioProviderId = [string]$snapshot.audioProviderId
+$generatedBarkCount = [int]$snapshot.generatedBarkCount
+$playedBarkCount = [int]$snapshot.playedBarkCount
+$audioArtifactsWritten = [int]$snapshot.audioArtifactsWritten
+$audioPlaybackFailures = [int]$snapshot.audioPlaybackFailures
+$audioArtifactDirectory = [string]$snapshot.audioArtifactDirectory
+$barkingVillagers = @($villagers | Where-Object { [int]$_.barkCount -ge 1 })
+$audioPlaybackActiveVillagers = @($villagers | Where-Object { $_.audioPlaybackActive -eq $true })
+$audioFiles = if (-not [string]::IsNullOrWhiteSpace($audioArtifactDirectory) -and (Test-Path $audioArtifactDirectory)) {
+    @(Get-ChildItem -Path $audioArtifactDirectory -Filter *.wav -File)
+}
+else {
+    @()
+}
+$sidecarFiles = if (-not [string]::IsNullOrWhiteSpace($audioArtifactDirectory) -and (Test-Path $audioArtifactDirectory)) {
+    @(Get-ChildItem -Path $audioArtifactDirectory -Filter *.audio.json -File)
+}
+else {
+    @()
+}
+$firstSidecar = if ($sidecarFiles.Count -ge 1) {
+    Get-Content $sidecarFiles[0].FullName -Raw | ConvertFrom-Json
+}
+else {
+    $null
+}
 
 Assert-Condition ([uint64]$snapshot.tickCount -gt 0) "TinyTown never ticked. tickCount=$($snapshot.tickCount)"
 Assert-Condition ([int]$snapshot.agentCount -eq 4) "Expected 4 agents, found $($snapshot.agentCount)"
 Assert-Condition (-not [string]::IsNullOrWhiteSpace($visualMode)) "Expected visualMode in TinyTown smoke snapshot."
+Assert-Condition ($audioBridgeEnabled) "Expected TinyTown audio bridge to be enabled."
+Assert-Condition ($audioProviderId -eq "fake") "Expected fake audio provider by default, found '$audioProviderId'."
+Assert-Condition ($generatedBarkCount -ge 1) "Expected at least one generated bark, found $generatedBarkCount."
+Assert-Condition ($audioArtifactsWritten -ge 1) "Expected at least one written audio artifact, found $audioArtifactsWritten."
+Assert-Condition ($audioFiles.Count -ge 1) "Expected at least one .wav bark artifact in '$audioArtifactDirectory'."
+Assert-Condition ($sidecarFiles.Count -ge 1) "Expected at least one audio sidecar JSON in '$audioArtifactDirectory'."
+Assert-Condition ($barkingVillagers.Count -ge 1) "Expected at least one villager bark snapshot."
+Assert-Condition ($audioPlaybackFailures -eq 0) "Expected no audio playback failures, found $audioPlaybackFailures."
+Assert-Condition ($null -ne $firstSidecar) "Expected to parse at least one audio sidecar JSON."
+Assert-Condition ($firstSidecar.hiddenWatermarkAddedByDominatus -eq $false) "Expected hiddenWatermarkAddedByDominatus=false in sidecar."
 Assert-Condition ($movedVillagers.Count -ge 1) "Expected at least one villager to move more than 8 units."
 Assert-Condition ($navigationObservedVillagers.Count -ge 1) "Expected at least one villager to use navigation during the smoke run."
 Assert-Condition ($nanVillagers.Count -eq 0) "Detected NaN position/velocity values in TinyTown smoke snapshot."
@@ -215,6 +252,7 @@ Assert-Condition ($errorLines.Count -eq 0) "Detected unexpected ERROR lines in r
 Assert-Condition ($visualMode -eq $VisualMode) "Expected visualMode=$VisualMode, found $visualMode"
 if (-not $Headless) {
     Assert-Condition ($snapshot.screenshotSaved -and (Test-Path $screenshotPath)) "Expected a saved screenshot artifact for non-headless smoke runs."
+    Assert-Condition ($playedBarkCount -ge 1) "Expected at least one played bark during non-headless smoke, found $playedBarkCount."
 }
 if ($VisualMode -eq "FallbackShapes") {
     Assert-Condition ($villagerVisualMode -eq "FallbackShapes") "Expected fallback villager visuals by default, found $villagerVisualMode"
@@ -261,6 +299,7 @@ Write-Host "Smoke harness passed."
 Write-Host "Observed activities: $($distinctObservedActivities -join ', ')"
 Write-Host "Observed dwell activities: $($observedDwellActivities -join ', ')"
 Write-Host "Observed travel activities: $($observedTravelActivities -join ', ')"
+Write-Host "Audio: bridge=$audioBridgeEnabled provider=$audioProviderId generated=$generatedBarkCount played=$playedBarkCount failures=$audioPlaybackFailures artifacts=$audioArtifactsWritten dir=$audioArtifactDirectory activeVillagers=$($audioPlaybackActiveVillagers.Count)"
 Write-Host "Visuals: mode=$visualMode villagers=$villagerVisualMode destinations=$destinationVisualMode fallback=$fallbackVisualsUsed spriteAssets=$spriteAssetsLoaded warnings=$missingAssetWarnings"
 Write-Host "Atlas: source=$atlasSourceKind path=$atlasPath tomlLoaded=$atlasTomlLoaded tomlPath=$atlasTomlPath size=${atlasWidth}x${atlasHeight} grid=${gridColumns}x${gridRows} cell=${cellWidth}x${cellHeight} normalized=$normalizedAtlasUsed alphaPath=$alphaAtlasUsed alphaDetected=$alphaDetected transparentPixels=$transparentPixelCount entities=$spriteEntitiesLoaded animations=$spriteAnimationsLoaded villagerSprites=$villagerSpritesLoaded destinationSprites=$destinationSpritesLoaded correctedFrames=$correctedFramesUsed"
 Write-Host ("Need summary: average={0:N2} max={1:N2}" -f $averageNeedUrgency, $maxNeedUrgency)

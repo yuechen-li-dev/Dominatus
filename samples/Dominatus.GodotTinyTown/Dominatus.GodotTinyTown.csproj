@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominatus.Actuators.Audio\Dominatus.Actuators.Audio.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.GodotConn\Dominatus.GodotConn.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
     <ProjectReference Include="..\..\src\Dominatus.UtilityLite\Dominatus.UtilityLite.csproj" />

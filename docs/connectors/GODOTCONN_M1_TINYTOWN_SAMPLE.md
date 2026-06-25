@@ -2,6 +2,8 @@
 
 This document covers the M1.4 through M2 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
 
+For the audio bridge and generated bark follow-up, see [GODOTCONN_AUDIO_M3.md](GODOTCONN_AUDIO_M3.md).
+
 SpriteForge M0 note:
 
 - TinyTown's `*.sprite.toml` sidecar is the first practical SpriteForge case.

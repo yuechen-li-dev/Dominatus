@@ -269,6 +269,9 @@ script = ExtResource("3")
 
 [node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Maya"]
 
+[node name="BarkPlayer" type="AudioStreamPlayer2D" parent="DominatusWorld/Villagers/Maya"]
+volume_db = -4.0
+
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Maya"]
 
 [node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Maya/VisualRoot"]
@@ -304,6 +307,9 @@ position = Vector2(194, 274)
 script = ExtResource("3")
 
 [node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Theo"]
+
+[node name="BarkPlayer" type="AudioStreamPlayer2D" parent="DominatusWorld/Villagers/Theo"]
+volume_db = -4.0
 
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Theo"]
 
@@ -341,6 +347,9 @@ script = ExtResource("3")
 
 [node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Lina"]
 
+[node name="BarkPlayer" type="AudioStreamPlayer2D" parent="DominatusWorld/Villagers/Lina"]
+volume_db = -4.0
+
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Lina"]
 
 [node name="Shadow" type="Polygon2D" parent="DominatusWorld/Villagers/Lina/VisualRoot"]
@@ -376,6 +385,9 @@ position = Vector2(194, 506)
 script = ExtResource("3")
 
 [node name="NavigationAgent2D" type="NavigationAgent2D" parent="DominatusWorld/Villagers/Nia"]
+
+[node name="BarkPlayer" type="AudioStreamPlayer2D" parent="DominatusWorld/Villagers/Nia"]
+volume_db = -4.0
 
 [node name="VisualRoot" type="Node2D" parent="DominatusWorld/Villagers/Nia"]
 

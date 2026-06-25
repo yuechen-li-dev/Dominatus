@@ -121,6 +121,7 @@ public partial class TinyTownMain : Node2D
         return $"Tick {world.TicksProcessed}\n"
             + $"Agents {world.World.Agents.Count}\n"
             + $"Visuals {_artProfile.VisualMode} / {(VillagersUseFallbackVisuals() ? "fallback" : "sprites")}\n"
+            + $"Audio {world.AudioProviderId} gen {world.GeneratedBarkCount} play {world.PlayedBarkCount}\n"
             + "Need scale 0 calm -> 1 urgent\n"
             + $"Average need {averageNeed:0.00}\n"
             + $"Max need {maxNeed:0.00}\n"
@@ -200,6 +201,13 @@ public partial class TinyTownMain : Node2D
             _spriteCatalog.DestinationSpritesLoaded,
             _spriteCatalog.CorrectedFramesUsed,
             _spriteCatalog.MissingAssetWarnings,
+            world.AudioBridgeEnabled,
+            world.AudioProviderId,
+            world.GeneratedBarkCount,
+            world.PlayedBarkCount,
+            world.AudioArtifactsWritten,
+            world.AudioPlaybackFailures,
+            world.AudioArtifactDirectory,
             VillagersUseFallbackVisuals(),
             ResolveVillagerVisualMode().ToString(),
             ResolveDestinationVisualMode().ToString(),
@@ -221,6 +229,12 @@ public partial class TinyTownMain : Node2D
         var position = body.GlobalPosition;
         var navigation = _world is not null && _world.TryGetNavigationState(brain.AgentId, out var state)
             ? state
+            : default;
+        var bark = _world is not null && _world.TryGetBarkState(brain.AgentId, out var barkState)
+            ? barkState
+            : default;
+        var playback = _world is not null && _world.TryGetAudioPlaybackState(brain.AgentId, out var playbackState)
+            ? playbackState
             : default;
         var presentation = actor?.LastPresentation;
         var visualStatus = actor?.VisualStatus
@@ -265,6 +279,11 @@ public partial class TinyTownMain : Node2D
             bb.GetOrDefault(TinyTownKeys.JoyNeed, 0f),
             bb.GetOrDefault(TinyTownKeys.SocialNeed, 0f),
             ComputeMaxNeed(brain),
+            bark.LastBarkText ?? bb.GetOrDefault(TinyTownKeys.LastBarkText, string.Empty),
+            bark.LastBarkArtifactPath ?? bb.GetOrDefault(TinyTownKeys.LastBarkArtifactPath, string.Empty),
+            bark.BarkCount,
+            bark.BarkCooldownRemainingSeconds,
+            playback.IsPlaying || bb.GetOrDefault(TinyTownKeys.AudioPlaybackActive, false),
             OrderedObserved(_observedActivities, brain.VillagerName),
             OrderedObserved(_observedPhases, brain.VillagerName),
             OrderedActivityCounts(brain.VillagerName));
@@ -764,6 +783,13 @@ public sealed record TinyTownDebugSnapshot(
     int DestinationSpritesLoaded,
     int CorrectedFramesUsed,
     int MissingAssetWarnings,
+    bool AudioBridgeEnabled,
+    string AudioProviderId,
+    int GeneratedBarkCount,
+    int PlayedBarkCount,
+    int AudioArtifactsWritten,
+    int AudioPlaybackFailures,
+    string AudioArtifactDirectory,
     bool FallbackVisualsUsed,
     string VillagerVisualMode,
     string DestinationVisualMode,
@@ -810,6 +836,11 @@ public sealed record TinyTownVillagerSnapshot(
     float JoyNeed,
     float SocialNeed,
     float MaxNeed,
+    string LastBarkText,
+    string LastBarkArtifactPath,
+    int BarkCount,
+    float BarkCooldownRemainingSeconds,
+    bool AudioPlaybackActive,
     string[] ObservedActivities,
     string[] ObservedPhases,
     TinyTownActivityCount[] ActivityCounts);

@@ -66,7 +66,7 @@ public partial class VillagerActor : CharacterBody2D
         if (_labelRefreshAccumulator >= 0.10d || _lastLabelText.Length == 0)
         {
             _labelRefreshAccumulator = 0d;
-            _lastLabelText = $"{_villagerName}\n{ShortActivity(activity)} · {phase}\n{NeedsLine(presentation)}";
+            _lastLabelText = BuildStatusLabel(activity, phase, presentation);
             _label.Text = _lastLabelText;
             var labelSize = _label.GetMinimumSize();
             _statusPlate.Size = labelSize + (TinyTownLayout.VillagerLabelPadding * 2f);
@@ -167,6 +167,20 @@ public partial class VillagerActor : CharacterBody2D
         };
 
     private static int Pct(float value) => (int)MathF.Round(Math.Clamp(value, 0f, 1f) * 100f);
+
+    private string BuildStatusLabel(string activity, string phase, TinyTownVillagerPresentation presentation)
+    {
+        var label = $"{_villagerName}\n{ShortActivity(activity)} · {phase}\n{NeedsLine(presentation)}";
+        if (_brain is null)
+            return label;
+
+        var visibleUntil = _brain.Bb.GetOrDefault(TinyTownKeys.BarkVisibleUntil, 0f);
+        var barkText = _brain.Bb.GetOrDefault(TinyTownKeys.LastBarkText, string.Empty);
+        if (visibleUntil > _brain.World.Clock.Time && !string.IsNullOrWhiteSpace(barkText))
+            label += $"\n\"{barkText}\"";
+
+        return label;
+    }
 
     private TinyTownVillagerPresentation BuildPresentation(
         Dominatus.Core.Blackboard.Blackboard bb,

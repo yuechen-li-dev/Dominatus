@@ -148,7 +148,11 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         blackboard.Set(TinyTownKeys.CurrentTargetKind, "Home");
         blackboard.Set(TinyTownKeys.LastDecisionWinner, string.Empty);
         blackboard.Set(TinyTownKeys.LastActivity, string.Empty);
+        blackboard.Set(TinyTownKeys.LastBarkText, string.Empty);
+        blackboard.Set(TinyTownKeys.LastBarkArtifactPath, string.Empty);
         blackboard.Set(TinyTownKeys.LastDecisionScore, 0f);
+        blackboard.Set(TinyTownKeys.BarkVisibleUntil, 0f);
+        blackboard.Set(TinyTownKeys.AudioPlaybackActive, false);
         blackboard.Set(TinyTownKeys.Hunger, _profile.StartHungerNeed);
         blackboard.Set(TinyTownKeys.Thirst, _profile.StartThirstNeed);
         blackboard.Set(TinyTownKeys.RestNeed, _profile.StartRestNeed);
@@ -156,6 +160,7 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         blackboard.Set(TinyTownKeys.SocialNeed, _profile.StartSocialNeed);
         blackboard.Set(TinyTownKeys.WanderIndex, _profile.Index);
         blackboard.Set(TinyTownKeys.ActivityCycleIndex, 0);
+        blackboard.Set(TinyTownKeys.BarkCount, 0);
         blackboard.Set(TinyTownKeys.ActivityRemainingSeconds, 0f);
         blackboard.Set(TinyTownKeys.NextNeedTickAt, 0f);
         blackboard.Set(TinyTownKeys.WellCooldownSeconds, 0f);
@@ -620,12 +625,16 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
     {
         ctx.Bb.Set(TinyTownKeys.CurrentPhase, "Travel");
         ctx.Bb.Set(TinyTownKeys.CurrentActivity, intent.TravelLabel);
+        if (WorldNode is TinyTownWorld world)
+            world.ObserveVillagerAudio(this, intent.Id, intent.TravelLabel, "Travel");
     }
 
     private void EnterDwellPhase(AiCtx ctx, TinyTownIntent intent)
     {
         ctx.Bb.Set(TinyTownKeys.CurrentPhase, "Dwell");
         ctx.Bb.Set(TinyTownKeys.CurrentActivity, intent.DwellLabel);
+        if (WorldNode is TinyTownWorld world)
+            world.ObserveVillagerAudio(this, intent.Id, intent.DwellLabel, "Dwell");
     }
 
     private Vector2 ResolveDestinationOffset(BbKey<Vector2> destinationKey, IReadOnlyList<Vector2> offsets)

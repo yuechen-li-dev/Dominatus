@@ -1,6 +1,7 @@
 using Dominatus.Core.Runtime;
 using Dominatus.GodotConn;
 using Dominatus.GodotConn.Actuation;
+using Dominatus.GodotConn.Audio;
 using Godot;
 
 namespace Dominatus.GodotTinyTown;
@@ -18,13 +19,18 @@ public partial class TinyTownWorld : DominatusWorldNode
     private static readonly int[] TownNavigationPolygon = [0, 1, 2, 3];
 
     private readonly RegisteredNavigationMove2DActuationHandler _navigationMoveHandler;
+    private readonly RegisteredAudioArtifactPlaybackActuationHandler _audioPlaybackHandler;
+    private readonly TinyTownBarkService _barkService;
     private readonly Dictionary<AgentId, TinyTownVillagerBrain> _brains = new();
     private readonly Dictionary<string, CharacterBody2D> _villagerBodiesByName = new(StringComparer.Ordinal);
 
     public TinyTownWorld()
     {
         _navigationMoveHandler = new RegisteredNavigationMove2DActuationHandler(this);
+        _audioPlaybackHandler = new RegisteredAudioArtifactPlaybackActuationHandler(this);
+        _barkService = new TinyTownBarkService(this, _audioPlaybackHandler);
         Actuators.Register(_navigationMoveHandler);
+        Actuators.Register(_audioPlaybackHandler);
     }
 
     public override void _Ready()
@@ -53,6 +59,7 @@ public partial class TinyTownWorld : DominatusWorldNode
         _brains[brain.AgentId] = brain;
         _villagerBodiesByName[brain.VillagerName] = body;
         _navigationMoveHandler.Bind(brain.AgentId, body, navigationAgent);
+        _barkService.RegisterVillager(brain, ResolveOrCreateBarkPlayer(body));
     }
 
     public void UnregisterVillager(TinyTownVillagerBrain brain)
@@ -62,6 +69,7 @@ public partial class TinyTownWorld : DominatusWorldNode
         _brains.Remove(brain.AgentId);
         _villagerBodiesByName.Remove(brain.VillagerName);
         _navigationMoveHandler.Unbind(brain.AgentId);
+        _barkService.UnregisterVillager(brain);
     }
 
     public IReadOnlyCollection<TinyTownVillagerBrain> VillagerBrains => _brains.Values;
@@ -80,6 +88,29 @@ public partial class TinyTownWorld : DominatusWorldNode
 
     public bool TryGetNavigationState(AgentId agentId, out NavigationMove2DStateSnapshot snapshot)
         => _navigationMoveHandler.TryGetStateSnapshot(agentId, out snapshot);
+
+    public bool TryGetAudioPlaybackState(AgentId agentId, out AudioPlaybackStateSnapshot snapshot)
+        => _audioPlaybackHandler.TryGetStateSnapshot(agentId, out snapshot);
+
+    public bool TryGetBarkState(AgentId agentId, out TinyTownBarkSnapshot snapshot)
+        => _barkService.TryGetBarkSnapshot(agentId, out snapshot);
+
+    public bool AudioBridgeEnabled => _barkService.AudioBridgeEnabled;
+
+    public string AudioProviderId => _barkService.AudioProviderId;
+
+    public int GeneratedBarkCount => _barkService.GeneratedBarkCount;
+
+    public int PlayedBarkCount => _barkService.PlayedBarkCount;
+
+    public int AudioArtifactsWritten => _barkService.AudioArtifactsWritten;
+
+    public int AudioPlaybackFailures => _barkService.AudioPlaybackFailures;
+
+    public string AudioArtifactDirectory => _barkService.AudioArtifactDirectory;
+
+    public void ObserveVillagerAudio(TinyTownVillagerBrain brain, string intentId, string activity, string phase)
+        => _barkService.ObserveActivity(brain, intentId, activity, phase);
 
     private void EnsureNavigationRegion()
     {
@@ -101,5 +132,23 @@ public partial class TinyTownWorld : DominatusWorldNode
         navigationPolygon.SetVertices(TownNavigationVertices);
         navigationPolygon.AddPolygon(TownNavigationPolygon);
         region.NavigationPolygon = navigationPolygon;
+    }
+
+    private static AudioStreamPlayer2D ResolveOrCreateBarkPlayer(CharacterBody2D body)
+    {
+        var player = body.GetNodeOrNull<AudioStreamPlayer2D>("BarkPlayer");
+        if (player is not null)
+            return player;
+
+        player = new AudioStreamPlayer2D
+        {
+            Name = "BarkPlayer",
+            MaxDistance = 600f,
+            Attenuation = 1f,
+            VolumeDb = -4f
+        };
+
+        body.AddChild(player);
+        return player;
     }
 }
