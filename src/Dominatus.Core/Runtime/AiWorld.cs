@@ -38,6 +38,18 @@ public sealed class AiWorld
             _public[agent.Id] = new AgentSnapshot(agent.Id, Team: 0, Position: Vector3.Zero, IsAlive: true);
     }
 
+    public bool Remove(AiAgent agent)
+    {
+        if (agent is null) throw new ArgumentNullException(nameof(agent));
+
+        var removed = _agents.Remove(agent);
+        if (!removed)
+            return false;
+
+        _public.Remove(agent.Id);
+        return true;
+    }
+
     public IReadOnlyList<AiAgent> Agents => _agents;
 
     /// <summary>World/system sets public facts here (connector would update per-frame).</summary>

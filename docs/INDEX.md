@@ -67,6 +67,7 @@ This index separates user-facing documentation from release prep, development lo
 
 ## Game and simulation integration
 
+- [GodotConn M0 design](connectors/GODOTCONN_M0_DESIGN.md) and [quickstart](connectors/GODOTCONN_M0_QUICKSTART.md) — Godot-native world/agent node bridge, explicit world discovery, tick modes, mailbox bridge, and minimal 2D actuator helpers.
 - [StrideConn M0](user/STRIDECONN_M0.md) and [Stride Rust simulator M1](user/STRIDECONN_M1_RUST_SIMULATOR.md) — Stride connector and sample integration notes.
 - [MonoGameConn M0](user/MONOGAME_CONN.md) — thin MonoGame `GameComponent` update bridge, SpriteBatch blackboard key conventions, and debug overlay helpers.
 - [`samples/Dominatus.FishTank`](../samples/Dominatus.FishTank) — MonoGame fish tank simulation.
