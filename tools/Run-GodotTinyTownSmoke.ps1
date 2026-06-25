@@ -129,7 +129,10 @@ Assert-Condition (Test-Path $debugJsonPath) "Missing debug JSON artifact: $debug
 $snapshot = Get-Content $debugJsonPath -Raw | ConvertFrom-Json
 $villagers = @($snapshot.villagers)
 $movedVillagers = @($villagers | Where-Object { [double]$_.distanceFromInitialPosition -gt 8.0 })
-$activityChanges = @($villagers | Where-Object { $_.activity -ne "Arriving" -or $_.need -ne "Settling in" })
+$dwellVillagers = @($villagers | Where-Object { $_.phase -eq "Dwell" })
+$allObservedActivities = @($snapshot.observedActivities)
+$distinctObservedActivities = @($allObservedActivities | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+$villagersWithPhaseVariety = @($villagers | Where-Object { @($_.observedPhases).Count -ge 2 })
 $logText = Get-Content $logPath -Raw
 $logLines = Get-Content $logPath
 $errorLines = @($logLines | Where-Object { $_ -match '(^|\s)ERROR[: ]' -or $_ -match 'System\.ArgumentException:' })
@@ -138,7 +141,8 @@ $duplicateLines = @($logLines | Where-Object { $_ -match 'ScriptTypeBiMap' -or $
 Assert-Condition ([uint64]$snapshot.tickCount -gt 0) "TinyTown never ticked. tickCount=$($snapshot.tickCount)"
 Assert-Condition ([int]$snapshot.agentCount -eq 4) "Expected 4 agents, found $($snapshot.agentCount)"
 Assert-Condition ($movedVillagers.Count -ge 1) "Expected at least one villager to move more than 8 units."
-Assert-Condition ($activityChanges.Count -ge 1) "Expected at least one villager activity or need label to change."
+Assert-Condition ($distinctObservedActivities.Count -ge 2) "Expected at least two distinct activities across the smoke run."
+Assert-Condition (($dwellVillagers.Count -ge 1) -or ($villagersWithPhaseVariety.Count -ge 1)) "Expected at least one villager to enter a non-travel dwell phase."
 Assert-Condition ($duplicateLines.Count -eq 0) "Detected duplicate ScriptTypeBiMap registration evidence in run.log"
 Assert-Condition ($errorLines.Count -eq 0) "Detected unexpected ERROR lines in run.log"
 

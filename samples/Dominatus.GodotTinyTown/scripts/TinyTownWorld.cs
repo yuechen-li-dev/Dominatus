@@ -9,6 +9,7 @@ public partial class TinyTownWorld : DominatusWorldNode
 {
     private readonly RegisteredMove2DActuationHandler _moveHandler;
     private readonly Dictionary<AgentId, TinyTownVillagerBrain> _brains = new();
+    private readonly Dictionary<string, CharacterBody2D> _villagerBodiesByName = new(StringComparer.Ordinal);
 
     public TinyTownWorld()
     {
@@ -37,6 +38,7 @@ public partial class TinyTownWorld : DominatusWorldNode
         ArgumentNullException.ThrowIfNull(body);
 
         _brains[brain.AgentId] = brain;
+        _villagerBodiesByName[brain.VillagerName] = body;
         _moveHandler.Bind(brain.AgentId, body);
     }
 
@@ -45,8 +47,21 @@ public partial class TinyTownWorld : DominatusWorldNode
         ArgumentNullException.ThrowIfNull(brain);
 
         _brains.Remove(brain.AgentId);
+        _villagerBodiesByName.Remove(brain.VillagerName);
         _moveHandler.Unbind(brain.AgentId);
     }
 
     public IReadOnlyCollection<TinyTownVillagerBrain> VillagerBrains => _brains.Values;
+
+    public bool TryGetVillagerPosition(string villagerName, out Vector2 position)
+    {
+        if (_villagerBodiesByName.TryGetValue(villagerName, out var body))
+        {
+            position = body.GlobalPosition;
+            return true;
+        }
+
+        position = Vector2.Zero;
+        return false;
+    }
 }

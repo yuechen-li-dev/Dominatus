@@ -7,6 +7,8 @@ namespace Dominatus.GodotTinyTown;
 
 public partial class TinyTownMain : Node2D
 {
+    private static readonly LabelSettings DebugLabelSettings = CreateDebugLabelSettings();
+
     private const string SmokeEnv = "DOMINATUS_GODOT_SMOKE";
     private const string SmokeFramesEnv = "DOMINATUS_GODOT_SMOKE_FRAMES";
     private const string SmokeArtifactsEnv = "DOMINATUS_GODOT_SMOKE_ARTIFACTS";
@@ -17,6 +19,8 @@ public partial class TinyTownMain : Node2D
     private SmokeOptions? _smoke;
     private bool _smokeCompleted;
     private ulong _smokePhysicsFrames;
+    private readonly Dictionary<string, HashSet<string>> _observedActivities = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _observedPhases = new(StringComparer.Ordinal);
 
     public override void _Ready()
     {
@@ -26,6 +30,7 @@ public partial class TinyTownMain : Node2D
         _debugLabel = GetNode<Label>("DebugLabel");
         _villagersRoot = GetNode<Node>("DominatusWorld/Villagers");
         _smoke = SmokeOptions.TryCreate();
+        _debugLabel.LabelSettings = DebugLabelSettings;
 
         if (_smoke is null && DisplayServer.GetName().Contains("headless", StringComparison.OrdinalIgnoreCase))
         {
@@ -39,6 +44,7 @@ public partial class TinyTownMain : Node2D
         if (_world is null || _debugLabel is null || _villagersRoot is null)
             return;
 
+        RecordObservedBehavior(_world);
         _debugLabel.Text = BuildDebugText(_world, _villagersRoot);
     }
 
@@ -60,6 +66,7 @@ public partial class TinyTownMain : Node2D
         var builder = new StringBuilder();
         builder.AppendLine($"DominatusWorld ticks: {world.TicksProcessed}");
         builder.AppendLine($"Agents: {world.World.Agents.Count}");
+        builder.AppendLine("Need scale: 0 = calm, 1 = urgent");
 
         foreach (var child in villagersRoot.GetChildren())
         {
@@ -104,6 +111,7 @@ public partial class TinyTownMain : Node2D
             screenshotSaved,
             screenshotPath,
             screenshotError,
+            FlattenObserved(_observedActivities),
             villagers);
     }
 
@@ -117,8 +125,15 @@ public partial class TinyTownMain : Node2D
 
         return new TinyTownVillagerSnapshot(
             brain.VillagerName,
+            bb.GetOrDefault(TinyTownKeys.PersonalityName, "Villager"),
             bb.GetOrDefault(TinyTownKeys.CurrentActivity, "Idle"),
+            bb.GetOrDefault(TinyTownKeys.CurrentIntent, string.Empty),
+            bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose"),
             bb.GetOrDefault(TinyTownKeys.CurrentNeed, "Unknown"),
+            bb.GetOrDefault(TinyTownKeys.CurrentTargetKind, "None"),
+            bb.GetOrDefault(TinyTownKeys.LastDecisionWinner, string.Empty),
+            bb.GetOrDefault(TinyTownKeys.LastDecisionScore, 0f),
+            bb.GetOrDefault(TinyTownKeys.ActivityRemainingSeconds, 0f),
             ToVec2(position),
             ToVec2(initialPosition),
             ToVec2(bb.GetOrDefault(TinyTownKeys.HomePosition, Vector2.Zero)),
@@ -126,9 +141,44 @@ public partial class TinyTownMain : Node2D
             position.DistanceTo(initialPosition),
             bb.GetOrDefault(TinyTownKeys.Hunger, 0f),
             bb.GetOrDefault(TinyTownKeys.Thirst, 0f),
-            bb.GetOrDefault(TinyTownKeys.Energy, 0f),
-            bb.GetOrDefault(TinyTownKeys.GardenJoy, 0f));
+            bb.GetOrDefault(TinyTownKeys.RestNeed, 0f),
+            bb.GetOrDefault(TinyTownKeys.JoyNeed, 0f),
+            bb.GetOrDefault(TinyTownKeys.SocialNeed, 0f),
+            OrderedObserved(_observedActivities, brain.VillagerName),
+            OrderedObserved(_observedPhases, brain.VillagerName));
     }
+
+    private void RecordObservedBehavior(TinyTownWorld world)
+    {
+        foreach (var brain in world.VillagerBrains)
+        {
+            var bb = brain.Bb;
+            AddObserved(_observedActivities, brain.VillagerName, bb.GetOrDefault(TinyTownKeys.CurrentActivity, "Idle"));
+            AddObserved(_observedPhases, brain.VillagerName, bb.GetOrDefault(TinyTownKeys.CurrentPhase, "Choose"));
+        }
+    }
+
+    private static void AddObserved(Dictionary<string, HashSet<string>> map, string villagerName, string value)
+    {
+        if (!map.TryGetValue(villagerName, out var set))
+        {
+            set = new HashSet<string>(StringComparer.Ordinal);
+            map[villagerName] = set;
+        }
+
+        if (!string.IsNullOrWhiteSpace(value))
+            set.Add(value);
+    }
+
+    private static string[] OrderedObserved(Dictionary<string, HashSet<string>> map, string villagerName)
+    {
+        return map.TryGetValue(villagerName, out var set)
+            ? set.OrderBy(x => x, StringComparer.Ordinal).ToArray()
+            : [];
+    }
+
+    private static string[] FlattenObserved(Dictionary<string, HashSet<string>> map)
+        => map.Values.SelectMany(x => x).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToArray();
 
     private static TinyTownVec2 ToVec2(Vector2 value) => new(value.X, value.Y);
 
@@ -139,6 +189,17 @@ public partial class TinyTownMain : Node2D
             return value.AsString();
 
         return Engine.GetVersionInfo().ToString();
+    }
+
+    private static LabelSettings CreateDebugLabelSettings()
+    {
+        return new LabelSettings
+        {
+            FontSize = 13,
+            OutlineSize = 2,
+            FontColor = new Color("201a13"),
+            OutlineColor = new Color(1f, 1f, 1f, 0.88f)
+        };
     }
 
     private bool TrySaveScreenshot(string path, out string? error)
@@ -220,12 +281,20 @@ public sealed record TinyTownDebugSnapshot(
     bool ScreenshotSaved,
     string ScreenshotPath,
     string? ScreenshotError,
+    string[] ObservedActivities,
     TinyTownVillagerSnapshot[] Villagers);
 
 public sealed record TinyTownVillagerSnapshot(
     string Name,
+    string Personality,
     string Activity,
+    string Intent,
+    string Phase,
     string Need,
+    string TargetKind,
+    string LastDecisionWinner,
+    float LastDecisionScore,
+    float ActivityRemainingSeconds,
     TinyTownVec2 Position,
     TinyTownVec2 InitialPosition,
     TinyTownVec2 HomePosition,
@@ -233,8 +302,11 @@ public sealed record TinyTownVillagerSnapshot(
     float DistanceFromInitialPosition,
     float Hunger,
     float Thirst,
-    float Energy,
-    float GardenJoy);
+    float RestNeed,
+    float JoyNeed,
+    float SocialNeed,
+    string[] ObservedActivities,
+    string[] ObservedPhases);
 
 public sealed record TinyTownVec2(float X, float Y);
 
