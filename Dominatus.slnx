@@ -53,4 +53,6 @@
   <Project Path="tests/Dominatus.Actuators.Payments.Tests/Dominatus.Actuators.Payments.Tests.csproj" />
   <Project Path="src/Dominatus.Actuators.Payments.Stripe/Dominatus.Actuators.Payments.Stripe.csproj" />
   <Project Path="tests/Dominatus.Actuators.Payments.Stripe.Tests/Dominatus.Actuators.Payments.Stripe.Tests.csproj" />
+  <Project Path="src/Dominatus.Actuators.Payments.PayPal/Dominatus.Actuators.Payments.PayPal.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Payments.PayPal.Tests/Dominatus.Actuators.Payments.PayPal.Tests.csproj" />
 </Solution>
