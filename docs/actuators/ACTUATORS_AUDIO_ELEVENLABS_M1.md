@@ -22,6 +22,8 @@ Dominatus uses direct `HttpClient` integration rather than an SDK dependency bec
 - Sound effects, even though ElevenLabs has sound-effect APIs.
 - Voice cloning, voice design, voice conversion, speech-to-text, music, streaming, timestamps/alignment, webhooks, playback, hidden watermarking, or hidden fingerprinting.
 
+Dominatus intentionally supports only basic provider-voice TTS for ElevenLabs. Reference-audio voice cloning and local/open style voice conditioning are handled separately through the M2 local/open provider seam rather than this proprietary-provider adapter.
+
 `GenerateSoundEffectAsync` returns a clear unsupported-feature failure via `NotSupportedException`.
 
 ## Options
@@ -76,6 +78,8 @@ Input text is not stored by default. Set `AudioMetadataPolicy.IncludeInputTextIn
 ## Voice rights
 
 Dominatus routes provider voice ids and records open metadata. The application layer owns voice selection policy, consent and rights records, UX disclosure, asset-library organization, and playback. M1 does not clone or design voices. `VoiceSourceKind.ClonedWithConsent` can be recorded if the caller already has a provider voice id, but cloning itself is outside this adapter.
+
+If a caller supplies `VoiceConditioningRef.ReferenceAudioWithConsent` or another non-provider conditioning mode, `ElevenLabsAudioProvider` rejects the command with a clear unsupported-feature failure: Dominatus ElevenLabs support is provider-voice-id only.
 
 ## Optional live smoke tests
 

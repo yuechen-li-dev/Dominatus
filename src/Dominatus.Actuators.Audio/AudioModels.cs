@@ -4,6 +4,7 @@ namespace Dominatus.Actuators.Audio;
 
 public enum AudioFormat { Wav, Mp3, Ogg, Flac, Unknown }
 public enum VoiceSourceKind { BuiltIn, Licensed, UserProvided, ClonedWithConsent, SyntheticDescription, Unknown }
+public enum VoiceConditioningKind { None, ProviderVoiceId, ReferenceAudioWithConsent, TextDescription, LocalSpeakerEmbedding, Unknown }
 
 public static class AudioMimeTypes
 {
@@ -37,11 +38,32 @@ public sealed record VoiceRef
     public string? ProviderId { get; init; }
 }
 
+public sealed record VoiceConditioningRef
+{
+    public VoiceConditioningKind Kind { get; init; } = VoiceConditioningKind.None;
+    public string? ReferenceAudioPath { get; init; }
+    public string? Description { get; init; }
+    public string? Language { get; init; }
+    public string? ConsentRef { get; init; }
+    public string? RightsRef { get; init; }
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+}
+
+public sealed record VoiceConsentMetadata
+{
+    public string? ConsentRef { get; init; }
+    public string? RightsRef { get; init; }
+    public string? SourceDescription { get; init; }
+    public bool CallerAssertsConsent { get; init; }
+}
+
 public sealed record AudioGenerationMetadata
 {
     public required string ProviderId { get; init; }
     public string? ModelId { get; init; }
     public VoiceRef? Voice { get; init; }
+    public VoiceConditioningRef? VoiceConditioning { get; init; }
+    public VoiceConsentMetadata? VoiceConsent { get; init; }
     public string? CommandIdempotencyKey { get; init; }
     public string? TextSha256 { get; init; }
     public DateTimeOffset GeneratedAt { get; init; }
@@ -56,6 +78,8 @@ public sealed record AudioMetadataPolicy
     public bool WriteSidecarJson { get; init; } = true;
     public bool IncludeInputTextInMetadata { get; init; } = false;
     public bool IncludeTextHash { get; init; } = true;
+    public bool IncludeVoiceReferencePathInMetadata { get; init; } = false;
+    public bool IncludeVoiceConsentMetadata { get; init; } = true;
     public bool EmbedOpenFileMetadata { get; init; } = false;
 }
 
@@ -65,6 +89,8 @@ public sealed record TextToSpeechCommand : IActuationCommand
     public required string IdempotencyKey { get; init; }
     public required string Text { get; init; }
     public VoiceRef? Voice { get; init; }
+    public VoiceConditioningRef? VoiceConditioning { get; init; }
+    public VoiceConsentMetadata? VoiceConsent { get; init; }
     public string? ModelId { get; init; }
     public required string OutputPath { get; init; }
     public AudioFormat PreferredFormat { get; init; } = AudioFormat.Wav;

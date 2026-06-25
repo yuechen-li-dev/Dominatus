@@ -11,7 +11,9 @@ public sealed class AudioTests
     [Fact] public void TextToSpeechCommand_RequiresIdempotencyKey() => Assert.Throws<ArgumentException>(() => AudioValidation.Validate(Tts() with { IdempotencyKey = "" }));
     [Fact] public void TextToSpeechCommand_RequiresText() => Assert.Throws<ArgumentException>(() => AudioValidation.Validate(Tts() with { Text = "" }));
     [Fact] public void TextToSpeechCommand_RequiresOutputPath() => Assert.Throws<ArgumentException>(() => AudioValidation.Validate(Tts() with { OutputPath = "" }));
-    [Fact] public void MetadataPolicy_DefaultWritesSidecarButNotInputText() { var p = new AudioMetadataPolicy(); Assert.True(p.WriteSidecarJson); Assert.False(p.IncludeInputTextInMetadata); Assert.True(p.IncludeTextHash); Assert.False(p.EmbedOpenFileMetadata); }
+    [Fact] public void VoiceConditioning_ReferenceAudioRequiresReferencePath() => Assert.Throws<ArgumentException>(() => AudioValidation.Validate(Tts() with { VoiceConditioning = new VoiceConditioningRef { Kind = VoiceConditioningKind.ReferenceAudioWithConsent }, VoiceConsent = Consent() }));
+    [Fact] public void VoiceConditioning_ReferenceAudioRequiresConsentMetadata_WhenProviderRequiresIt() => Assert.Throws<ArgumentException>(() => AudioValidation.Validate(Tts() with { VoiceConditioning = RefAudioConditioning() }));
+    [Fact] public void MetadataPolicy_DefaultWritesSidecarButNotInputText() { var p = new AudioMetadataPolicy(); Assert.True(p.WriteSidecarJson); Assert.False(p.IncludeInputTextInMetadata); Assert.True(p.IncludeTextHash); Assert.False(p.IncludeVoiceReferencePathInMetadata); Assert.True(p.IncludeVoiceConsentMetadata); Assert.False(p.EmbedOpenFileMetadata); }
     [Fact] public async Task FakeAudioProvider_TextToSpeech_WritesValidWav() { var res = await Provider().TextToSpeechAsync(Tts(), default); AssertWav(res.Artifact.Path); }
     [Fact] public async Task FakeAudioProvider_TextToSpeech_WritesSidecarMetadata() { var res = await Provider().TextToSpeechAsync(Tts(), default); Assert.True(File.Exists(res.Artifact.MetadataPath)); }
     [Fact] public async Task FakeAudioProvider_TextToSpeech_MetadataIncludesTextHashButNotTextByDefault() { var res = await Provider().TextToSpeechAsync(Tts() with { Text = "secret words" }, default); var json = File.ReadAllText(res.Artifact.MetadataPath!); Assert.Contains("textSha256", json); Assert.DoesNotContain("secret words", json); }
@@ -24,14 +26,122 @@ public sealed class AudioTests
     [Fact] public void AudioActuationHandler_UnknownProviderFailsSafely() { var (host, ctx) = Ctx(); var res = host.Dispatch(ctx, Tts() with { ProviderId = "missing" }); Assert.False(res.Ok); Assert.Contains("Unknown audio provider", res.Error); }
     [Fact] public void AudioErrors_DoNotLeakSecrets() { var error = AudioActuationHandler.Sanitize(new InvalidOperationException("bad sk-secret api_key token")); Assert.DoesNotContain("sk-secret", error); Assert.DoesNotContain("api_key", error); }
     [Fact] public async Task NoHiddenFingerprinting_MetadataStatesNoDominatusHiddenWatermark() { var res = await Provider().TextToSpeechAsync(Tts(), default); using var doc = JsonDocument.Parse(File.ReadAllText(res.Artifact.MetadataPath!)); Assert.False(doc.RootElement.GetProperty("hiddenWatermarkAddedByDominatus").GetBoolean()); }
+    [Fact] public async Task VoiceConsentMetadata_CallerAssertionRecordedButNotVerified()
+    {
+        var res = await Provider().TextToSpeechAsync(Tts() with { VoiceConditioning = RefAudioConditioning(), VoiceConsent = Consent() }, default);
+        using var doc = JsonDocument.Parse(File.ReadAllText(res.Artifact.MetadataPath!));
+        Assert.True(doc.RootElement.GetProperty("voiceConsent").GetProperty("callerAssertsConsent").GetBoolean());
+        Assert.Equal("Recorded from narrated clip.", doc.RootElement.GetProperty("voiceConsent").GetProperty("sourceDescription").GetString());
+    }
+    [Fact] public async Task AudioSidecar_DoesNotIncludeReferenceAudioPathByDefault()
+    {
+        var res = await Provider().TextToSpeechAsync(Tts() with { VoiceConditioning = RefAudioConditioning(), VoiceConsent = Consent() }, default);
+        using var doc = JsonDocument.Parse(File.ReadAllText(res.Artifact.MetadataPath!));
+        var conditioning = doc.RootElement.GetProperty("voiceConditioning");
+        Assert.Equal("ReferenceAudioWithConsent", conditioning.GetProperty("kind").GetString());
+        Assert.Equal("clone.wav", conditioning.GetProperty("referenceAudioFileName").GetString());
+        Assert.True(conditioning.TryGetProperty("referenceAudioPath", out var pathNode));
+        Assert.Equal(JsonValueKind.Null, pathNode.ValueKind);
+    }
+    [Fact] public async Task AudioSidecar_CanIncludeReferenceAudioPathWhenPolicyAllows()
+    {
+        var cmd = Tts() with
+        {
+            VoiceConditioning = RefAudioConditioning(),
+            VoiceConsent = Consent(),
+            MetadataPolicy = new AudioMetadataPolicy { IncludeVoiceReferencePathInMetadata = true }
+        };
+        var res = await Provider().TextToSpeechAsync(cmd, default);
+        using var doc = JsonDocument.Parse(File.ReadAllText(res.Artifact.MetadataPath!));
+        Assert.Equal("C:\\voices\\clone.wav", doc.RootElement.GetProperty("voiceConditioning").GetProperty("referenceAudioPath").GetString());
+    }
     [Fact] public void Package_HasNoElevenLabsOpenAiQwenProviderDependenciesInM0() { var csproj = File.ReadAllText(Path.Combine(Root(), "src/Dominatus.Actuators.Audio/Dominatus.Actuators.Audio.csproj")); Assert.DoesNotContain("Eleven", csproj); Assert.DoesNotContain("OpenAI", csproj); Assert.DoesNotContain("Qwen", csproj); }
     private static FakeAudioProvider Provider() => new();
     private static string Tmp(string name) => Path.Combine(Path.GetTempPath(), "dominatus-audio-tests", Guid.NewGuid().ToString("N"), name);
     private static TextToSpeechCommand Tts() => new() { ProviderId = "fake", IdempotencyKey = "key", Text = "hello", OutputPath = Tmp("out.wav") };
+    private static VoiceConditioningRef RefAudioConditioning() => new() { Kind = VoiceConditioningKind.ReferenceAudioWithConsent, ReferenceAudioPath = "C:\\voices\\clone.wav", Language = "en", ConsentRef = "consent-1" };
+    private static VoiceConsentMetadata Consent() => new() { ConsentRef = "consent-1", RightsRef = "rights-1", SourceDescription = "Recorded from narrated clip.", CallerAssertsConsent = true };
     private static GenerateSoundEffectCommand Sfx() => new() { ProviderId = "fake", IdempotencyKey = "sfx", Prompt = "zap", OutputPath = Tmp("sfx.wav"), DurationSeconds = .25 };
     private static void AssertWav(string path) { var b = File.ReadAllBytes(path); Assert.Equal((byte)'R', b[0]); Assert.Equal((byte)'I', b[1]); Assert.Equal((byte)'F', b[2]); Assert.Equal((byte)'F', b[3]); Assert.Equal((byte)'W', b[8]); Assert.Equal((byte)'A', b[9]); Assert.Equal((byte)'V', b[10]); Assert.Equal((byte)'E', b[11]); }
     private static (ActuatorHost, AiCtx) Ctx() { var host = new ActuatorHost().RegisterAudioActuators(new AudioProviderRegistry().Register(new FakeAudioProvider())); var world = new AiWorld(host); var agent = new AiAgent(new HfsmInstance(new HfsmGraph { Root = "root" })); world.Add(agent); return (host, new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host, new LiveWorldBb(world.Bb))); }
     private static string Root() { var d = new DirectoryInfo(AppContext.BaseDirectory); while (d is not null && !File.Exists(Path.Combine(d.FullName, "Dominatus.slnx"))) d = d.Parent; return d!.FullName; }
+}
+
+public sealed class LocalTtsAudioProviderTests
+{
+    [Fact]
+    public async Task LocalTtsProvider_TextToSpeech_UsesBackend()
+    {
+        var backend = new RecordingLocalTtsBackend();
+        var provider = new LocalTtsAudioProvider(new LocalTtsAudioProviderOptions(), backend);
+        var cmd = Tts();
+        var res = await provider.TextToSpeechAsync(cmd, default);
+        Assert.Equal(cmd.Text, backend.LastRequest!.Text);
+        Assert.Equal(cmd.OutputPath, res.Artifact.Path);
+    }
+
+    [Fact]
+    public async Task LocalTtsProvider_ReferenceAudioRejected_WhenCloningDisabled()
+    {
+        var provider = new LocalTtsAudioProvider(new LocalTtsAudioProviderOptions { AllowReferenceAudioCloning = false }, new FakeLocalTtsBackend());
+        await Assert.ThrowsAsync<NotSupportedException>(async () => await provider.TextToSpeechAsync(Tts() with { VoiceConditioning = RefAudioConditioning(), VoiceConsent = Consent() }, default));
+    }
+
+    [Fact]
+    public async Task LocalTtsProvider_ReferenceAudioAccepted_WhenEnabledAndConsentProvided()
+    {
+        var provider = new LocalTtsAudioProvider(new LocalTtsAudioProviderOptions { AllowReferenceAudioCloning = true }, new FakeLocalTtsBackend());
+        var res = await provider.TextToSpeechAsync(Tts() with { VoiceConditioning = RefAudioConditioning(), VoiceConsent = Consent() }, default);
+        Assert.Equal(AudioFormat.Wav, res.Artifact.Format);
+        Assert.True(File.Exists(res.Artifact.Path));
+    }
+
+    [Fact]
+    public async Task LocalTtsProvider_WritesSidecarWithConsentMetadata()
+    {
+        var provider = new LocalTtsAudioProvider(new LocalTtsAudioProviderOptions { AllowReferenceAudioCloning = true }, new FakeLocalTtsBackend());
+        var res = await provider.TextToSpeechAsync(Tts() with { VoiceConditioning = RefAudioConditioning(), VoiceConsent = Consent() }, default);
+        var json = File.ReadAllText(res.Artifact.MetadataPath!);
+        Assert.Contains("voiceConsent", json);
+        Assert.Contains("rights-1", json);
+    }
+
+    [Fact]
+    public async Task LocalTtsProvider_GenerateSoundEffectUnsupported()
+    {
+        var provider = new LocalTtsAudioProvider(new LocalTtsAudioProviderOptions(), new FakeLocalTtsBackend());
+        await Assert.ThrowsAsync<NotSupportedException>(async () => await provider.GenerateSoundEffectAsync(new GenerateSoundEffectCommand { ProviderId = "local-tts", IdempotencyKey = "sfx", Prompt = "zap", OutputPath = Tmp("sfx.wav") }, default));
+    }
+
+    [Fact]
+    public async Task NoHiddenFingerprinting_StillFalseForLocalTts()
+    {
+        var provider = new LocalTtsAudioProvider(new LocalTtsAudioProviderOptions { AllowReferenceAudioCloning = true }, new FakeLocalTtsBackend());
+        var res = await provider.TextToSpeechAsync(Tts() with { VoiceConditioning = RefAudioConditioning(), VoiceConsent = Consent() }, default);
+        using var doc = JsonDocument.Parse(File.ReadAllText(res.Artifact.MetadataPath!));
+        Assert.False(doc.RootElement.GetProperty("hiddenWatermarkAddedByDominatus").GetBoolean());
+    }
+
+    private static TextToSpeechCommand Tts() => new() { ProviderId = "local-tts", IdempotencyKey = "local-key", Text = "hello local", OutputPath = Tmp("out.wav") };
+    private static VoiceConditioningRef RefAudioConditioning() => new() { Kind = VoiceConditioningKind.ReferenceAudioWithConsent, ReferenceAudioPath = "C:\\voices\\clone.wav", Language = "en", ConsentRef = "consent-1" };
+    private static VoiceConsentMetadata Consent() => new() { ConsentRef = "consent-1", RightsRef = "rights-1", SourceDescription = "Recorded from narrated clip.", CallerAssertsConsent = true };
+    private static string Tmp(string name) => Path.Combine(Path.GetTempPath(), "dominatus-local-tts-tests", Guid.NewGuid().ToString("N"), name);
+
+    private sealed class RecordingLocalTtsBackend : ILocalTtsBackend
+    {
+        public LocalTtsSynthesisRequest? LastRequest { get; private set; }
+
+        public ValueTask<LocalTtsSynthesisResult> SynthesizeAsync(LocalTtsSynthesisRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return new(new LocalTtsSynthesisResult
+            {
+                Artifact = new AudioArtifact { Path = request.OutputPath, Format = AudioFormat.Wav, MimeType = AudioMimeTypes.Wav, SampleRateHz = 24000, Channels = 1, SizeBytes = 0 },
+                ProviderRequestId = "backend-1",
+                ProviderMetadata = new Dictionary<string, string> { ["backend"] = "recording" }
+            });
+        }
+    }
 }
 
 public sealed class ElevenLabsAudioProviderTests
@@ -46,6 +156,8 @@ public sealed class ElevenLabsAudioProviderTests
     [Fact] public async Task ElevenLabsProvider_TextToSpeech_DoesNotStoreInputTextByDefault() { var res = await Provider(new()).TextToSpeechAsync(Tts() with { Text = "secret input text" }, default); Assert.DoesNotContain("secret input text", File.ReadAllText(res.Artifact.MetadataPath!)); }
     [Fact] public async Task ElevenLabsProvider_TextToSpeech_CanStoreInputTextWhenPolicyAllows() { var res = await Provider(new()).TextToSpeechAsync(Tts() with { Text = "ok to store", MetadataPolicy = new() { IncludeInputTextInMetadata = true } }, default); Assert.Contains("ok to store", File.ReadAllText(res.Artifact.MetadataPath!)); }
     [Fact] public async Task ElevenLabsProvider_TextToSpeech_RejectsOutputExtensionMismatch() => await Assert.ThrowsAsync<ArgumentException>(async () => await Provider(new()).TextToSpeechAsync(Tts() with { OutputPath = Tmp("out.wav"), PreferredFormat = AudioFormat.Mp3 }, default));
+    [Fact] public async Task ElevenLabsProvider_RejectsReferenceAudioVoiceConditioning()
+        => await Assert.ThrowsAsync<NotSupportedException>(async () => await Provider(new()).TextToSpeechAsync(Tts() with { VoiceConditioning = new VoiceConditioningRef { Kind = VoiceConditioningKind.ReferenceAudioWithConsent, ReferenceAudioPath = "C:\\voices\\clone.wav", ConsentRef = "consent-1" }, VoiceConsent = new VoiceConsentMetadata { ConsentRef = "consent-1", SourceDescription = "Recorded with permission.", CallerAssertsConsent = true } }, default));
     [Fact] public async Task ElevenLabsProvider_TextToSpeech_RedactsApiKeyInErrors() { var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Provider(new FakeElevenLabsClient { Exception = new ElevenLabsApiException(System.Net.HttpStatusCode.BadRequest, "/v1/text-to-speech/{voice_id}", "req", "bad xi-api-key: super-secret token abc") }, Options() with { IncludeRawProviderErrors = true }).TextToSpeechAsync(Tts(), default)); Assert.DoesNotContain("super-secret", ex.Message); Assert.DoesNotContain("abc", ex.Message); }
     [Fact] public async Task ElevenLabsProvider_GenerateSoundEffect_ReturnsUnsupported() => await Assert.ThrowsAsync<NotSupportedException>(async () => await Provider(new()).GenerateSoundEffectAsync(new GenerateSoundEffectCommand { ProviderId = "elevenlabs", IdempotencyKey = "sfx", Prompt = "zap", OutputPath = Tmp("sfx.wav") }, default));
     [Fact] public void ElevenLabsOutputFormatMapper_InfersMp3() { var info = ElevenLabsOutputFormatMapper.Infer("mp3_44100_128"); Assert.Equal(AudioFormat.Mp3, info.Format); Assert.Equal(".mp3", info.Extension); Assert.Equal(44100, info.SampleRateHz); }

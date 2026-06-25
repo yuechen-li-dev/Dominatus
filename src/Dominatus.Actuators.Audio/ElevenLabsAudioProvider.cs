@@ -2,8 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace Dominatus.Actuators.Audio;
@@ -42,6 +40,7 @@ public sealed class ElevenLabsAudioProvider : IAudioProvider
     {
         AudioValidation.Validate(command);
         if (command.Voice is null) throw new ArgumentException("ElevenLabs text-to-speech requires a voice with a provider voice id.", nameof(command));
+        RejectUnsupportedConditioning(command);
         var outputFormat = command.Metadata is not null && command.Metadata.TryGetValue(OutputFormatMetadataKey, out var f) && !string.IsNullOrWhiteSpace(f) ? f : _options.DefaultOutputFormat;
         var enableLogging = command.Metadata is not null && command.Metadata.TryGetValue(EnableLoggingMetadataKey, out var e) && bool.TryParse(e, out var b) ? b : _options.EnableLogging;
         var info = ElevenLabsOutputFormatMapper.Infer(outputFormat);
@@ -63,22 +62,31 @@ public sealed class ElevenLabsAudioProvider : IAudioProvider
                 ["enableLogging"] = enableLogging.ToString().ToLowerInvariant()
             };
             if (!string.IsNullOrWhiteSpace(response.RequestId)) metadataMap["providerRequestId"] = response.RequestId!;
-            var metadata = new AudioGenerationMetadata { ProviderId = ProviderId, ModelId = modelId, Voice = command.Voice, CommandIdempotencyKey = command.IdempotencyKey, TextSha256 = command.MetadataPolicy.IncludeTextHash ? Sha256(command.Text) : null, GeneratedAt = DateTimeOffset.UtcNow, DominatusPackage = "Dominatus.Actuators.Audio", Metadata = metadataMap };
-            if (command.MetadataPolicy.WriteSidecarJson) artifact = artifact with { MetadataPath = WriteSidecar(artifact, metadata, command.Text, command.MetadataPolicy) };
+            var metadata = new AudioGenerationMetadata { ProviderId = ProviderId, ModelId = modelId, Voice = command.Voice, VoiceConditioning = command.VoiceConditioning, VoiceConsent = command.VoiceConsent, CommandIdempotencyKey = command.IdempotencyKey, TextSha256 = command.MetadataPolicy.IncludeTextHash ? Sha256(command.Text) : null, GeneratedAt = DateTimeOffset.UtcNow, DominatusPackage = "Dominatus.Actuators.Audio", Metadata = metadataMap };
+            if (command.MetadataPolicy.WriteSidecarJson) artifact = artifact with { MetadataPath = AudioSidecarWriter.WriteSidecar(artifact, metadata, command.Text, command.MetadataPolicy) };
             return new TextToSpeechResult { ProviderId = ProviderId, Artifact = artifact, Metadata = metadata, ProviderRequestId = response.RequestId };
         }
         catch (ElevenLabsApiException ex) { throw new InvalidOperationException(ElevenLabsErrorSanitizer.Sanitize(ex, _options), ex); }
         catch (HttpRequestException ex) { throw new InvalidOperationException(ElevenLabsErrorSanitizer.Sanitize(ex.Message, _options), ex); }
     }
     public ValueTask<GenerateSoundEffectResult> GenerateSoundEffectAsync(GenerateSoundEffectCommand command, CancellationToken cancellationToken) => throw new NotSupportedException("ElevenLabs M1 supports TextToSpeechCommand only; sound effects are not implemented by this provider.");
-    private static string WriteSidecar(AudioArtifact artifact, AudioGenerationMetadata metadata, string inputText, AudioMetadataPolicy policy)
+
+    private static void RejectUnsupportedConditioning(TextToSpeechCommand command)
     {
-        var path = artifact.Path + ".audio.json";
-        var sidecar = new Dictionary<string, object?> { ["providerId"] = metadata.ProviderId, ["modelId"] = metadata.ModelId, ["voice"] = metadata.Voice, ["generatedAt"] = metadata.GeneratedAt, ["commandIdempotencyKey"] = metadata.CommandIdempotencyKey, ["textSha256"] = policy.IncludeTextHash ? metadata.TextSha256 : null, ["outputPath"] = artifact.Path, ["format"] = artifact.Format.ToString(), ["mimeType"] = artifact.MimeType, ["sampleRateHz"] = artifact.SampleRateHz, ["channels"] = artifact.Channels, ["sizeBytes"] = artifact.SizeBytes, ["metadata"] = metadata.Metadata, ["hiddenWatermarkAddedByDominatus"] = false, ["providerWatermarkBehavior"] = "unknown" };
-        if (policy.IncludeInputTextInMetadata) sidecar["inputText"] = inputText;
-        File.WriteAllText(path, JsonSerializer.Serialize(sidecar, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
-        return path;
+        var conditioning = command.VoiceConditioning;
+        if (conditioning is null || conditioning.Kind is VoiceConditioningKind.None or VoiceConditioningKind.ProviderVoiceId)
+        {
+            return;
+        }
+
+        if (conditioning.Kind == VoiceConditioningKind.ReferenceAudioWithConsent)
+        {
+            throw new NotSupportedException("ElevenLabs provider in Dominatus supports TTS from provider voice ids only; voice cloning is intentionally unsupported.");
+        }
+
+        throw new NotSupportedException($"ElevenLabs provider in Dominatus does not support voice conditioning kind '{conditioning.Kind}'. Use provider voice ids only.");
     }
+
     private static string Sha256(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 }
 

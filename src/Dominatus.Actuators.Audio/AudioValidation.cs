@@ -6,7 +6,7 @@ public static class AudioValidation
     public static void Validate(TextToSpeechCommand c)
     {
         RequireNonWhiteSpace(c.ProviderId, nameof(c.ProviderId)); RequireNonWhiteSpace(c.IdempotencyKey, nameof(c.IdempotencyKey));
-        RequireText(c.Text, nameof(c.Text)); ValidateOutputPath(c.OutputPath, c.PreferredFormat); ValidateVoice(c.Voice); ValidateFormat(c.PreferredFormat);
+        RequireText(c.Text, nameof(c.Text)); ValidateOutputPath(c.OutputPath, c.PreferredFormat); ValidateVoice(c.Voice); ValidateVoiceConditioning(c.VoiceConditioning, c.VoiceConsent); ValidateFormat(c.PreferredFormat);
     }
     public static void Validate(GenerateSoundEffectCommand c)
     {
@@ -31,4 +31,35 @@ public static class AudioValidation
     }
     private static void ValidateFormat(AudioFormat format) { if (!Enum.IsDefined(format)) throw new NotSupportedException("Unsupported audio format."); }
     private static void ValidateVoice(VoiceRef? voice) { if (voice is not null) RequireNonWhiteSpace(voice.VoiceId, nameof(voice.VoiceId)); }
+    private static void ValidateVoiceConditioning(VoiceConditioningRef? conditioning, VoiceConsentMetadata? consent)
+    {
+        if (conditioning is null || conditioning.Kind == VoiceConditioningKind.None)
+        {
+            return;
+        }
+
+        if (!Enum.IsDefined(conditioning.Kind))
+        {
+            throw new NotSupportedException("Unsupported voice conditioning kind.");
+        }
+
+        if (conditioning.Kind == VoiceConditioningKind.ReferenceAudioWithConsent)
+        {
+            RequireNonWhiteSpace(conditioning.ReferenceAudioPath, nameof(conditioning.ReferenceAudioPath));
+            if (consent is null)
+            {
+                throw new ArgumentException("VoiceConsent is required when using ReferenceAudioWithConsent.", nameof(consent));
+            }
+
+            if (!consent.CallerAssertsConsent)
+            {
+                throw new ArgumentException("VoiceConsent.CallerAssertsConsent must be true when using ReferenceAudioWithConsent.", nameof(consent));
+            }
+
+            if (string.IsNullOrWhiteSpace(consent.ConsentRef) && string.IsNullOrWhiteSpace(consent.SourceDescription))
+            {
+                throw new ArgumentException("VoiceConsent must include ConsentRef or SourceDescription when using ReferenceAudioWithConsent.", nameof(consent));
+            }
+        }
+    }
 }

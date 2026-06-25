@@ -103,6 +103,8 @@ This index separates user-facing documentation from release prep, development lo
 
 ## Actuators
 - [Dominatus.Actuators.Audio M0](actuators/ACTUATORS_AUDIO_M0.md) - Provider-neutral audio generation primitives, fake WAV provider, and open metadata doctrine.
+- [Dominatus.Actuators.Audio M1 ElevenLabs](actuators/ACTUATORS_AUDIO_ELEVENLABS_M1.md) - Direct ElevenLabs text-to-speech adapter with open sidecars and explicit scope limits.
+- [Dominatus.Actuators.Audio M2 Local/Open TTS](actuators/ACTUATORS_AUDIO_LOCAL_TTS_M2.md) - Local/open TTS seam, consent/provenance metadata, fake backend, and Qwen3-TTS feasibility notes.
 
 - [Standard M0](actuators/ACTUATORS_STANDARD_M0.md) — sandboxed file text and wall-clock actuators.
 - [Standard M1 HTTP](actuators/ACTUATORS_STANDARD_M1_HTTP.md) — typed HTTP request actuation.
@@ -171,3 +173,4 @@ These are not first-stop user docs, but they are retained as implementation hist
 - [Dominatus.Pay M3 — PayPal Orders adapter](actuators/ACTUATORS_PAYMENTS_PAYPAL_M3.md)
 
 - [Audio ElevenLabs M1](actuators/ACTUATORS_AUDIO_ELEVENLABS_M1.md)
+- [Audio Local/Open TTS M2](actuators/ACTUATORS_AUDIO_LOCAL_TTS_M2.md)

@@ -48,3 +48,5 @@ var host = new ActuatorHost()
 ## Future work
 
 Future milestones may add documented adapters for ElevenLabs, OpenAI audio, Qwen or local TTS, and local process backends. Playback is intentionally deferred to application layers, a Godot `AudioStreamPlayer` bridge, or a later boring local playback actuator if it can remain cross-platform and testable.
+
+For the local/open TTS seam added in M2, see [ACTUATORS_AUDIO_LOCAL_TTS_M2.md](ACTUATORS_AUDIO_LOCAL_TTS_M2.md).
