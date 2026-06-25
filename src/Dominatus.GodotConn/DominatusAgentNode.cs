@@ -76,7 +76,9 @@ public abstract partial class DominatusAgentNode : Node
             throw new InvalidOperationException("Dominatus agent has not been created yet.");
 
         Agent.Events.Publish(message);
-        EmitSignal("DominatusMessageSent", message.GetType().FullName ?? message.GetType().Name);
+
+        if (HasSignal("DominatusMessageSent"))
+            EmitSignal("DominatusMessageSent", message.GetType().FullName ?? message.GetType().Name);
     }
 
     public bool SendMessageTo<T>(AgentId recipient, T message) where T : notnull
@@ -133,7 +135,9 @@ public abstract partial class DominatusAgentNode : Node
 
         if (!string.Equals(_lastLeafState, nextLeaf, StringComparison.Ordinal))
         {
-            EmitSignal("DominatusStateChanged", _lastLeafState, nextLeaf);
+            if (HasSignal("DominatusStateChanged"))
+                EmitSignal("DominatusStateChanged", _lastLeafState, nextLeaf);
+
             _lastLeafState = nextLeaf;
         }
     }

@@ -9,6 +9,7 @@ public partial class DominatusWorldNode : Node
 
     private readonly HashSet<DominatusAgentNode> _agents = new();
     private readonly ActuatorHost _actuators = new();
+    private DominatusTickMode _tickMode = DominatusTickMode.PhysicsProcess;
 
     public DominatusWorldNode()
     {
@@ -20,11 +21,24 @@ public partial class DominatusWorldNode : Node
     public ActuatorHost Actuators => _actuators;
 
     [Export]
-    public DominatusTickMode TickMode { get; set; } = DominatusTickMode.PhysicsProcess;
+    public DominatusTickMode TickMode
+    {
+        get => _tickMode;
+        set
+        {
+            _tickMode = value;
+            ApplyTickMode();
+        }
+    }
 
     public double LastDeltaSeconds { get; private set; }
 
     public ulong TicksProcessed { get; private set; }
+
+    public override void _Ready()
+    {
+        ApplyTickMode();
+    }
 
     public override void _Process(double delta)
     {
@@ -82,5 +96,11 @@ public partial class DominatusWorldNode : Node
 
         foreach (var agent in _agents)
             agent.NotifyPostTick();
+    }
+
+    private void ApplyTickMode()
+    {
+        SetProcess(_tickMode == DominatusTickMode.Process);
+        SetPhysicsProcess(_tickMode == DominatusTickMode.PhysicsProcess);
     }
 }

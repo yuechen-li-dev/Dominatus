@@ -72,6 +72,8 @@ It does three things:
 
 That shared handler matters because the world owns one `ActuatorHost`, while the sample has multiple villagers issuing the same `Move2DCommand` type.
 
+With Godot 4.7 .NET, the concrete scene script should forward lifecycle methods to the connector base class when that base class lives in another assembly. `TinyTownWorld` now explicitly overrides `_Ready()`, `_Process(...)`, and `_PhysicsProcess(...)` and calls `base` for each path so the real `DominatusWorldNode` tick logic stays bound to the script Godot instances from the scene.
+
 ## How the agent node works
 
 Each villager brain derives from `DominatusAgentNode`.
@@ -167,6 +169,69 @@ That makes the behavior legible even in a very simple scene.
 
 The main scene is already configured in `project.godot`.
 
+## Smoke harness
+
+Use the repeatable local smoke harness:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
+  -GodotPath 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe'
+```
+
+What it writes:
+
+- `artifacts/godot-tinytown/run.log`
+- `artifacts/godot-tinytown/tinytown-debug.json`
+- `artifacts/godot-tinytown/tinytown-screenshot.png` when the renderer supports it
+
+What it asserts:
+
+- `tickCount > 0`
+- `agentCount == 4`
+- at least one villager moves materially from spawn
+- no duplicate `ScriptTypeBiMap` / `same key has already been added` evidence in the run log
+- no unexpected Godot `ERROR` lines
+
+Useful options:
+
+- `-SmokeFrames 180`
+- `-Headless`
+- `-CleanGodotCaches`
+- `-GodotPath <path>`
+
+The harness uses sample-controlled smoke environment variables:
+
+- `DOMINATUS_GODOT_SMOKE=1`
+- `DOMINATUS_GODOT_SMOKE_FRAMES=120`
+- `DOMINATUS_GODOT_SMOKE_ARTIFACTS=<absolute artifacts path>`
+
+## Debug JSON
+
+`tinytown-debug.json` includes:
+
+- `godotVersion`
+- `tickCount`
+- `agentCount`
+- `screenshotSaved`
+- `screenshotPath`
+- `screenshotError`
+- `villagers[]`
+
+Each villager entry includes:
+
+- `name`
+- `activity`
+- `need`
+- `position`
+- `initialPosition`
+- `homePosition`
+- `targetPosition`
+- `distanceFromInitialPosition`
+- `hunger`
+- `thirst`
+- `energy`
+- `gardenJoy`
+
 ## CLI / headless validation
 
 Build the C# project:
@@ -187,7 +252,7 @@ Short headless runtime smoke:
 & 'C:\Users\yuech\source\repos\Godot\Godot_v4.7-stable_mono_win64_console.exe' --headless --path 'C:\Users\yuech\source\repos\Dominatus\samples\Dominatus.GodotTinyTown' --quit-after 120
 ```
 
-For this sample, the built-in quit flags are the reliable smoke path. A plain headless run without a quit condition will keep the project alive as expected.
+The harness is the preferred smoke path because it also captures artifacts and validates invariants. By default it uses a normal local run so it can save a viewport screenshot. If you pass `-Headless`, the same smoke JSON still works, but on the local 4.7 mono headless run Godot does not expose a usable viewport screenshot texture, so the JSON records that limitation instead of producing a PNG.
 
 ## Limitations
 
@@ -204,15 +269,26 @@ For this sample, the built-in quit flags are the reliable smoke path. A plain he
 - confirm the sample is running with Godot 4.7 .NET managed packages
 - confirm `DominatusWorld` is present in the scene
 - confirm the brain node remains a child of each villager body
+- confirm `TinyTownWorld` still forwards `_Ready()`, `_Process(...)`, and `_PhysicsProcess(...)` to `DominatusWorldNode`
 
 ### Brain cannot find the world
 
 - the sample expects `DominatusWorld` to remain the ancestor for the villager subtree
 - if you rearrange the scene, update `WorldPath` accordingly
 
+### Duplicate `ScriptTypeBiMap` registration or other external-script reload weirdness
+
+- close the Godot editor
+- remove generated C# state:
+  - `samples/Dominatus.GodotTinyTown/.godot/mono/temp`
+  - `samples/Dominatus.GodotTinyTown/.godot/global_script_class_cache.cfg`
+  - sample `bin/` and `obj/` if present
+- reopen the project and rebuild
+- prefer the smoke harness or an external `dotnet build` when validating connector changes
+
 ### The scene opens headlessly but does not stop
 
-- use `--quit` or `--quit-after 120` for command-line smoke validation
+- use the smoke harness, or use `--quit` / `--quit-after 120` for manual command-line smoke validation
 
 ## Relationship to the M0 quickstart
 

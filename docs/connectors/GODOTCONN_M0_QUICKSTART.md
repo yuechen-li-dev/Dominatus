@@ -155,6 +155,8 @@ Prefer `NodePath` for durable references. Treat live node references as runtime-
 
 ## Troubleshooting
 
+For a full runnable example plus the smoke artifact harness, see [GodotConn M1 TinyTown sample](GODOTCONN_M1_TINYTOWN_SAMPLE.md).
+
 ### "Could not find a DominatusWorldNode"
 
 - set `WorldPath`, or
@@ -166,6 +168,7 @@ Prefer `NodePath` for durable references. Treat live node references as runtime-
 - verify `DominatusWorldNode.TickMode` is `PhysicsProcess` or `Process`
 - confirm the brain node actually entered `_Ready()`
 - for `CharacterBody2D`, confirm the registered move handler targets the body node you expect
+- if your concrete scene script derives from a connector base class in another assembly, explicitly override `_Ready()`, `_Process(...)`, and `_PhysicsProcess(...)` on the concrete script and call `base`
 
 ### State never changes
 
@@ -176,3 +179,11 @@ Prefer `NodePath` for durable references. Treat live node references as runtime-
 
 - align the project's Godot-managed package baseline with the engine version in use
 - M0/M1 are validated against the Godot 4.7 managed package family
+
+### Duplicate `ScriptTypeBiMap` registration after a rebuild
+
+- close Godot
+- clear generated project state under `.godot/mono/temp`
+- remove `.godot/global_script_class_cache.cfg` if it exists
+- rebuild the C# project and reopen
+- use `tools/Run-GodotTinyTownSmoke.ps1` as the repeatable local validation path

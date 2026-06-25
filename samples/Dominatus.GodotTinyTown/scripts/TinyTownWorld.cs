@@ -16,6 +16,21 @@ public partial class TinyTownWorld : DominatusWorldNode
         Actuators.Register(_moveHandler);
     }
 
+    public override void _Ready()
+    {
+        base._Ready();
+    }
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        base._PhysicsProcess(delta);
+    }
+
     public void RegisterVillager(TinyTownVillagerBrain brain, CharacterBody2D body)
     {
         ArgumentNullException.ThrowIfNull(brain);

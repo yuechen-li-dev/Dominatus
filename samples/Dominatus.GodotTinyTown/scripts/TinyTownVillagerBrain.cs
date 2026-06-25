@@ -95,6 +95,7 @@ public partial class TinyTownVillagerBrain : DominatusAgentNode
         blackboard.Set(TinyTownKeys.GardenJoy, 0.74f);
         blackboard.Set(TinyTownKeys.WanderIndex, Mathf.Abs(VillagerName.GetHashCode()) % 3);
         blackboard.Set(TinyTownKeys.NextNeedDecayAt, 0f);
+        blackboard.Set(TinyTownKeys.InitialPosition, GetBody().GlobalPosition);
         blackboard.Set(TinyTownKeys.HomePosition, ResolveMarker(HomeMarkerPath).GlobalPosition);
         blackboard.Set(TinyTownKeys.WellPosition, ResolveMarker(WellMarkerPath).GlobalPosition);
         blackboard.Set(TinyTownKeys.MarketPosition, ResolveMarker(MarketMarkerPath).GlobalPosition);
