@@ -4,117 +4,122 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 
-**Dominatus is a high-performance, deterministic .NET agent runtime kernel designed for complex automation, simulations, and AI agent orchestration.**
+**Agent runtime, typed actuators, real-world effects.**
 
-The industry is learning the hard way that LLMs are terrible, expensive schedulers for high-frequency workflows. Dominatus takes agent orchestration out of the "haunted prompt-chain loop" and brings it down to the native CPU layer.
+Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, auditable automation. It keeps orchestration in ordinary C# control flow—blackboards, HFSMs, utility scoring, mailboxes, persistence, and explicit actuators—while letting LLMs, payment providers, audio providers, game engines, local tools, home automation systems, and other external capabilities sit at the boundary as typed effects.
 
-By executing agent behaviors as highly optimized, local C# control flow - using Hierarchical Finite State Machines (HFSMs), Utility AI, structured blackboards, and policy gates - Dominatus provides a bulletproof, zero-allocation control plane. **LLMs are treated as optional yet powerful semantic reasoning actuators on the boundary, not the main scheduler.**
+Dominatus is not a prompt-chain framework, chatbot app, workflow SaaS clone, game engine, ECS, payment processor, hidden-fee platform, image editor, or audio model provider. It turns useful .NET capabilities into safe actuators.
 
----
+## Why Dominatus exists
 
-## ⚡ Hard Benchmark Receipts
+LLMs are useful semantic engines: they summarize, classify, transform language, propose plans, and call tools when a boundary is explicit. They are a poor hot-loop/runtime substrate for live systems that need deterministic replay, predictable latency, audit trails, policy gates, idempotency, and typed state.
 
-Dominatus drops agent execution costs and latency to absolute zero by running ticks locally instead of making blocking, expensive model calls over the network.
+Dominatus therefore keeps the runtime loop deterministic and typed. Provider calls still matter, but they are invoked as tools/actuators where appropriate—not as the scheduler for every tick.
 
-*The following metrics are tracked in our headless CPU simulation workload (`net10.0` Release, Ubuntu 24.04, 2 Cores):*
+## Start here: pick your path
 
-| Metric | Performance | What it Means for Architecture |
+### For game and simulation developers
+
+- [GodotConn quickstart](docs/connectors/GODOTCONN_M0_QUICKSTART.md) and [TinyTown Godot sample](docs/connectors/GODOTCONN_M1_TINYTOWN_SAMPLE.md) — Godot 4.7 .NET bridge with `DominatusWorldNode`, `DominatusAgentNode`, `NavigationAgent2D` movement, sprite metadata, and fake TTS barks.
+- [MonoGame RTS demo](docs/samples/SAMPLE_MONOGAME_RTS_DEMO.md) — hardware-accelerated fleet visualization driven by Dominatus runtime primitives.
+- [RTSBenchmark](docs/samples/SAMPLE_RTS_BENCHMARK.md) and [benchmark report](docs/benchmarks/RTS_BENCHMARK_REPORT.md) — headless deterministic simulation, checkpoint/resume, and throughput validation.
+
+### For backend and automation developers
+
+- [Standard actuators](docs/actuators/ACTUATORS_STANDARD_M0.md) — sandboxed files, HTTP, process, calendar, and web-safety building blocks.
+- [Payments author guide](docs/actuators/ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md) — provider-neutral payment commands, fake provider, Stripe, PayPal, idempotency, webhook events, and no-hidden-fee doctrine.
+- [Audio actuators](docs/actuators/ACTUATORS_AUDIO_M0.md) — provider-neutral audio generation, fake WAV output, ElevenLabs, local/open TTS seam, and explicit provenance metadata.
+- [Home Assistant actuators](docs/actuators/ACTUATORS_HOMEASSISTANT_M0.md) — home automation commands and observation behind Dominatus policy.
+
+### For LLM workflow developers
+
+- [Orchestration ladder](docs/user/ORCHESTRATION_LADDER.md) — when to stay in native code, when to call LLMs, and when to require approval.
+- [LLM context docs](docs/llm/LLM_CONTEXT_M0.md) and [LLM OptFlow package](src/Dominatus.Llm.OptFlow) — context packets, provider routing, cassettes, streaming, and replayable LLM calls.
+- [LLM PR review template](samples/Templates/Dominatus.Template.LlmPrReview) — semantic review gate template.
+- [Semantic Kernel actuators](docs/actuators/ACTUATORS_SEMANTICKERNEL_M0.md) — SK functions and MCP capabilities as typed, policy-gated Dominatus effects.
+
+### For assets and tooling
+
+- [Dominatus.Assets.Toml](docs/user/ASSETS_TOML.md) — typed TOML asset loading, validation, and symbolic references.
+- [SpriteForge](docs/assets/SPRITEFORGE_M0.md) — engine-neutral sprite atlas TOML metadata with nested grids, absolute frames, validation, and a Godot preview skeleton.
+- [Godot TinyTown sprite metadata](samples/Dominatus.GodotTinyTown/assets/README.md) — sample/generated prototype art, SpriteForge-adjacent TOML, and Godot import notes.
+
+## Package matrix
+
+These are the intended publishable package projects for the 0.4 NuGet workflow. Test and sample projects are intentionally excluded.
+
+| Package | Purpose | Status |
 | --- | --- | --- |
-| **RTS Skirmish Simulation** | **130,862** agent-ticks/sec | Ultra-dense behavioral simulation loops at true CPU speed. |
-| **Utility Option Evaluations** | **1,177,761** evaluations/sec | Lightning-fast `Ai.Decide` scoring across massive option matrices. |
-| **State Replay & Resume** | **Deterministic Hash Match** | 100% deterministic checkpoint/resume. Perfect for state audits and bug replication. |
-| **Parallel Decision Modes** | **Identical Hash Equivalence** | Multi-threaded execution pipelines yield identical state hashes to sequential runs. |
+| `Dominatus.Core` | Core runtime: blackboards, HFSMs, mailboxes, steps, persistence primitives. | Core |
+| `Dominatus.OptFlow` | Fluent authoring helpers for `Ai.*` control flow. | Core |
+| `Ariadne.OptFlow` | Dialogue-oriented OptFlow package for authored conversation workflows. | Core |
+| `Dominatus.UtilityLite` | Lightweight utility scoring engines and combinators. | Core |
+| `Dominatus.Assets.Toml` | Typed TOML asset loading, diagnostics, validation, and symbolic references. | Tooling |
+| `Dominatus.SpriteForge` | Engine-neutral sprite atlas metadata, validation, and Godot preview support. | Tooling |
+| `Dominatus.Llm.Context` | Context packet/loadout/manifest primitives for LLM boundaries. | LLM |
+| `Dominatus.Llm.OptFlow` | `Llm.Call`, `Llm.Decide`, streaming, replay/cassettes, and provider clients. | LLM |
+| `Dominatus.Actuators.Standard` | Sandboxed file, HTTP, process, calendar, and web-safety actuators. | Actuator |
+| `Dominatus.Actuators.HomeAssistant` | Home Assistant command/observation actuators. | Actuator |
+| `Dominatus.Actuators.SemanticKernel` | Semantic Kernel function/MCP capability surface behind Dominatus policy. | Actuator |
+| `Dominatus.Actuators.Payments` | Provider-neutral payment commands/results, fake provider, registry, idempotency, normalized events. | Actuator |
+| `Dominatus.Actuators.Payments.Stripe` | Stripe Checkout/PaymentIntent adapter, live smoke seam, webhook verification. | Provider adapter |
+| `Dominatus.Actuators.Payments.PayPal` | PayPal Orders adapter and provider status mapping. | Provider adapter |
+| `Dominatus.Actuators.Audio` | Provider-neutral audio commands/results, fake WAV provider, ElevenLabs, local/open TTS seam. | Actuator |
+| `Dominatus.Server` | ASP.NET Core inspection/read-model endpoints. | Server |
+| `Dominatus.MonoGameConn` | MonoGame update/render bridge and debug overlay helpers. | Connector |
+| `Dominatus.StrideConn` | Stride connector and simulator integration support. | Connector |
+| `Dominatus.GodotConn` | Godot 4.7 .NET connector, world/agent nodes, movement and audio bridge. | Connector |
 
-> 💡 **The Bottom Line:** Dominatus doesn't make prompt chains faster. **It makes prompt chains irrelevant.**
+## Samples and demos
 
----
+- [MonoGame RTS demo](docs/samples/SAMPLE_MONOGAME_RTS_DEMO.md) — visual RTS-style behavioral AI demo using `Dominatus.MonoGameConn`.
+- [Godot TinyTown](docs/connectors/GODOTCONN_M1_TINYTOWN_SAMPLE.md) — Godot 4.7 .NET sample with UtilityLite behavior, `NavigationAgent2D` movement, sprite atlas visuals, and generated/played fake TTS barks.
+- [RTSBenchmark](docs/samples/SAMPLE_RTS_BENCHMARK.md) — deterministic CPU benchmark with JSON/CSV reports, checkpoint/resume, and parallel decision equivalence checks.
+- [LLM PR review template](samples/Templates/Dominatus.Template.LlmPrReview) — pass/fail/needs-human semantic PR gate.
+- [Home Assistant template](docs/user/ONBOARDING_TEMPLATES.md) — fake-first thermostat automation template with live configuration through environment variables.
+- [Payment docs](docs/actuators/ACTUATORS_PAYMENTS_M0.md), [Stripe docs](docs/actuators/ACTUATORS_PAYMENTS_STRIPE_M1.md), [Stripe webhook docs](docs/actuators/ACTUATORS_PAYMENTS_STRIPE_M2_WEBHOOKS.md), and [PayPal docs](docs/actuators/ACTUATORS_PAYMENTS_PAYPAL_M3.md) — provider-neutral payments with adapter examples.
+- [Audio docs](docs/actuators/ACTUATORS_AUDIO_M0.md), [ElevenLabs docs](docs/actuators/ACTUATORS_AUDIO_ELEVENLABS_M1.md), and [local/open TTS docs](docs/actuators/ACTUATORS_AUDIO_LOCAL_TTS_M2.md) — audio generation contracts and provider seams.
 
-## 🎯 How Dominatus Fits the Ecosystem
+## Safety and doctrine
 
-Dominatus occupies a completely different layer than existing AI framework wrappers. It functions as the **operating system kernel** for state management, while other tools act as userland plugins.
+Dominatus favors explicit effects over ambient magic:
 
-| System | Main Role | The Dominatus Difference |
-| --- | --- | --- |
-| **LangGraph / CrewAI** | LLM-centered workflow graph | They chain slow, expensive network calls. **Dominatus** runs stateful agent loops locally on the CPU; LLMs are optional semantic steps, not the engine. |
-| **Semantic Kernel / MS Agent Framework** | Enterprise plugin & connector ecosystems | They provide capability surfaces. **Dominatus** sits *underneath* them to manage the core state, execution policies, audit-friendly approvals, and loop scheduling. |
-| **Dominatus Kernel** | **Deterministic Orchestration Engine** | Keeps high-frequency orchestration in native code. Invokes LLMs strictly for language tasks (summaries, code-gen, semantic transforms). |
+- commands/results are typed;
+- external effects are explicit actuators;
+- approval and policy gates live in the runtime path;
+- idempotency is modeled where repeated effects matter, especially payments;
+- audit metadata is carried with provider calls and generated artifacts;
+- Dominatus payment adapters do not add hidden fees;
+- Dominatus audio adapters do not add hidden watermarks, inaudible fingerprints, covert provenance, or secret tracking identifiers.
 
----
+See the [actuation policy](docs/user/ACTUATION_POLICY.md), [payments author guide](docs/actuators/ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md), and [audio M0 doctrine](docs/actuators/ACTUATORS_AUDIO_M0.md) for deeper details.
 
-## 🛠️ Code Snippet: Tiny Feel
+## Installation, build, and validation
 
-Dominatus states are lightweight C# iterators yielding execution steps. Native logic drives the ticks; external intelligence or heavy tools are only summoned when necessary.
+Install packages from NuGet as needed, for example:
 
-```csharp
-using Dominatus.Core;
-using Dominatus.Core.Blackboard;
-using Dominatus.Core.Decision;
-
-static readonly BbKey<bool> NeedsReview = new("Agent.NeedsReview");
-static readonly DecisionSlot NextAction = new("Agent.NextAction");
-
-static IEnumerator<AiStep> Root(AiCtx ctx)
-{
-    ctx.Bb.Set(NeedsReview, true);
-
-    // Highly scalable, native Utility AI option scoring
-    yield return Ai.Decide(NextAction,
-    [
-        Ai.Option("wait", Consideration.Constant(0.2f), "Idle"),
-        Ai.Option("review", Consideration.FromBool((w, _) => w.Bb.GetOrDefault(NeedsReview, false)), "Review"),
-    ]);
-
-    yield return Ai.Steady("Root parked after deterministic handoff");
-}
-
+```bash
+dotnet add package Dominatus.Core
 ```
 
----
+Build and test the repository with:
 
-## 📂 Featured Applications & Samples
+```bash
+dotnet build Dominatus.slnx
+dotnet test Dominatus.slnx
+```
 
-Dominatus uses the exact same deterministic primitives to solve problems across vastly different domains. Explore the specialized sample targets below:
+Default tests require no API keys. Live provider smoke tests for Stripe, ElevenLabs, and similar services are gated/skipped unless explicitly configured. Godot TinyTown validation requires a local Godot 4.7 .NET installation; the regular solution build/test path does not require launching Godot.
 
-### 🤖 AI Agent & Enterprise Automation
+## Documentation
 
-* [`Dominatus.Template.LlmPrReview`](samples/Templates/Dominatus.Template.LlmPrReview) – A semantic pass/fail/needs-human review gate for PR diffs utilizing OpenRouter.
-* [`Dominatus.SemanticKernelGraphAssistant`](samples/Dominatus.SemanticKernelGraphAssistant) – An approval-gated Outlook email assistant that leverages Semantic Kernel plugins under a rigid Dominatus safety policy.
-* [`Dominatus.ParallelModuleWorkflow`](samples/Dominatus.ParallelModuleWorkflow) – Deterministic coordinator splitting autonomous enterprise module tasks across parallelizable LLM-style workers.
+- [Documentation index](docs/INDEX.md)
+- [Architecture overview](docs/user/ARCHITECTURE.md)
+- [Authoring guide](docs/user/AUTHORING_GUIDE.md)
+- [Orchestration ladder](docs/user/ORCHESTRATION_LADDER.md)
+- [Dominatus 0.4 release notes](docs/release/DOMINATUS_0_4_RELEASE_NOTES.md)
+- [NuGet trusted publishing](docs/release/NUGET_TRUSTED_PUBLISHING.md)
 
-### 🎮 Low-Latency Game AI & Simulation
+## License
 
-* [`Dominatus.RTSBenchmark`](samples/Dominatus.RTSBenchmark) – Our authoritative CPU benchmark running hundreds of ships exchanging events, utilizing spatial grid sensors, and making tactical utility choices without network overhead.
-* [`Dominatus.TinyTown`](samples/Dominatus.TinyTown) – A utility-driven sandbox life simulation where agent life cycles and blackboards run locally, using an LLM strictly as a "Dungeon Master" for social dialogue.
-* [`Dominatus.MonoGameRtsDemo`](samples/Dominatus.MonoGameRtsDemo) – A 1080p hardware-accelerated fleet visualization driving 50 ships simultaneously via `Dominatus.MonoGameConn`.
-
----
-
-## 📦 Package Architecture
-
-The Dominatus ecosystem is built to be modular and lean. The core runtime is 100% independent of cloud providers, LLMs, and external automation ecosystems.
-
-### Core Engine Primitives
-
-* **`Dominatus.Core`** – The core orchestration runtime: blackboards, HFSMs, mailboxes, and persistence.
-* **`Dominatus.OptFlow`** – Fluent authoring helpers for writing cleaner `Ai.*` control flow.
-* **`Ariadne.OptFlow`** – Dialogue orientend actuator for Dominatus.
-* **`Dominatus.UtilityLite`** – Lightweight scoring engines and combinators for utility evaluation.
-
-### Actuators & Extensions
-
-* **`Dominatus.Actuators.Standard`** – Auditable environment hooks (Sandboxed Files, HTTP, WebSafety, Process isolation).
-* **`Dominatus.Actuators.SemanticKernel`** – Wraps MS Semantic Kernel plugins cleanly behind Dominatus runtime policies, full MCP capabilities.
-* **`Dominatus.Llm.OptFlow`** – Bridges semantic context boundaries (`Llm.Call`, `Llm.Decide`, `Llm.MagiDecide`, streaming, OpenRouter).
-* **`Dominatus.Server`** – ASP.NET Core telemetry read-models for live agent web inspection.
-
----
-
-## 🚀 Getting Started
-
-* **[Architecture Overview](https://www.google.com/search?q=docs/user/ARCHITECTURE.md)** – Deep dive into deep-level engine nodes, blackboards, and state rollbacks.
-* **[The Orchestration Ladder](https://www.google.com/search?q=docs/user/ORCHESTRATION_LADDER.md)** – Structural guide explaining when to stay native vs. when to exit out to LLM boundaries.
-* **[Authoring Guide](https://www.google.com/search?q=docs/user/AUTHORING_GUIDE.md)** – A practical handbook on node design, custom actuators, and state setup.
-
-## 📄 License
-
-Dominatus is open-source software licensed under the **[MIT License](https://www.google.com/search?q=LICENSE.txt)**.
+Dominatus is open-source software licensed under the [MIT License](LICENSE.txt).

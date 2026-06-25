@@ -29,13 +29,13 @@ Configure this GitHub Actions repository variable:
 
 Do not add `NUGET_API_KEY` as a repository secret. The workflow uses `permissions: id-token: write` so `NuGet/login@v1` can exchange the GitHub OIDC token for a short-lived temporary NuGet API key.
 
-## How to publish Dominatus 0.3.0
+## How to publish Dominatus 0.4.0
 
 1. Confirm the NuGet Trusted Publishing policy fields above are present on NuGet.org.
 2. Confirm the GitHub `release` environment exists and any desired reviewers/approvals are configured there.
 3. Confirm the repository variable `NUGET_USER` contains the NuGet profile username.
 4. In GitHub, open **Actions** → **Publish NuGet** → **Run workflow**.
-5. Enter version `0.3.0` or keep the default.
+5. Enter version `0.4.0` or keep the default.
 6. Start the workflow.
 
 The workflow restores, builds, tests, packs the publishable projects under `src/`, uploads generated `.nupkg` files as an artifact named `nuget-packages-<version>`, authenticates with `NuGet/login@v1`, and runs `dotnet nuget push` with the temporary API key and `--skip-duplicate`.
@@ -44,23 +44,29 @@ The workflow restores, builds, tests, packs the publishable projects under `src/
 
 The workflow intentionally packs package projects only. It does not pack tests, sample apps, or the `Ariadne.Console` executable project.
 
-Current package projects:
+Current 0.4 package projects:
 
 - `src/Dominatus.Core/Dominatus.Core.csproj`
 - `src/Dominatus.OptFlow/Dominatus.OptFlow.csproj`
 - `src/Ariadne.OptFlow/Ariadne.OptFlow.csproj`
 - `src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj`
 - `src/Dominatus.Assets.Toml/Dominatus.Assets.Toml.csproj`
+- `src/Dominatus.SpriteForge/Dominatus.SpriteForge.csproj`
 - `src/Dominatus.Llm.Context/Dominatus.Llm.Context.csproj`
 - `src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj`
 - `src/Dominatus.Actuators.Standard/Dominatus.Actuators.Standard.csproj`
 - `src/Dominatus.Actuators.HomeAssistant/Dominatus.Actuators.HomeAssistant.csproj`
+- `src/Dominatus.Actuators.Payments/Dominatus.Actuators.Payments.csproj`
+- `src/Dominatus.Actuators.Audio/Dominatus.Actuators.Audio.csproj`
 - `src/Dominatus.Actuators.SemanticKernel/Dominatus.Actuators.SemanticKernel.csproj`
 - `src/Dominatus.Server/Dominatus.Server.csproj`
 - `src/Dominatus.MonoGameConn/Dominatus.MonoGameConn.csproj`
 - `src/Dominatus.StrideConn/Dominatus.StrideConn.csproj`
+- `src/Dominatus.GodotConn/Dominatus.GodotConn.csproj`
+- `src/Dominatus.Actuators.Payments.Stripe/Dominatus.Actuators.Payments.Stripe.csproj`
+- `src/Dominatus.Actuators.Payments.PayPal/Dominatus.Actuators.Payments.PayPal.csproj`
 
-The workflow passes `/p:Version=${{ inputs.version }}` to each `dotnet pack` command so a manual run can publish `0.3.0` without editing each project file first.
+The workflow passes `/p:Version=${{ inputs.version }}` to each `dotnet pack` command so a manual run can publish `0.4.0` without editing each project file first.
 
 ## Recovery if publish fails
 

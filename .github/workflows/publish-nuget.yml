@@ -6,7 +6,7 @@ on:
       version:
         description: "Package version to publish"
         required: true
-        default: "0.3.0"
+        default: "0.4.0"
 
 permissions:
   contents: read
@@ -54,6 +54,7 @@ jobs:
           dotnet pack src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Actuators.Standard/Dominatus.Actuators.Standard.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Actuators.HomeAssistant/Dominatus.Actuators.HomeAssistant.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.Actuators.Payments/Dominatus.Actuators.Payments.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Actuators.Audio/Dominatus.Actuators.Audio.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Actuators.SemanticKernel/Dominatus.Actuators.SemanticKernel.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Server/Dominatus.Server.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
