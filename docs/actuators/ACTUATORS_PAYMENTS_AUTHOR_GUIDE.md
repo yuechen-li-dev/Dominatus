@@ -331,3 +331,12 @@ Future provider webhook checklist:
 - Return unknown/unsupported verified events safely.
 - Keep duplicate-delivery protection provider-neutral and make durable stores app-owned.
 - Do not add endpoint hosting, tenant/merchant registry, dashboards, fulfillment, entitlement grants, or commercial policy to Dominatus.Pay.
+
+
+## PayPal adapter checklist (M3)
+
+* Use PayPal Orders v2 for hosted approval flows; do not collect raw card data in Dominatus.Pay.
+* Map Dominatus idempotency keys to `PayPal-Request-Id` only on supported POST calls. Keep derived request ids deterministic and within PayPal's 38 single-byte character limit.
+* Be explicit about provider references: checkout/payment creation returns an order id, order capture can return a capture id, refunds require a capture id, and M3 status lookup expects an order id.
+* Do not silently drop `PaymentPlatformFee`. PayPal partner/platform-fee behavior remains deferred until partner docs and account-routing policy are verified outside the kernel adapter.
+* Keep PayPal webhooks as a future seam. A later milestone must verify webhook authenticity, tolerate retries, and follow the normalized event/dedup pattern established for Stripe M2.

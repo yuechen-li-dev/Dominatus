@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsPackable>true</IsPackable>
+    <PackageId>Dominatus.Actuators.Payments.PayPal</PackageId><Version>0.1.0</Version><Authors>Yuechen Li</Authors>
+    <Description>PayPal Orders adapter for Dominatus.Pay.</Description><PackageTags>ai;agent;actuator;payments;paypal;dominatus</PackageTags>
+    <RepositoryType>git</RepositoryType><RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl><PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl><PackageLicenseExpression>MIT</PackageLicenseExpression><PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\Dominatus.Actuators.Payments\Dominatus.Actuators.Payments.csproj" /></ItemGroup>
+  <ItemGroup><None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" /></ItemGroup>
+</Project>
