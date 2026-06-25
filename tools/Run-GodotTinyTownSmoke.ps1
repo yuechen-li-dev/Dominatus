@@ -169,12 +169,16 @@ $duplicateLines = @($logLines | Where-Object { $_ -match 'ScriptTypeBiMap' -or $
 $averageNeedUrgency = [double]$snapshot.averageNeedUrgency
 $maxNeedUrgency = [double]$snapshot.maxNeedUrgency
 $visualMode = [string]$snapshot.visualMode
+$atlasSourceKind = [string]$snapshot.atlasSourceKind
 $atlasPath = [string]$snapshot.atlasPath
 $atlasWidth = [int]$snapshot.atlasWidth
 $atlasHeight = [int]$snapshot.atlasHeight
 $cellWidth = [int]$snapshot.cellWidth
 $cellHeight = [int]$snapshot.cellHeight
 $normalizedAtlasUsed = [bool]$snapshot.normalizedAtlasUsed
+$alphaAtlasUsed = [bool]$snapshot.alphaAtlasUsed
+$alphaDetected = [bool]$snapshot.alphaDetected
+$transparentPixelCount = [long]$snapshot.transparentPixelCount
 $villagerVisualMode = [string]$snapshot.villagerVisualMode
 $destinationVisualMode = [string]$snapshot.destinationVisualMode
 $fallbackVisualsUsed = [bool]$snapshot.fallbackVisualsUsed
@@ -201,6 +205,9 @@ Assert-Condition ($highStressVillagers.Count -le 1) "Too many villagers ended th
 Assert-Condition ($duplicateLines.Count -eq 0) "Detected duplicate ScriptTypeBiMap registration evidence in run.log"
 Assert-Condition ($errorLines.Count -eq 0) "Detected unexpected ERROR lines in run.log"
 Assert-Condition ($visualMode -eq $VisualMode) "Expected visualMode=$VisualMode, found $visualMode"
+if (-not $Headless) {
+    Assert-Condition ($snapshot.screenshotSaved -and (Test-Path $screenshotPath)) "Expected a saved screenshot artifact for non-headless smoke runs."
+}
 if ($VisualMode -eq "FallbackShapes") {
     Assert-Condition ($villagerVisualMode -eq "FallbackShapes") "Expected fallback villager visuals by default, found $villagerVisualMode"
     Assert-Condition ($destinationVisualMode -eq "FallbackShapes") "Expected fallback destination visuals by default, found $destinationVisualMode"
@@ -215,8 +222,12 @@ else {
     Assert-Condition (-not $fallbackVisualsUsed) "Sprite smoke should not fall back when a valid atlas is present."
     Assert-Condition ($fallbackVillagers.Count -eq 0) "Expected no villager fallback visuals in sprite mode."
     Assert-Condition ($spriteAssetsLoaded -gt 0) "Sprite smoke expected atlas-backed visuals, but snapshot reported $spriteAssetsLoaded loaded sprite assets."
-    Assert-Condition ($villagerSpritesLoaded -ge 4) "Expected all four villager rows to resolve, found $villagerSpritesLoaded."
-    Assert-Condition ($destinationSpritesLoaded -ge 3) "Expected destination prop sprites to resolve, found $destinationSpritesLoaded."
+    Assert-Condition ($alphaAtlasUsed) "Sprite smoke should prefer the cleaned alpha atlas path, but alphaAtlasUsed was false."
+    Assert-Condition ($atlasSourceKind -in @('AlphaOriginal', 'AlphaNormalized')) "Sprite smoke should report AlphaOriginal or AlphaNormalized, found $atlasSourceKind."
+    Assert-Condition ($alphaDetected) "Sprite smoke expected atlas transparency to be detected."
+    Assert-Condition ($transparentPixelCount -gt 0) "Sprite smoke expected transparent pixels in the alpha atlas."
+    Assert-Condition ($villagerSpritesLoaded -eq 4) "Expected all four villager rows to resolve, found $villagerSpritesLoaded."
+    Assert-Condition ($destinationSpritesLoaded -ge 5) "Expected destination prop sprites to resolve for at least five mapped destinations, found $destinationSpritesLoaded."
     Assert-Condition ($missingAssetWarnings -eq 0) "Sprite smoke should not log missing asset warnings, but snapshot reported $missingAssetWarnings."
     Assert-Condition ($atlasWidth -gt 0 -and $atlasHeight -gt 0) "Sprite smoke expected atlas dimensions, found ${atlasWidth}x${atlasHeight}."
     Assert-Condition ($cellWidth -gt 0 -and $cellHeight -gt 0) "Sprite smoke expected cell dimensions, found ${cellWidth}x${cellHeight}."
@@ -237,7 +248,7 @@ Write-Host "Observed activities: $($distinctObservedActivities -join ', ')"
 Write-Host "Observed dwell activities: $($observedDwellActivities -join ', ')"
 Write-Host "Observed travel activities: $($observedTravelActivities -join ', ')"
 Write-Host "Visuals: mode=$visualMode villagers=$villagerVisualMode destinations=$destinationVisualMode fallback=$fallbackVisualsUsed spriteAssets=$spriteAssetsLoaded warnings=$missingAssetWarnings"
-Write-Host "Atlas: path=$atlasPath size=${atlasWidth}x${atlasHeight} cell=${cellWidth}x${cellHeight} normalized=$normalizedAtlasUsed villagerSprites=$villagerSpritesLoaded destinationSprites=$destinationSpritesLoaded"
+Write-Host "Atlas: source=$atlasSourceKind path=$atlasPath size=${atlasWidth}x${atlasHeight} cell=${cellWidth}x${cellHeight} normalized=$normalizedAtlasUsed alphaPath=$alphaAtlasUsed alphaDetected=$alphaDetected transparentPixels=$transparentPixelCount villagerSprites=$villagerSpritesLoaded destinationSprites=$destinationSpritesLoaded"
 Write-Host ("Need summary: average={0:N2} max={1:N2}" -f $averageNeedUrgency, $maxNeedUrgency)
 Write-Host "Artifacts:"
 Write-Host "  Log: $logPath"

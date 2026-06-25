@@ -46,10 +46,10 @@ public partial class TinyTownMain : Node2D
     public TinyTownVisualMode VisualMode { get; set; } = TinyTownVisualMode.FallbackShapes;
 
     [Export]
-    public string VillagerAtlasPath { get; set; } = "res://assets/sprites/generated/tinytown_atlas_normalized.png";
+    public string VillagerAtlasPath { get; set; } = TinyTownArtProfile.AlphaOriginalAtlasPath;
 
     [Export]
-    public string DestinationAtlasPath { get; set; } = "res://assets/sprites/generated/tinytown_atlas_normalized.png";
+    public string DestinationAtlasPath { get; set; } = TinyTownArtProfile.AlphaOriginalAtlasPath;
 
     [Export]
     public Vector2I SpriteCellSize { get; set; } = new(32, 32);
@@ -177,12 +177,17 @@ public partial class TinyTownMain : Node2D
             screenshotPath,
             screenshotError,
             _artProfile.VisualMode.ToString(),
+            _spriteCatalog.AtlasSourceKind.ToString(),
             _spriteCatalog.AtlasPath,
             _spriteCatalog.AtlasWidth,
             _spriteCatalog.AtlasHeight,
             _spriteCatalog.CellWidth,
             _spriteCatalog.CellHeight,
             _spriteCatalog.NormalizedAtlasUsed,
+            _spriteCatalog.AlphaAtlasUsed,
+            _spriteCatalog.AlphaDetected,
+            _spriteCatalog.TransparentPixelCount,
+            _spriteCatalog.KeyColorRemoved,
             _spriteCatalog.SpriteAssetsLoaded,
             _spriteCatalog.VillagerSpritesLoaded,
             _spriteCatalog.DestinationSpritesLoaded,
@@ -279,7 +284,7 @@ public partial class TinyTownMain : Node2D
         if (VisualMode != TinyTownVisualMode.FallbackShapes)
             return VisualMode;
 
-        return AtlasAssetExists(ResolveAtlasPathOverride())
+        return TinyTownArtProfile.BuildAtlasCandidates(ResolveAtlasPathOverride()).Any(AtlasAssetExists)
             ? TinyTownVisualMode.AnimatedSprites
             : TinyTownVisualMode.FallbackShapes;
     }
@@ -306,8 +311,19 @@ public partial class TinyTownMain : Node2D
     private static bool AtlasAssetExists(string atlasPath)
     {
         var trimmed = (atlasPath ?? string.Empty).Trim();
-        return !string.IsNullOrWhiteSpace(trimmed)
-            && ResourceLoader.Exists(trimmed, "Texture2D");
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        if (trimmed.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+        {
+            var filePath = ProjectSettings.GlobalizePath(trimmed);
+            return !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath);
+        }
+
+        return ResourceLoader.Exists(trimmed, "Texture2D");
     }
 
     private void RecordMovementSamples(TinyTownWorld world)
@@ -717,12 +733,17 @@ public sealed record TinyTownDebugSnapshot(
     string ScreenshotPath,
     string? ScreenshotError,
     string VisualMode,
+    string AtlasSourceKind,
     string AtlasPath,
     int AtlasWidth,
     int AtlasHeight,
     int CellWidth,
     int CellHeight,
     bool NormalizedAtlasUsed,
+    bool AlphaAtlasUsed,
+    bool AlphaDetected,
+    long TransparentPixelCount,
+    bool KeyColorRemoved,
     int SpriteAssetsLoaded,
     int VillagerSpritesLoaded,
     int DestinationSpritesLoaded,

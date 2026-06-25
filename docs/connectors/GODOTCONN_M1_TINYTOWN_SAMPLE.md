@@ -352,12 +352,12 @@ The committed TinyTown sprite art is a local generated sample sheet, not third-p
 
 ## M2.1 local sprite atlas integration
 
-M2.1 replaces the old per-file sprite lookup convention with one sample-local atlas:
+M2.1 replaced the old per-file sprite lookup convention with one sample-local atlas:
 
 - source sheet: `res://assets/sprites/tinytown_sprite.png`
 - normalized runtime atlas: `res://assets/sprites/generated/tinytown_atlas_normalized.png`
 
-Inspection result for the source sheet:
+Inspection result for the original generated source sheet:
 
 - original size: `1774x887`
 - format: opaque `24bpp` RGB
@@ -372,6 +372,25 @@ Normalization result:
 - cell geometry: `148x148`
 - original file remains untouched
 - border-connected checkerboard is removed into transparency
+
+## M2.2 cleaned alpha atlas preference
+
+M2.2 promotes the cleaned alpha atlas to the primary TinyTown sprite source:
+
+- chroma-key source: `res://assets/sprites/tinytown_sprite_magenta.png`
+- cleaned alpha source: `res://assets/sprites/tinytown_sprite_alpha.png`
+- optional normalized alpha derivative: `res://assets/sprites/generated/tinytown_atlas_alpha_normalized.png`
+- retained checkerboard fallback: `res://assets/sprites/generated/tinytown_atlas_normalized.png`
+
+Inspection result for the cleaned alpha source:
+
+- size: `1440x720`
+- format: `32bpp` RGBA
+- transparency: present
+- divisibility: exactly divisible by `12x6`
+- direct cell geometry: `120x120`
+
+Because the alpha sheet is already a clean `12x6` multiple, TinyTown uses it directly instead of creating a new normalized derivative.
 
 ### Atlas grid semantics
 
@@ -431,14 +450,21 @@ Texture handling:
 
 If no visual mode override is supplied:
 
-- TinyTown prefers `AnimatedSprites` when the normalized atlas exists
+- TinyTown prefers `AnimatedSprites` when any preferred atlas candidate exists
 - otherwise it stays on `FallbackShapes`
 
 If an atlas is missing or invalid:
 
-- TinyTown logs one warning
+- TinyTown tries the next candidate in order
+- TinyTown only logs one warning if every candidate fails
 - the requesting visual controller falls back to shapes
 - the sample keeps running
+
+Preferred runtime atlas order:
+
+- `res://assets/sprites/tinytown_sprite_alpha.png`
+- `res://assets/sprites/generated/tinytown_atlas_alpha_normalized.png`
+- `res://assets/sprites/generated/tinytown_atlas_normalized.png`
 
 ### Sprite smoke
 
@@ -464,8 +490,33 @@ Optional atlas override:
 powershell -ExecutionPolicy Bypass -File tools/Run-GodotTinyTownSmoke.ps1 `
   -SmokeFrames 360 `
   -VisualMode AnimatedSprites `
-  -AtlasPath 'res://assets/sprites/generated/tinytown_atlas_normalized.png'
+  -AtlasPath 'res://assets/sprites/tinytown_sprite_alpha.png'
 ```
+
+Smoke JSON atlas fields now include:
+
+- `atlasSourceKind`
+- `atlasPath`
+- `atlasWidth`
+- `atlasHeight`
+- `cellWidth`
+- `cellHeight`
+- `normalizedAtlasUsed`
+- `alphaAtlasUsed`
+- `alphaDetected`
+- `transparentPixelCount`
+- `keyColorRemoved`
+- `villagerSpritesLoaded`
+- `destinationSpritesLoaded`
+- `fallbackVisualsUsed`
+- `missingAssetWarnings`
+
+`atlasSourceKind` reports:
+
+- `AlphaOriginal` when the cleaned source sheet is used directly
+- `AlphaNormalized` when a generated alpha-normalized derivative is used
+- `CheckerboardNormalized` when the retained M2.1 workaround atlas is used
+- `Fallback` when sprite mode could not secure a valid atlas and visuals dropped to shapes
 
 ## Personality profiles
 

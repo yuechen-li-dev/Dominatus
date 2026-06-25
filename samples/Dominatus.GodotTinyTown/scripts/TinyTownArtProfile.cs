@@ -4,11 +4,15 @@ namespace Dominatus.GodotTinyTown;
 
 public sealed class TinyTownArtProfile
 {
+    public const string AlphaOriginalAtlasPath = "res://assets/sprites/tinytown_sprite_alpha.png";
+    public const string AlphaNormalizedAtlasPath = "res://assets/sprites/generated/tinytown_atlas_alpha_normalized.png";
+    public const string CheckerboardNormalizedAtlasPath = "res://assets/sprites/generated/tinytown_atlas_normalized.png";
+
     public TinyTownVisualMode VisualMode { get; init; } = TinyTownVisualMode.FallbackShapes;
 
-    public string VillagerAtlasPath { get; init; } = "res://assets/sprites/generated/tinytown_atlas_normalized.png";
+    public string VillagerAtlasPath { get; init; } = AlphaOriginalAtlasPath;
 
-    public string DestinationAtlasPath { get; init; } = "res://assets/sprites/generated/tinytown_atlas_normalized.png";
+    public string DestinationAtlasPath { get; init; } = AlphaOriginalAtlasPath;
 
     public Vector2I CellSize { get; init; } = new(32, 32);
 
@@ -31,4 +35,29 @@ public sealed class TinyTownArtProfile
         => VisualMode == TinyTownVisualMode.AnimatedSprites
             ? TinyTownVisualMode.StaticSprites
             : VisualMode;
+
+    public IReadOnlyList<string> GetVillagerAtlasCandidates()
+        => BuildAtlasCandidates(VillagerAtlasPath);
+
+    public IReadOnlyList<string> GetDestinationAtlasCandidates()
+        => BuildAtlasCandidates(DestinationAtlasPath);
+
+    public static IReadOnlyList<string> BuildAtlasCandidates(string primaryPath)
+    {
+        var candidates = new List<string>(3);
+        AddCandidate(candidates, primaryPath);
+        AddCandidate(candidates, AlphaOriginalAtlasPath);
+        AddCandidate(candidates, AlphaNormalizedAtlasPath);
+        AddCandidate(candidates, CheckerboardNormalizedAtlasPath);
+        return candidates;
+    }
+
+    private static void AddCandidate(List<string> candidates, string atlasPath)
+    {
+        var trimmed = (atlasPath ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || candidates.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        candidates.Add(trimmed);
+    }
 }

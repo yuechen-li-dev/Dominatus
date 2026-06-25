@@ -33,10 +33,20 @@ public sealed class TinyTownSpriteCatalog
 
     public bool NormalizedAtlasUsed { get; private set; }
 
+    public TinyTownAtlasSourceKind AtlasSourceKind { get; private set; } = TinyTownAtlasSourceKind.Fallback;
+
+    public bool AlphaAtlasUsed { get; private set; }
+
+    public bool AlphaDetected { get; private set; }
+
+    public long TransparentPixelCount { get; private set; }
+
+    public bool KeyColorRemoved { get; private set; }
+
     public bool TryGetVillagerSprite(TinyTownArtProfile profile, TinyTownVillagerPresentation presentation, out TinyTownAtlasSlice? slice)
     {
         slice = null;
-        if (!TryLoadAtlas(profile.VillagerAtlasPath, out var atlas))
+        if (!TryLoadAtlas(profile.GetVillagerAtlasCandidates(), out var atlas))
             return false;
 
         if (!TryResolveVillagerRow(presentation, out var row))
@@ -54,7 +64,7 @@ public sealed class TinyTownSpriteCatalog
     public bool TryGetDestinationSprite(TinyTownArtProfile profile, TinyTownDestinationPresentation presentation, out TinyTownAtlasSlice? slice)
     {
         slice = null;
-        if (!TryLoadAtlas(profile.DestinationAtlasPath, out var atlas))
+        if (!TryLoadAtlas(profile.GetDestinationAtlasCandidates(), out var atlas))
             return false;
 
         if (!TryResolveDestinationCell(presentation.Kind, out var row, out var column))
@@ -68,42 +78,68 @@ public sealed class TinyTownSpriteCatalog
         return true;
     }
 
-    private bool TryLoadAtlas(string atlasPath, out AtlasTextureInfo atlas)
+    private bool TryLoadAtlas(IReadOnlyList<string> atlasCandidates, out AtlasTextureInfo atlas)
     {
         atlas = default;
-        var trimmedPath = (atlasPath ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(trimmedPath))
+        if (atlasCandidates.Count == 0)
             return false;
 
-        if (_atlasCache.TryGetValue(trimmedPath, out atlas))
+        string? firstCandidate = null;
+        string? invalidCandidate = null;
+        int invalidWidth = 0;
+        int invalidHeight = 0;
+        foreach (var candidate in atlasCandidates)
         {
+            var trimmedPath = (candidate ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmedPath))
+                continue;
+
+            firstCandidate ??= trimmedPath;
+            if (_atlasCache.TryGetValue(trimmedPath, out atlas))
+            {
+                UpdateDiagnostics(trimmedPath, atlas);
+                return true;
+            }
+
+            var texture = TryLoadTexture(trimmedPath);
+            if (texture is null)
+                continue;
+
+            var loadedTexture = texture.Value;
+
+            var width = loadedTexture.Texture.GetWidth();
+            var height = loadedTexture.Texture.GetHeight();
+            if (width <= 0 || height <= 0 || width % AtlasColumns != 0 || height % AtlasRows != 0)
+            {
+                invalidCandidate = trimmedPath;
+                invalidWidth = width;
+                invalidHeight = height;
+                continue;
+            }
+
+            atlas = new AtlasTextureInfo(
+                loadedTexture.Texture,
+                width,
+                height,
+                width / AtlasColumns,
+                height / AtlasRows,
+                loadedTexture.AlphaDetected,
+                loadedTexture.TransparentPixelCount);
+            _atlasCache[trimmedPath] = atlas;
+            SpriteAssetsLoaded++;
             UpdateDiagnostics(trimmedPath, atlas);
             return true;
         }
 
-        var texture = TryLoadTexture(trimmedPath);
-        if (texture is null)
-        {
-            WarnMissing(trimmedPath, [trimmedPath], "atlas texture");
-            return false;
-        }
+        if (!string.IsNullOrWhiteSpace(invalidCandidate))
+            WarnInvalidAtlas(invalidCandidate, invalidWidth, invalidHeight);
+        else if (!string.IsNullOrWhiteSpace(firstCandidate))
+            WarnMissing(firstCandidate, atlasCandidates, "atlas texture");
 
-        var width = texture.GetWidth();
-        var height = texture.GetHeight();
-        if (width <= 0 || height <= 0 || width % AtlasColumns != 0 || height % AtlasRows != 0)
-        {
-            WarnInvalidAtlas(trimmedPath, width, height);
-            return false;
-        }
-
-        atlas = new AtlasTextureInfo(texture, width, height, width / AtlasColumns, height / AtlasRows);
-        _atlasCache[trimmedPath] = atlas;
-        SpriteAssetsLoaded++;
-        UpdateDiagnostics(trimmedPath, atlas);
-        return true;
+        return false;
     }
 
-    private static Texture2D? TryLoadTexture(string atlasPath)
+    private static TextureLoadInfo? TryLoadTexture(string atlasPath)
     {
         if (IsImagePath(atlasPath))
         {
@@ -115,13 +151,19 @@ public sealed class TinyTownSpriteCatalog
             if (image.IsEmpty())
                 return null;
 
-            return ImageTexture.CreateFromImage(image);
+            var texture = ImageTexture.CreateFromImage(image);
+            return texture is null
+                ? null
+                : new TextureLoadInfo(texture, DetectAlpha(image), CountTransparentPixels(image));
         }
 
         if (!ResourceLoader.Exists(atlasPath, "Texture2D"))
             return null;
 
-        return ResourceLoader.Load<Texture2D>(atlasPath);
+        var resource = ResourceLoader.Load<Texture2D>(atlasPath);
+        return resource is null
+            ? null
+            : new TextureLoadInfo(resource, false, 0);
     }
 
     private static Rect2 BuildRegion(AtlasTextureInfo atlas, int row, int column)
@@ -211,7 +253,12 @@ public sealed class TinyTownSpriteCatalog
         AtlasHeight = atlas.Height;
         CellWidth = atlas.CellWidth;
         CellHeight = atlas.CellHeight;
-        NormalizedAtlasUsed = atlasPath.Contains("/generated/", StringComparison.OrdinalIgnoreCase);
+        AtlasSourceKind = ResolveSourceKind(atlasPath);
+        NormalizedAtlasUsed = AtlasSourceKind is TinyTownAtlasSourceKind.AlphaNormalized or TinyTownAtlasSourceKind.CheckerboardNormalized;
+        AlphaAtlasUsed = AtlasSourceKind is TinyTownAtlasSourceKind.AlphaOriginal or TinyTownAtlasSourceKind.AlphaNormalized;
+        AlphaDetected = atlas.AlphaDetected;
+        TransparentPixelCount = atlas.TransparentPixelCount;
+        KeyColorRemoved = AlphaAtlasUsed;
     }
 
     private void RecordLoaded(HashSet<string> loadedSet, string key)
@@ -267,7 +314,67 @@ public sealed class TinyTownSpriteCatalog
         return builder.ToString().Trim('-');
     }
 
-    private readonly record struct AtlasTextureInfo(Texture2D Texture, int Width, int Height, int CellWidth, int CellHeight);
+    private static bool DetectAlpha(Image image)
+    {
+        for (var y = 0; y < image.GetHeight(); y++)
+        {
+            for (var x = 0; x < image.GetWidth(); x++)
+            {
+                if (image.GetPixel(x, y).A < 0.999f)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static long CountTransparentPixels(Image image)
+    {
+        long transparentPixels = 0;
+        for (var y = 0; y < image.GetHeight(); y++)
+        {
+            for (var x = 0; x < image.GetWidth(); x++)
+            {
+                if (image.GetPixel(x, y).A <= 0.001f)
+                    transparentPixels++;
+            }
+        }
+
+        return transparentPixels;
+    }
+
+    private static TinyTownAtlasSourceKind ResolveSourceKind(string atlasPath)
+    {
+        return atlasPath switch
+        {
+            TinyTownArtProfile.AlphaOriginalAtlasPath => TinyTownAtlasSourceKind.AlphaOriginal,
+            TinyTownArtProfile.AlphaNormalizedAtlasPath => TinyTownAtlasSourceKind.AlphaNormalized,
+            TinyTownArtProfile.CheckerboardNormalizedAtlasPath => TinyTownAtlasSourceKind.CheckerboardNormalized,
+            _ when atlasPath.Contains("sprite_alpha", StringComparison.OrdinalIgnoreCase) => TinyTownAtlasSourceKind.AlphaOriginal,
+            _ when atlasPath.Contains("atlas_alpha_normalized", StringComparison.OrdinalIgnoreCase) => TinyTownAtlasSourceKind.AlphaNormalized,
+            _ when atlasPath.Contains("atlas_normalized", StringComparison.OrdinalIgnoreCase) => TinyTownAtlasSourceKind.CheckerboardNormalized,
+            _ => TinyTownAtlasSourceKind.Fallback
+        };
+    }
+
+    private readonly record struct AtlasTextureInfo(
+        Texture2D Texture,
+        int Width,
+        int Height,
+        int CellWidth,
+        int CellHeight,
+        bool AlphaDetected,
+        long TransparentPixelCount);
+
+    private readonly record struct TextureLoadInfo(Texture2D Texture, bool AlphaDetected, long TransparentPixelCount);
 }
 
 public sealed record TinyTownAtlasSlice(Texture2D Texture, Rect2 RegionRect);
+
+public enum TinyTownAtlasSourceKind
+{
+    Fallback = 0,
+    AlphaOriginal = 1,
+    AlphaNormalized = 2,
+    CheckerboardNormalized = 3
+}
