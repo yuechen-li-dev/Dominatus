@@ -14,6 +14,7 @@ This index separates user-facing documentation from release prep, development lo
 - [Actuation policy](user/ACTUATION_POLICY.md) — policy-gated typed side effects and approval boundaries.
 - [Team coordination](user/TEAM_COORDINATION.md) — shared/team blackboard coordination patterns.
 - [TOML assets](user/ASSETS_TOML.md) — generic typed TOML asset loading, diagnostics, validators, symbolic references, and the Ariadne dialogue sample.
+- [SpriteForge M0](assets/SPRITEFORGE_M0.md) — doctrine, TOML schema, validation/resolution model, Godot preview workflow, and TinyTown migration roadmap for semantic sprite atlases.
 
 ## Actuators
 

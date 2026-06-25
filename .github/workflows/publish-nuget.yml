@@ -49,6 +49,7 @@ jobs:
           dotnet pack src/Ariadne.OptFlow/Ariadne.OptFlow.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Assets.Toml/Dominatus.Assets.Toml.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          dotnet pack src/Dominatus.SpriteForge/Dominatus.SpriteForge.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Llm.Context/Dominatus.Llm.Context.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
           dotnet pack src/Dominatus.Actuators.Standard/Dominatus.Actuators.Standard.csproj -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}

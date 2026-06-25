@@ -1,0 +1,20 @@
+; Engine configuration file.
+; SpriteForge preview tooling project.
+
+config_version=5
+
+[application]
+
+config/name="Dominatus.SpriteForge.PreviewGodot"
+run/main_scene="res://scenes/SpriteForgePreviewMain.tscn"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+
+[dotnet]
+
+project/assembly_name="Dominatus.SpriteForge.PreviewGodot"

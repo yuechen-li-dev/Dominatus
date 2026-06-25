@@ -1,0 +1,16 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Dominatus.SpriteForge.PreviewGodot</RootNamespace>
+    <AssemblyName>Dominatus.SpriteForge.PreviewGodot</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominatus.SpriteForge\Dominatus.SpriteForge.csproj" />
+  </ItemGroup>
+
+</Project>

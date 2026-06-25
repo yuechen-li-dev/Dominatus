@@ -14,10 +14,12 @@ Fallback visuals still remain safe and available if any sprite asset is missing 
 - local cleanup helper: `assets/sprites/chroma_key_extract.py`
 - preferred runtime atlas: `assets/sprites/tinytown_sprite_alpha.png`
 - preferred atlas metadata: `assets/sprites/tinytown_sprite_alpha.sprite.toml`
+- forward-looking SpriteForge fixture: `assets/sprites/tinytown_sprite_alpha.spriteforge.toml`
 - generated normalized atlases: `assets/sprites/generated`
 - runtime mode override: env var `DOMINATUS_TINYTOWN_VISUAL_MODE`
 - runtime atlas override: env var `DOMINATUS_TINYTOWN_ATLAS_PATH`
 - local preview command: `tools/Preview-SpriteAtlasToml.ps1`
+- SpriteForge preview smoke: `tools/Run-SpriteForgePreview.ps1`
 
 ## License rule
 
@@ -40,6 +42,7 @@ The previous checkerboard-derived normalized atlas remains at `1776x888`, which 
 TinyTown now keeps semantic sprite metadata in:
 
 - `assets/sprites/tinytown_sprite_alpha.sprite.toml`
+- `assets/sprites/tinytown_sprite_alpha.spriteforge.toml` for the SpriteForge M0 schema skeleton
 
 That sidecar defines:
 
@@ -50,6 +53,10 @@ That sidecar defines:
 - optional per-frame correction overrides under `[frames]`
 
 This lets you fix imperfect cuts and alignment in data without editing C# for every art pass.
+
+The current TinyTown runtime still consumes the legacy `*.sprite.toml` shape through `Dominatus.GodotConn`.
+
+The new `*.spriteforge.toml` file exists so SpriteForge can evolve without destabilizing the working sample during M0.
 
 ### Current schema shape
 

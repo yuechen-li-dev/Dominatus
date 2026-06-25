@@ -2,6 +2,12 @@
 
 This document covers the M1.4 through M2 TinyTown pass for `samples/Dominatus.GodotTinyTown`.
 
+SpriteForge M0 note:
+
+- TinyTown's `*.sprite.toml` sidecar is the first practical SpriteForge case.
+- The forward-looking SpriteForge fixture now lives beside it at `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.spriteforge.toml`.
+- TinyTown runtime migration to `Dominatus.SpriteForge` is deferred past M0 so the current sample stays stable.
+
 ## Purpose
 
 `samples/Dominatus.GodotTinyTown` is the small, real Godot 4.7 .NET sample that proves the connector in the path that matters:

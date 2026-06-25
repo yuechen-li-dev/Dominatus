@@ -1,0 +1,176 @@
+[atlas]
+image = "tinytown_sprite_alpha.png"
+width = 1440
+height = 720
+
+[grids.villagers_down]
+origin_x = 0
+origin_y = 0
+columns = 3
+rows = 4
+cell_width = 120
+cell_height = 120
+default_pivot = "bottom_center"
+
+[grids.villagers_left]
+origin_x = 360
+origin_y = 0
+columns = 3
+rows = 4
+cell_width = 120
+cell_height = 120
+default_pivot = "bottom_center"
+
+[grids.villagers_right]
+origin_x = 720
+origin_y = 0
+columns = 3
+rows = 4
+cell_width = 120
+cell_height = 120
+default_pivot = "bottom_center"
+
+[grids.villagers_up]
+origin_x = 1080
+origin_y = 0
+columns = 3
+rows = 4
+cell_width = 120
+cell_height = 120
+default_pivot = "bottom_center"
+
+[grids.props]
+origin_x = 0
+origin_y = 480
+columns = 12
+rows = 2
+cell_width = 120
+cell_height = 120
+default_pivot = "bottom_center"
+
+[sprites.maya]
+kind = "villager"
+display_name = "Maya"
+
+[sprites.maya.animations.down]
+grid = "villagers_down"
+row = 0
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.maya.animations.left]
+grid = "villagers_left"
+row = 0
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.maya.animations.right]
+grid = "villagers_right"
+row = 0
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.maya.animations.up]
+grid = "villagers_up"
+row = 0
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.maya.animations.down_exact]
+grid = "villagers_down"
+row = 0
+frames = ["maya.down.idle_exact", 1, 2]
+fps = 6
+loop = true
+
+[sprites.theo]
+kind = "villager"
+display_name = "Theo"
+
+[sprites.theo.animations.down]
+grid = "villagers_down"
+row = 1
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.lina]
+kind = "villager"
+display_name = "Lina"
+
+[sprites.lina.animations.down]
+grid = "villagers_down"
+row = 2
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.nia]
+kind = "villager"
+display_name = "Nia"
+
+[sprites.nia.animations.down]
+grid = "villagers_down"
+row = 3
+frames = [0, 1, 2]
+fps = 6
+loop = true
+
+[sprites.well]
+kind = "destination"
+display_name = "Well"
+grid = "props"
+row = 0
+col = 0
+scale = 1.0
+pivot = "bottom_center"
+
+[sprites.market]
+kind = "destination"
+display_name = "Market"
+grid = "props"
+row = 0
+col = 1
+scale = 1.0
+pivot = "bottom_center"
+
+[sprites.garden]
+kind = "destination"
+display_name = "Garden"
+grid = "props"
+row = 0
+col = 2
+scale = 1.0
+pivot = "bottom_center"
+
+[sprites.home]
+kind = "destination"
+display_name = "Home"
+grid = "props"
+row = 0
+col = 3
+scale = 1.0
+pivot = "bottom_center"
+
+[sprites.social]
+kind = "destination"
+display_name = "Social"
+grid = "props"
+row = 0
+col = 4
+scale = 1.0
+pivot = "bottom_center"
+
+[frames."maya.down.idle_exact"]
+x = 24
+y = 8
+width = 72
+height = 104
+pivot = "bottom_center"
+offset_x = 0
+offset_y = -4
+scale = 1.0

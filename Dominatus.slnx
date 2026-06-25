@@ -13,11 +13,13 @@
   <Project Path="samples/Dominatus.TinyTown/Dominatus.TinyTown.csproj" />
   <Project Path="samples/Dominatus.GodotTinyTown/Dominatus.GodotTinyTown.csproj" />
   <Project Path="samples/Dominatus.Assets.Toml.AriadneDialogue/Dominatus.Assets.Toml.AriadneDialogue.csproj" />
+  <Project Path="tools/Dominatus.SpriteForge.PreviewGodot/Dominatus.SpriteForge.PreviewGodot.csproj" />
   <Project Path="tests/Dominatus.TinyTown.Tests/Dominatus.TinyTown.Tests.csproj" />
   <Project Path="src/Ariadne.Console/Ariadne.ConsoleApp.csproj" Id="4ffe8ebb-8ad5-4faa-bdad-afddf42b99e7" />
   <Project Path="src/Ariadne.OptFlow/Ariadne.OptFlow.csproj" Id="7f70086a-7f3d-4fcf-a681-49c83963a640" />
   <Project Path="src/Dominatus.Core/Dominatus.Core.csproj" />
   <Project Path="src/Dominatus.Assets.Toml/Dominatus.Assets.Toml.csproj" />
+  <Project Path="src/Dominatus.SpriteForge/Dominatus.SpriteForge.csproj" />
   <Project Path="src/Dominatus.OptFlow/Dominatus.OptFlow.csproj" Id="31fe4a4a-c059-4ea0-a3c8-2837b15f8b77" />
   <Project Path="src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj" />
   <Project Path="src/Dominatus.Llm.Context/Dominatus.Llm.Context.csproj" />
@@ -28,6 +30,7 @@
   <Project Path="tests/Ariadne,ConsoleApp.Tests/Ariadne,ConsoleApp.Tests.csproj" Id="9b598c48-2ebd-4917-acdd-05dcd18a212b" />
   <Project Path="tests/Dominatus.Core.Tests/Dominatus.Core.Tests.csproj" Id="b37f6e51-ca1b-4df8-b58f-7345ccc8d904" />
   <Project Path="tests/Dominatus.Assets.Toml.Tests/Dominatus.Assets.Toml.Tests.csproj" />
+  <Project Path="tests/Dominatus.SpriteForge.Tests/Dominatus.SpriteForge.Tests.csproj" />
   <Project Path="tests/Dominatus.Llm.OptFlow.Tests/Dominatus.Llm.OptFlow.Tests.csproj" />
   <Project Path="tests/Dominatus.Llm.Context.Tests/Dominatus.Llm.Context.Tests.csproj" />
   <Project Path="tests/Dominatus.Llm.ContextDogfood.Tests/Dominatus.Llm.ContextDogfood.Tests.csproj" />
