@@ -169,3 +169,5 @@ These are not first-stop user docs, but they are retained as implementation hist
 - [Primer examples](PrimerExamples/README.md) — source artifacts used to generate and validate `PRIMER.context` packets.
 
 - [Dominatus.Pay M3 — PayPal Orders adapter](actuators/ACTUATORS_PAYMENTS_PAYPAL_M3.md)
+
+- [Audio ElevenLabs M1](actuators/ACTUATORS_AUDIO_ELEVENLABS_M1.md)
