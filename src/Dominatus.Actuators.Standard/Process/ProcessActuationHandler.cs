@@ -56,7 +56,7 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
             {
                 if (completed.IsFaulted && completed.Exception?.InnerException is OutputLimitExceededException limitEx)
                 {
-                    TryKillProcessTree(process);
+                    StopProcessAndDrain(process, stdoutTask, stderrTask);
                     throw new InvalidOperationException(limitEx.Message);
                 }
             }
@@ -68,17 +68,18 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            TryKillProcessTree(process);
+            StopProcessAndDrain(process, stdoutTask, stderrTask);
             throw;
         }
         catch (OperationCanceledException)
         {
-            TryKillProcessTree(process);
+            StopProcessAndDrain(process, stdoutTask, stderrTask);
             var timeoutStdout = AwaitCompletedText(stdoutTask);
             var timeoutStderr = AwaitCompletedText(stderrTask);
             return new ProcessResult(-1, TimedOut: true, timeoutStdout, timeoutStderr);
         }
 
+        WaitForProcessExit(process);
         var stdout = AwaitCompletedText(stdoutTask);
         var stderr = AwaitCompletedText(stderrTask);
 
@@ -149,6 +150,50 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
         catch
         {
             // best effort
+        }
+    }
+
+    private static void StopProcessAndDrain(Process process, Task<string> stdoutTask, Task<string> stderrTask)
+    {
+        TryKillProcessTree(process);
+        WaitForProcessExit(process);
+        AwaitCleanup(stdoutTask);
+        AwaitCleanup(stderrTask);
+    }
+
+    private static void WaitForProcessExit(Process process)
+    {
+        const int ExitTimeoutMs = 5000;
+
+        if (process.HasExited)
+        {
+            process.WaitForExit();
+            return;
+        }
+
+        if (!process.WaitForExit(ExitTimeoutMs))
+            throw new InvalidOperationException($"Process '{process.StartInfo.FileName}' did not exit within {ExitTimeoutMs}ms of termination.");
+
+        process.WaitForExit();
+    }
+
+    private static void AwaitCleanup(Task<string> task)
+    {
+        try
+        {
+            task.GetAwaiter().GetResult();
+        }
+        catch (OutputLimitExceededException)
+        {
+            // Expected when we're cleaning up after an output-cap violation.
+        }
+        catch (OperationCanceledException)
+        {
+            // Streams may be interrupted by process termination.
+        }
+        catch (IOException)
+        {
+            // Redirected pipe teardown can surface as I/O after termination.
         }
     }
 
