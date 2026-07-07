@@ -1,0 +1,135 @@
+[guide]
+id = "tinytown_sprite_alpha"
+target = "tinytown-sheet"
+units = "px"
+description = "TinyTown authoring IR. Regions and annotations describe the atlas layout without polluting runtime sprite metadata."
+
+[[regions]]
+id = "characters_down"
+kind = "sprite-region"
+x = 0
+y = 0
+width = 360
+height = 480
+description = "Facing-down character band."
+
+[[regions]]
+id = "characters_left"
+kind = "sprite-region"
+x = 360
+y = 0
+width = 360
+height = 480
+description = "Facing-left character band."
+
+[[regions]]
+id = "characters_right"
+kind = "sprite-region"
+x = 720
+y = 0
+width = 360
+height = 480
+description = "Facing-right character band."
+
+[[regions]]
+id = "characters_up"
+kind = "sprite-region"
+x = 1080
+y = 0
+width = 360
+height = 480
+description = "Facing-up character band."
+
+[[regions]]
+id = "props_top"
+kind = "sprite-region"
+x = 0
+y = 480
+width = 1440
+height = 120
+description = "Upper prop and destination row."
+
+[regions.grid]
+cell_width = 120
+cell_height = 120
+columns = 12
+rows = 1
+
+[[regions]]
+id = "props_bottom"
+kind = "sprite-region"
+x = 0
+y = 600
+width = 1440
+height = 120
+description = "Lower prop and UI row."
+
+[regions.grid]
+cell_width = 120
+cell_height = 120
+columns = 12
+rows = 1
+
+[[datums]]
+id = "face-split-left"
+kind = "vertical"
+x = 360
+label = "left band split"
+
+[[datums]]
+id = "face-split-right"
+kind = "vertical"
+x = 720
+label = "right band split"
+
+[[datums]]
+id = "face-split-up"
+kind = "vertical"
+x = 1080
+label = "up band split"
+
+[[datums]]
+id = "prop-row-top"
+kind = "horizontal"
+y = 480
+label = "props top"
+
+[[datums]]
+id = "prop-row-bottom"
+kind = "horizontal"
+y = 600
+label = "props bottom"
+
+[[dimensions]]
+id = "character-cell"
+kind = "linear"
+label = "character cell 80 px"
+from = [ 0, 0 ]
+to = [ 80, 0 ]
+units = "px"
+region = "characters_down"
+
+[[dimensions]]
+id = "character-cell-height"
+kind = "linear"
+label = "character cell 120 px"
+from = [ 0, 0 ]
+to = [ 0, 120 ]
+units = "px"
+region = "characters_down"
+
+[[dimensions]]
+id = "prop-cell"
+kind = "linear"
+label = "prop cell 120 px"
+from = [ 0, 480 ]
+to = [ 120, 480 ]
+units = "px"
+region = "props_top"
+
+[[alignment_marks]]
+id = "atlas-origin"
+kind = "point"
+x = 0
+y = 0
+label = "atlas origin"

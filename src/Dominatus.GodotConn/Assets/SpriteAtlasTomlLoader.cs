@@ -10,6 +10,10 @@ public static class SpriteAtlasTomlLoader
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        var rawToml = File.ReadAllText(path);
+        if (LooksLikeCompiledRuntimeToml(path, rawToml))
+            return LoadCompiledFile(path);
+
         var loadResult = TomlAssetLoader.LoadFile<SpriteAtlasTomlDocument>(
             path,
             new SpriteAtlasTomlValidator());
@@ -43,12 +47,51 @@ public static class SpriteAtlasTomlLoader
         }
     }
 
+    private static SpriteAtlasLoadResult LoadCompiledFile(string path)
+    {
+        var loadResult = TomlAssetLoader.LoadFile<CompiledSpriteAtlasTomlDocument>(
+            path,
+            new CompiledSpriteAtlasTomlValidator());
+        if (loadResult.Value is null)
+        {
+            return new SpriteAtlasLoadResult
+            {
+                Asset = null,
+                Diagnostics = loadResult.Diagnostics
+            };
+        }
+
+        var diagnostics = new List<AssetDiagnostic>(loadResult.Diagnostics);
+        try
+        {
+            var asset = BuildCompiledAsset(path, loadResult.Value, diagnostics, loadResult.SourceMap);
+            return new SpriteAtlasLoadResult
+            {
+                Asset = diagnostics.Any(d => d.Severity == AssetDiagnosticSeverity.Error) ? null : asset,
+                Diagnostics = diagnostics
+            };
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException)
+        {
+            diagnostics.Add(AssetValidation.Error("sprite.transform", ex.Message, path));
+            return new SpriteAtlasLoadResult
+            {
+                Asset = null,
+                Diagnostics = diagnostics
+            };
+        }
+    }
+
     public static string GetMetadataPathForImage(string imagePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imagePath);
 
         var directory = Path.GetDirectoryName(imagePath) ?? string.Empty;
         var fileName = Path.GetFileNameWithoutExtension(imagePath);
+        var compiledPath = Path.Combine(directory, $"{fileName}.compiled.sprite.toml");
+        if (File.Exists(compiledPath))
+            return compiledPath;
+
         return Path.Combine(directory, $"{fileName}.sprite.toml");
     }
 
@@ -76,6 +119,37 @@ public static class SpriteAtlasTomlLoader
             Width = imageWidth,
             Height = imageHeight,
             Grid = new SpriteAtlasGrid(atlas.Columns, atlas.Rows, atlas.CellWidth, atlas.CellHeight),
+            DefaultPivot = defaultPivot,
+            Entities = entities,
+            Frames = frames
+        };
+    }
+
+    private static SpriteAtlasAsset BuildCompiledAsset(
+        string sourcePath,
+        CompiledSpriteAtlasTomlDocument document,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap)
+    {
+        var atlas = document.Atlas ?? throw new InvalidOperationException("Compiled sprite atlas TOML is missing the [atlas] table.");
+        var resolvedImagePath = ResolveImagePath(sourcePath, atlas.Image);
+        var defaultPivot = ParsePivot(atlas.DefaultPivot, "atlas.default_pivot", sourcePath, diagnostics, sourceMap) ?? SpritePivot.BottomCenter;
+
+        if (!TryReadImageDimensions(resolvedImagePath, out var imageWidth, out var imageHeight, out var imageError))
+            throw new InvalidOperationException($"Sprite atlas image '{resolvedImagePath}' could not be inspected: {imageError}");
+
+        var inferredGrid = InferCompiledGrid(document, atlas);
+        var frames = BuildCompiledFrames(document, sourcePath, diagnostics, sourceMap, defaultPivot);
+        var entities = BuildCompiledSprites(document, frames, sourcePath, diagnostics, sourceMap, defaultPivot);
+
+        return new SpriteAtlasAsset
+        {
+            SourcePath = sourcePath,
+            ImagePath = atlas.Image.Trim(),
+            ResolvedImagePath = resolvedImagePath,
+            Width = imageWidth,
+            Height = imageHeight,
+            Grid = inferredGrid,
             DefaultPivot = defaultPivot,
             Entities = entities,
             Frames = frames
@@ -154,6 +228,90 @@ public static class SpriteAtlasTomlLoader
                 Offset = new Vector2(entityDoc.OffsetX ?? 0f, entityDoc.OffsetY ?? 0f),
                 Pivot = entityPivot,
                 Correction = entityCorrection
+            };
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, SpriteFrameAsset> BuildCompiledFrames(
+        CompiledSpriteAtlasTomlDocument document,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        SpritePivot defaultPivot)
+    {
+        var result = new Dictionary<string, SpriteFrameAsset>(StringComparer.Ordinal);
+
+        foreach (var (stackframeId, stackframe) in document.Stackframes)
+        {
+            foreach (var frame in ExpandStackframe(stackframeId, stackframe, sourcePath, diagnostics, sourceMap, defaultPivot))
+                result[frame.Id] = frame;
+        }
+
+        foreach (var (frameId, frame) in document.Frames)
+            result[frameId] = BuildCompiledFrameAsset(frameId, frame, sourcePath, diagnostics, sourceMap, defaultPivot, $"frames.{QuoteKey(frameId)}");
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, SpriteEntityAsset> BuildCompiledSprites(
+        CompiledSpriteAtlasTomlDocument document,
+        IReadOnlyDictionary<string, SpriteFrameAsset> frames,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        SpritePivot defaultPivot)
+    {
+        var result = new Dictionary<string, SpriteEntityAsset>(StringComparer.Ordinal);
+        foreach (var (spriteId, sprite) in document.Sprites)
+        {
+            var keyPath = $"sprites.{QuoteKey(spriteId)}";
+            var animations = new Dictionary<string, SpriteAnimationAsset>(StringComparer.Ordinal);
+            if (sprite.Animations is not null)
+            {
+                foreach (var (animationId, animation) in sprite.Animations)
+                {
+                    var frameRefs = new List<SpriteFrameRef>(animation.Frames.Count);
+                    for (var i = 0; i < animation.Frames.Count; i++)
+                    {
+                        var frameId = animation.Frames[i]?.Trim() ?? string.Empty;
+                        if (TryResolveCompiledFrameRef(frameId, frames, sourcePath, diagnostics, sourceMap, $"{keyPath}.animations.{QuoteKey(animationId)}.frames[{i}]", defaultPivot, out var frameRef))
+                            frameRefs.Add(frameRef);
+                    }
+
+                    animations[animationId] = new SpriteAnimationAsset
+                    {
+                        Name = animationId,
+                        Frames = frameRefs,
+                        Fps = animation.Fps ?? 0f,
+                        Loop = animation.Loop ?? true
+                    };
+                }
+            }
+
+            SpriteFrameRef? staticFrame = null;
+            if (!string.IsNullOrWhiteSpace(sprite.Frame)
+                && TryResolveCompiledFrameRef(sprite.Frame, frames, sourcePath, diagnostics, sourceMap, $"{keyPath}.frame", defaultPivot, out var resolvedStaticFrame))
+            {
+                staticFrame = resolvedStaticFrame;
+            }
+
+            var staticFrameAsset = !string.IsNullOrWhiteSpace(sprite.Frame) && frames.TryGetValue(sprite.Frame, out var sharedFrame)
+                ? sharedFrame
+                : null;
+
+            result[spriteId] = new SpriteEntityAsset
+            {
+                Id = spriteId,
+                Kind = FirstNonEmpty(sprite.Kind, staticFrameAsset?.Kind),
+                DisplayName = FirstNonEmpty(sprite.DisplayName, staticFrameAsset?.DisplayName),
+                Animations = animations,
+                StaticFrame = staticFrame,
+                Scale = 1f,
+                Offset = Vector2.Zero,
+                Pivot = defaultPivot,
+                Correction = null
             };
         }
 
@@ -259,6 +417,132 @@ public static class SpriteAtlasTomlLoader
             FrameId = frameId,
             Correction = baseCorrection is null ? null : MergeCorrection(null, baseCorrection, declaredPivot)
         };
+    }
+
+    private static IEnumerable<SpriteFrameAsset> ExpandStackframe(
+        string stackframeId,
+        CompiledStackframeTomlDocument stackframe,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        SpritePivot defaultPivot)
+    {
+        var labels = stackframe.Labels ?? [];
+        for (var i = 0; i < stackframe.Count; i++)
+        {
+            var label = i < labels.Count && !string.IsNullOrWhiteSpace(labels[i])
+                ? labels[i].Trim()
+                : $"{stackframeId}.{i}";
+            var rect = BuildStackframeRect(stackframe, i);
+            yield return new SpriteFrameAsset
+            {
+                Id = label,
+                Row = 0,
+                Col = 0,
+                Kind = string.Empty,
+                DisplayName = null,
+                Correction = new SpriteFrameCorrection
+                {
+                    SourceRectOverride = rect,
+                    Offset = Vector2.Zero,
+                    Scale = 1f,
+                    Pivot = defaultPivot
+                }
+            };
+        }
+    }
+
+    private static SpriteFrameAsset BuildCompiledFrameAsset(
+        string frameId,
+        CompiledFrameTomlDocument frame,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        SpritePivot defaultPivot,
+        string keyPath)
+    {
+        var pivot = ParsePivot(frame.Pivot, $"{keyPath}.pivot", sourcePath, diagnostics, sourceMap) ?? defaultPivot;
+        return new SpriteFrameAsset
+        {
+            Id = frameId,
+            Row = 0,
+            Col = 0,
+            Kind = frame.Kind?.Trim() ?? string.Empty,
+            DisplayName = string.IsNullOrWhiteSpace(frame.DisplayName) ? null : frame.DisplayName.Trim(),
+            Correction = new SpriteFrameCorrection
+            {
+                SourceRectOverride = new Rect2(frame.X, frame.Y, frame.Width, frame.Height),
+                Offset = Vector2.Zero,
+                Scale = 1f,
+                Pivot = pivot
+            }
+        };
+    }
+
+    private static bool TryResolveCompiledFrameRef(
+        string frameId,
+        IReadOnlyDictionary<string, SpriteFrameAsset> frames,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        string keyPath,
+        SpritePivot defaultPivot,
+        out SpriteFrameRef frameRef)
+    {
+        if (frames.TryGetValue(frameId, out var frame))
+        {
+            frameRef = new SpriteFrameRef
+            {
+                Row = frame.Row,
+                Col = frame.Col,
+                FrameId = frame.Id,
+                Correction = frame.Correction ?? new SpriteFrameCorrection { Pivot = defaultPivot }
+            };
+            return true;
+        }
+
+        diagnostics.Add(AssetValidation.Error(
+            "sprite.unknown_frame",
+            $"Sprite metadata references unknown frame '{frameId}'.",
+            sourcePath,
+            keyPath: keyPath,
+            span: sourceMap?.TryGetSpan(keyPath, out var span) == true ? span : null));
+        frameRef = null!;
+        return false;
+    }
+
+    private static Rect2 BuildStackframeRect(CompiledStackframeTomlDocument stackframe, int index)
+    {
+        var offset = stackframe.Step * index;
+        return stackframe.Direction.Trim().Equals("horizontal", StringComparison.OrdinalIgnoreCase)
+            ? new Rect2(stackframe.X + offset, stackframe.Y, stackframe.Width, stackframe.Height)
+            : new Rect2(stackframe.X, stackframe.Y + offset, stackframe.Width, stackframe.Height);
+    }
+
+    private static SpriteAtlasGrid InferCompiledGrid(CompiledSpriteAtlasTomlDocument document, CompiledSpriteAtlasSection atlas)
+    {
+        var verticalStackframes = document.Stackframes.Values
+            .Where(x => !x.Direction.Trim().Equals("horizontal", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var cellHeight = verticalStackframes
+            .Select(x => x.Step > 0 ? x.Step : x.Height)
+            .FirstOrDefault(x => x > 0);
+        if (cellHeight <= 0)
+            cellHeight = atlas.Height;
+
+        var rows = atlas.Height > 0 && atlas.Height % cellHeight == 0
+            ? atlas.Height / cellHeight
+            : 1;
+
+        var columns = verticalStackframes.Length;
+        if (columns <= 0)
+            columns = 1;
+
+        var cellWidth = atlas.Width > 0 && atlas.Width % columns == 0
+            ? atlas.Width / columns
+            : atlas.Width;
+
+        return new SpriteAtlasGrid(columns, rows, cellWidth, cellHeight);
     }
 
     private static SpriteFrameCorrection? BuildCorrection(
@@ -422,6 +706,44 @@ public static class SpriteAtlasTomlLoader
     }
 
     private static string QuoteKey(string value) => $"\"{value}\"";
+
+    private static bool LooksLikeCompiledRuntimeToml(string path, string rawToml)
+    {
+        return path.Contains(".compiled.sprite.toml", StringComparison.OrdinalIgnoreCase)
+            || rawToml.Contains("[sprites.", StringComparison.Ordinal)
+            || rawToml.Contains("[stackframes.", StringComparison.Ordinal);
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return string.Empty;
+    }
+
+    private static void RequirePositive(
+        int value,
+        string keyPath,
+        string code,
+        string message,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        AssetValidationContext context)
+    {
+        if (value > 0)
+            return;
+
+        diagnostics.Add(AssetValidation.Error(
+            code,
+            message,
+            sourcePath,
+            keyPath: keyPath,
+            span: context.GetSpan(keyPath)));
+    }
 
     private sealed class SpriteAtlasTomlValidator : IAssetValidator<SpriteAtlasTomlDocument>
     {
@@ -640,24 +962,69 @@ public static class SpriteAtlasTomlLoader
             }
         }
 
-        private static void RequirePositive(
-            int value,
+    }
+
+    private sealed class CompiledSpriteAtlasTomlValidator : IAssetValidator<CompiledSpriteAtlasTomlDocument>
+    {
+        public IReadOnlyList<AssetDiagnostic> Validate(CompiledSpriteAtlasTomlDocument asset, AssetValidationContext context)
+        {
+            var diagnostics = new List<AssetDiagnostic>();
+            var sourcePath = context.SourcePath ?? string.Empty;
+            if (asset.Atlas is null)
+            {
+                diagnostics.Add(AssetValidation.Required("atlas", sourcePath, "atlas"));
+                return diagnostics;
+            }
+
+            if (string.IsNullOrWhiteSpace(asset.Atlas.Image))
+                diagnostics.Add(AssetValidation.Required("atlas.image", sourcePath, "atlas.image"));
+
+            RequirePositive(asset.Atlas.Width, "atlas.width", "sprite.width_invalid", "Compiled sprite atlas width must be greater than zero.", sourcePath, diagnostics, context);
+            RequirePositive(asset.Atlas.Height, "atlas.height", "sprite.height_invalid", "Compiled sprite atlas height must be greater than zero.", sourcePath, diagnostics, context);
+
+            foreach (var (frameId, frame) in asset.Frames)
+            {
+                var key = $"frames.{QuoteKey(frameId)}";
+                ValidateCompiledRect(frame.X, frame.Y, frame.Width, frame.Height, asset.Atlas, key, sourcePath, diagnostics, context);
+            }
+
+            foreach (var (stackframeId, stackframe) in asset.Stackframes)
+            {
+                var key = $"stackframes.{QuoteKey(stackframeId)}";
+                RequirePositive(stackframe.Count, $"{key}.count", "sprite.stackframe_count_invalid", $"Stackframe '{stackframeId}' count must be greater than zero.", sourcePath, diagnostics, context);
+                RequirePositive(stackframe.Step, $"{key}.step", "sprite.stackframe_step_invalid", $"Stackframe '{stackframeId}' step must be greater than zero.", sourcePath, diagnostics, context);
+                for (var i = 0; i < Math.Max(stackframe.Count, 0); i++)
+                {
+                    var rect = BuildStackframeRect(stackframe, i);
+                    ValidateCompiledRect((int)rect.Position.X, (int)rect.Position.Y, (int)rect.Size.X, (int)rect.Size.Y, asset.Atlas, key, sourcePath, diagnostics, context);
+                }
+            }
+
+            return diagnostics;
+        }
+
+        private static void ValidateCompiledRect(
+            int x,
+            int y,
+            int width,
+            int height,
+            CompiledSpriteAtlasSection atlas,
             string keyPath,
-            string code,
-            string message,
             string sourcePath,
             List<AssetDiagnostic> diagnostics,
             AssetValidationContext context)
         {
-            if (value > 0)
-                return;
-
-            diagnostics.Add(AssetValidation.Error(
-                code,
-                message,
-                sourcePath,
-                keyPath: keyPath,
-                span: context.GetSpan(keyPath)));
+            RequirePositive(width, $"{keyPath}.width", "sprite.frame_width_invalid", "Frame width must be greater than zero.", sourcePath, diagnostics, context);
+            RequirePositive(height, $"{keyPath}.height", "sprite.frame_height_invalid", "Frame height must be greater than zero.", sourcePath, diagnostics, context);
+            if (x < 0 || y < 0 || x + width > atlas.Width || y + height > atlas.Height)
+            {
+                diagnostics.Add(AssetValidation.Error(
+                    "sprite.frame_out_of_bounds",
+                    $"Frame rectangle ({x}, {y}, {width}, {height}) is outside atlas bounds {atlas.Width}x{atlas.Height}.",
+                    sourcePath,
+                    keyPath: keyPath,
+                    span: context.GetSpan(keyPath)));
+            }
         }
     }
 
@@ -668,6 +1035,17 @@ public static class SpriteAtlasTomlLoader
         public Dictionary<string, SpriteEntityTomlDocument> Entities { get; init; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, SpriteFrameTomlDocument> Frames { get; init; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed record CompiledSpriteAtlasTomlDocument
+    {
+        public CompiledSpriteAtlasSection? Atlas { get; init; }
+
+        public Dictionary<string, CompiledFrameTomlDocument> Frames { get; init; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, CompiledSpriteTomlDocument> Sprites { get; init; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, CompiledStackframeTomlDocument> Stackframes { get; init; } = new(StringComparer.Ordinal);
     }
 
     private sealed record SpriteAtlasSection
@@ -685,6 +1063,17 @@ public static class SpriteAtlasTomlLoader
         public int CellWidth { get; init; }
 
         public int CellHeight { get; init; }
+
+        public string? DefaultPivot { get; init; }
+    }
+
+    private sealed record CompiledSpriteAtlasSection
+    {
+        public string Image { get; init; } = string.Empty;
+
+        public int Width { get; init; }
+
+        public int Height { get; init; }
 
         public string? DefaultPivot { get; init; }
     }
@@ -732,6 +1121,74 @@ public static class SpriteAtlasTomlLoader
         public float? Fps { get; init; }
 
         public bool? Loop { get; init; }
+    }
+
+    private sealed record CompiledSpriteTomlDocument
+    {
+        public string? DisplayName { get; init; }
+
+        public string? Kind { get; init; }
+
+        public string? Frame { get; init; }
+
+        public Dictionary<string, CompiledSpriteAnimationTomlDocument>? Animations { get; init; }
+    }
+
+    private sealed record CompiledSpriteAnimationTomlDocument
+    {
+        public List<string> Frames { get; init; } = [];
+
+        public float? Fps { get; init; }
+
+        public bool? Loop { get; init; }
+    }
+
+    private sealed record CompiledFrameTomlDocument
+    {
+        public int X { get; init; }
+
+        public int Y { get; init; }
+
+        public int Width { get; init; }
+
+        public int Height { get; init; }
+
+        public string? DisplayName { get; init; }
+
+        public string? SpriteId { get; init; }
+
+        public string? AnimationId { get; init; }
+
+        public string? SourceKind { get; init; }
+
+        public string? Pivot { get; init; }
+
+        public string? Kind { get; init; }
+
+        public string? SourceStackframe { get; init; }
+
+        public int? SourceStackIndex { get; init; }
+    }
+
+    private sealed record CompiledStackframeTomlDocument
+    {
+        public int X { get; init; }
+
+        public int Y { get; init; }
+
+        public int Width { get; init; }
+
+        public int Height { get; init; }
+
+        public int Count { get; init; }
+
+        public string Direction { get; init; } = "vertical";
+
+        public int Step { get; init; }
+
+        public List<string>? Labels { get; init; }
+
+        public string? Description { get; init; }
     }
 
     private sealed record SpriteFrameTomlDocument : ICorrectionTomlDocument

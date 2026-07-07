@@ -70,6 +70,10 @@ public sealed record SpriteFrameAsset
 
     public required int Col { get; init; }
 
+    public string Kind { get; init; } = string.Empty;
+
+    public string? DisplayName { get; init; }
+
     public SpriteFrameCorrection? Correction { get; init; }
 }
 

@@ -1,0 +1,883 @@
+[atlas]
+image = "tinytown_sprite_alpha.png"
+width = 1440
+height = 720
+
+[frames.arch]
+x = 854
+y = 609
+width = 116
+height = 107
+display_name = "Archway"
+sprite_id = "arch"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.barrel]
+x = 1111
+y = 479
+width = 69
+height = 115
+display_name = "Barrel"
+sprite_id = "barrel"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.basket]
+x = 391
+y = 617
+width = 89
+height = 95
+display_name = "Basket"
+sprite_id = "basket"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.bucket]
+x = 274
+y = 618
+width = 70
+height = 88
+display_name = "Bucket"
+sprite_id = "bucket"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.bush]
+x = 629
+y = 623
+width = 87
+height = 80
+display_name = "Bush"
+sprite_id = "bush"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.campfire]
+x = 23
+y = 623
+width = 94
+height = 81
+display_name = "Campfire"
+sprite_id = "campfire"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.crate]
+x = 987
+y = 497
+width = 79
+height = 115
+display_name = "Crate"
+sprite_id = "crate"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.fence]
+x = 742
+y = 637
+width = 98
+height = 62
+display_name = "Fence"
+sprite_id = "fence"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.flowers]
+x = 1214
+y = 498
+width = 96
+height = 106
+display_name = "Flowers"
+sprite_id = "flowers"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.fountain]
+x = 1105
+y = 614
+width = 86
+height = 92
+display_name = "Fountain"
+sprite_id = "fountain"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.garden]
+x = 268
+y = 504
+width = 100
+height = 102
+display_name = "Garden"
+sprite_id = "garden"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.heart]
+x = 1225
+y = 633
+width = 71
+height = 63
+display_name = "Heart"
+sprite_id = "heart"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "ui"
+
+[frames.home]
+x = 379
+y = 486
+width = 120
+height = 121
+display_name = "Home"
+sprite_id = "home"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames."lina.down.0"]
+x = 38
+y = 249
+width = 79
+height = 120
+sprite_id = "lina"
+animation_id = "down"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."lina.down.1"]
+x = 155
+y = 250
+width = 79
+height = 120
+sprite_id = "lina"
+animation_id = "down"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."lina.down.2"]
+x = 272
+y = 250
+width = 79
+height = 120
+sprite_id = "lina"
+animation_id = "down"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."lina.left.2"]
+x = 631
+y = 252
+width = 80
+height = 120
+sprite_id = "lina"
+animation_id = "left"
+source_kind = "manual"
+source_stackframe = "left.2"
+source_stack_index = 2
+
+[frames."lina.right.0"]
+x = 771
+y = 256
+width = 80
+height = 120
+sprite_id = "lina"
+animation_id = "right"
+source_kind = "manual"
+source_stackframe = "right.0"
+source_stack_index = 2
+
+[frames."lina.right.2"]
+x = 988
+y = 251
+width = 77
+height = 120
+sprite_id = "lina"
+animation_id = "right"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."lina.up.0"]
+x = 1108
+y = 252
+width = 80
+height = 120
+sprite_id = "lina"
+animation_id = "up"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."lina.up.1"]
+x = 1217
+y = 251
+width = 80
+height = 120
+sprite_id = "lina"
+animation_id = "up"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."lina.up.2"]
+x = 1329
+y = 252
+width = 80
+height = 120
+sprite_id = "lina"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.2"
+source_stack_index = 2
+
+[frames.mailbox]
+x = 757
+y = 490
+width = 72
+height = 118
+display_name = "Mailbox"
+sprite_id = "mailbox"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.market]
+x = 147
+y = 490
+width = 100
+height = 115
+display_name = "Market"
+sprite_id = "market"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames."maya.down.0"]
+x = 36
+y = 11
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "down"
+source_kind = "manual"
+source_stackframe = "down.0"
+source_stack_index = 0
+
+[frames."maya.down.1"]
+x = 157
+y = 12
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "down"
+source_kind = "manual"
+source_stackframe = "down.1"
+source_stack_index = 0
+
+[frames."maya.left.0"]
+x = 422
+y = 12
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "left"
+source_kind = "manual"
+source_stackframe = "left.0"
+source_stack_index = 0
+
+[frames."maya.left.2"]
+x = 629
+y = 12
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "left"
+source_kind = "manual"
+source_stackframe = "left.2"
+source_stack_index = 0
+
+[frames."maya.right.1"]
+x = 877
+y = 16
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "right"
+source_kind = "manual"
+source_stackframe = "right.1"
+source_stack_index = 0
+
+[frames."maya.up.0"]
+x = 1106
+y = 16
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.0"
+source_stack_index = 0
+
+[frames."maya.up.1"]
+x = 1216
+y = 16
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.1"
+source_stack_index = 0
+
+[frames."maya.up.2"]
+x = 1327
+y = 16
+width = 80
+height = 120
+sprite_id = "maya"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.2"
+source_stack_index = 0
+
+[frames."nia.down.0"]
+x = 37
+y = 372
+width = 80
+height = 120
+sprite_id = "nia"
+animation_id = "down"
+source_kind = "manual"
+source_stackframe = "down.0"
+source_stack_index = 3
+
+[frames."nia.right.2"]
+x = 987
+y = 370
+width = 80
+height = 120
+sprite_id = "nia"
+animation_id = "right"
+source_kind = "manual"
+source_stackframe = "right.2"
+source_stack_index = 3
+
+[frames."nia.up.0"]
+x = 1107
+y = 371
+width = 80
+height = 120
+sprite_id = "nia"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.0"
+source_stack_index = 3
+
+[frames."nia.up.1"]
+x = 1218
+y = 370
+width = 80
+height = 120
+sprite_id = "nia"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.1"
+source_stack_index = 3
+
+[frames."nia.up.2"]
+x = 1329
+y = 370
+width = 80
+height = 120
+sprite_id = "nia"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.2"
+source_stack_index = 3
+
+[frames.sack]
+x = 518
+y = 620
+width = 78
+height = 84
+display_name = "Sack"
+sprite_id = "sack"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.signpost]
+x = 640
+y = 493
+width = 76
+height = 118
+display_name = "Signpost"
+sprite_id = "signpost"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.social]
+x = 508
+y = 495
+width = 113
+height = 112
+display_name = "Social"
+sprite_id = "social"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.speech_bubble]
+x = 1333
+y = 615
+width = 76
+height = 99
+display_name = "Speech Bubble"
+sprite_id = "speech_bubble"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.stone]
+x = 982
+y = 629
+width = 87
+height = 70
+display_name = "Stone Slab"
+sprite_id = "stone"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames.streetlamp]
+x = 884
+y = 490
+width = 56
+height = 120
+display_name = "Streetlamp"
+sprite_id = "streetlamp"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.table]
+x = 145
+y = 623
+width = 92
+height = 83
+display_name = "Table"
+sprite_id = "table"
+source_kind = "manual"
+pivot = "bottom_center"
+kind = "prop"
+
+[frames."theo.down.0"]
+x = 36
+y = 132
+width = 80
+height = 120
+sprite_id = "theo"
+animation_id = "down"
+source_kind = "manual"
+source_stackframe = "down.0"
+source_stack_index = 1
+
+[frames."theo.down.1"]
+x = 156
+y = 132
+width = 80
+height = 120
+sprite_id = "theo"
+animation_id = "down"
+source_kind = "manual"
+source_stackframe = "down.1"
+source_stack_index = 1
+
+[frames."theo.left.2"]
+x = 626
+y = 133
+width = 80
+height = 120
+sprite_id = "theo"
+animation_id = "left"
+source_kind = "exact"
+pivot = "bottom_center"
+
+[frames."theo.up.0"]
+x = 1107
+y = 136
+width = 80
+height = 120
+sprite_id = "theo"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.0"
+source_stack_index = 1
+
+[frames."theo.up.1"]
+x = 1217
+y = 136
+width = 80
+height = 120
+sprite_id = "theo"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.1"
+source_stack_index = 1
+
+[frames."theo.up.2"]
+x = 1327
+y = 136
+width = 80
+height = 120
+sprite_id = "theo"
+animation_id = "up"
+source_kind = "manual"
+source_stackframe = "up.2"
+source_stack_index = 1
+
+[frames.tree]
+x = 1327
+y = 493
+width = 90
+height = 120
+display_name = "Tree"
+sprite_id = "tree"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[frames.well]
+x = 30
+y = 486
+width = 83
+height = 120
+display_name = "Well"
+sprite_id = "well"
+source_kind = "manual"
+pivot = "bottom_center"
+
+[sprites.arch]
+display_name = "Archway"
+frame = "arch"
+
+[sprites.barrel]
+display_name = "Barrel"
+frame = "barrel"
+
+[sprites.basket]
+display_name = "Basket"
+frame = "basket"
+
+[sprites.bucket]
+display_name = "Bucket"
+kind = "prop"
+frame = "bucket"
+
+[sprites.bush]
+display_name = "Bush"
+kind = "prop"
+frame = "bush"
+
+[sprites.campfire]
+display_name = "Campfire"
+kind = "prop"
+frame = "campfire"
+
+[sprites.crate]
+display_name = "Crate"
+frame = "crate"
+
+[sprites.fence]
+display_name = "Fence"
+kind = "prop"
+frame = "fence"
+
+[sprites.flowers]
+display_name = "Flowers"
+frame = "flowers"
+
+[sprites.fountain]
+display_name = "Fountain"
+kind = "prop"
+frame = "fountain"
+
+[sprites.garden]
+display_name = "Garden"
+frame = "garden"
+
+[sprites.heart]
+display_name = "Heart"
+kind = "ui"
+frame = "heart"
+
+[sprites.home]
+display_name = "Home"
+frame = "home"
+
+[sprites.lina]
+display_name = "lina"
+
+[sprites.lina.animations.down]
+frames = [ "lina.down.0", "lina.down.1", "lina.down.2" ]
+fps = 6
+loop = true
+
+[sprites.lina.animations.left]
+frames = [ "lina.left.0", "lina.left.1", "lina.left.2" ]
+fps = 6
+loop = true
+
+[sprites.lina.animations.right]
+frames = [ "lina.right.0", "lina.right.1", "lina.right.2" ]
+fps = 6
+loop = true
+
+[sprites.lina.animations.up]
+frames = [ "lina.up.0", "lina.up.1", "lina.up.2" ]
+fps = 6
+loop = true
+
+[sprites.mailbox]
+display_name = "Mailbox"
+frame = "mailbox"
+
+[sprites.market]
+display_name = "Market"
+frame = "market"
+
+[sprites.maya]
+display_name = "maya"
+
+[sprites.maya.animations.down]
+frames = [ "maya.down.0", "maya.down.1", "maya.down.2" ]
+fps = 6
+loop = true
+
+[sprites.maya.animations.left]
+frames = [ "maya.left.0", "maya.left.1", "maya.left.2" ]
+fps = 6
+loop = true
+
+[sprites.maya.animations.right]
+frames = [ "maya.right.0", "maya.right.1", "maya.right.2" ]
+fps = 6
+loop = true
+
+[sprites.maya.animations.up]
+frames = [ "maya.up.0", "maya.up.1", "maya.up.2" ]
+fps = 6
+loop = true
+
+[sprites.nia]
+display_name = "nia"
+
+[sprites.nia.animations.down]
+frames = [ "nia.down.0", "nia.down.1", "nia.down.2" ]
+fps = 6
+loop = true
+
+[sprites.nia.animations.left]
+frames = [ "nia.left.0", "nia.left.1", "nia.left.2" ]
+fps = 6
+loop = true
+
+[sprites.nia.animations.right]
+frames = [ "nia.right.0", "nia.right.1", "nia.right.2" ]
+fps = 6
+loop = true
+
+[sprites.nia.animations.up]
+frames = [ "nia.up.0", "nia.up.1", "nia.up.2" ]
+fps = 6
+loop = true
+
+[sprites.sack]
+display_name = "Sack"
+kind = "prop"
+frame = "sack"
+
+[sprites.signpost]
+display_name = "Signpost"
+frame = "signpost"
+
+[sprites.social]
+display_name = "Social"
+frame = "social"
+
+[sprites.speech_bubble]
+display_name = "Speech Bubble"
+frame = "speech_bubble"
+
+[sprites.stone]
+display_name = "Stone Slab"
+kind = "prop"
+frame = "stone"
+
+[sprites.streetlamp]
+display_name = "Streetlamp"
+frame = "streetlamp"
+
+[sprites.table]
+display_name = "Table"
+kind = "prop"
+frame = "table"
+
+[sprites.theo]
+display_name = "theo"
+
+[sprites.theo.animations.down]
+frames = [ "theo.down.0", "theo.down.1", "theo.down.2" ]
+fps = 6
+loop = true
+
+[sprites.theo.animations.left]
+frames = [ "theo.left.0", "theo.left.1", "theo.left.2" ]
+fps = 6
+loop = true
+
+[sprites.theo.animations.right]
+frames = [ "theo.right.0", "theo.right.1", "theo.right.2" ]
+fps = 6
+loop = true
+
+[sprites.theo.animations.up]
+frames = [ "theo.up.0", "theo.up.1", "theo.up.2" ]
+fps = 6
+loop = true
+
+[sprites.tree]
+display_name = "Tree"
+frame = "tree"
+
+[sprites.well]
+display_name = "Well"
+frame = "well"
+
+[stackframes."down.0"]
+x = 40
+y = 12
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.down.0", "theo.down.0", "lina.down.0", "nia.down.0" ]
+description = "down character column 0"
+
+[stackframes."down.1"]
+x = 153
+y = 12
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.down.1", "theo.down.1", "lina.down.1", "nia.down.1" ]
+description = "down character column 1"
+
+[stackframes."down.2"]
+x = 272
+y = 12
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.down.2", "theo.down.2", "lina.down.2", "nia.down.2" ]
+description = "down character column 2"
+
+[stackframes."left.0"]
+x = 419
+y = 13
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.left.0", "theo.left.0", "lina.left.0", "nia.left.0" ]
+description = "left character column 0"
+
+[stackframes."left.1"]
+x = 527
+y = 13
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.left.1", "theo.left.1", "lina.left.1", "nia.left.1" ]
+description = "left character column 1"
+
+[stackframes."left.2"]
+x = 626
+y = 13
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.left.2", "theo.left.2", "lina.left.2", "nia.left.2" ]
+description = "left character column 2"
+
+[stackframes."right.0"]
+x = 766
+y = 16
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.right.0", "theo.right.0", "lina.right.0", "nia.right.0" ]
+description = "right character column 0"
+
+[stackframes."right.1"]
+x = 880
+y = 16
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.right.1", "theo.right.1", "lina.right.1", "nia.right.1" ]
+description = "right character column 1"
+
+[stackframes."right.2"]
+x = 987
+y = 16
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.right.2", "theo.right.2", "lina.right.2", "nia.right.2" ]
+description = "right character column 2"
+
+[stackframes."up.0"]
+x = 1117
+y = 16
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.up.0", "theo.up.0", "lina.up.0", "nia.up.0" ]
+description = "up character column 0"
+
+[stackframes."up.1"]
+x = 1214
+y = 16
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.up.1", "theo.up.1", "lina.up.1", "nia.up.1" ]
+description = "up character column 1"
+
+[stackframes."up.2"]
+x = 1329
+y = 16
+width = 80
+height = 120
+count = 4
+direction = "vertical"
+step = 120
+labels = [ "maya.up.2", "theo.up.2", "lina.up.2", "nia.up.2" ]
+description = "up character column 2"

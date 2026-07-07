@@ -2,7 +2,7 @@
 
 TinyTown now includes sample-local sprite art for the M2.2 alpha-atlas integration path.
 
-M2.3 adds TOML sidecar metadata so the pixels stay in PNG and the semantic atlas layout stays in `*.sprite.toml`.
+M2.3 adds TOML sidecar metadata so the pixels stay in PNG and the semantic atlas layout stays in TOML.
 
 Fallback visuals still remain safe and available if any sprite asset is missing or invalid.
 
@@ -13,8 +13,8 @@ Fallback visuals still remain safe and available if any sprite asset is missing 
 - cleaned alpha source sheet: `assets/sprites/tinytown_sprite_alpha.png`
 - local cleanup helper: `assets/sprites/chroma_key_extract.py`
 - preferred runtime atlas: `assets/sprites/tinytown_sprite_alpha.png`
-- preferred atlas metadata: `assets/sprites/tinytown_sprite_alpha.sprite.toml`
-- forward-looking SpriteForge fixture: `assets/sprites/tinytown_sprite_alpha.spriteforge.toml`
+- preferred runtime metadata: `assets/sprites/tinytown_sprite_alpha.compiled.sprite.toml`
+- authoring guide metadata: `assets/sprites/tinytown_sprite_alpha.guide.toml`
 - generated normalized atlases: `assets/sprites/generated`
 - runtime mode override: env var `DOMINATUS_TINYTOWN_VISUAL_MODE`
 - runtime atlas override: env var `DOMINATUS_TINYTOWN_ATLAS_PATH`
@@ -41,8 +41,8 @@ The previous checkerboard-derived normalized atlas remains at `1776x888`, which 
 
 TinyTown now keeps semantic sprite metadata in:
 
-- `assets/sprites/tinytown_sprite_alpha.sprite.toml`
-- `assets/sprites/tinytown_sprite_alpha.spriteforge.toml` for the SpriteForge M0 schema skeleton
+- `assets/sprites/tinytown_sprite_alpha.compiled.sprite.toml` for runtime loading in Godot
+- `assets/sprites/tinytown_sprite_alpha.guide.toml` for authoring-only guide data
 
 That sidecar defines:
 
@@ -54,56 +54,54 @@ That sidecar defines:
 
 This lets you fix imperfect cuts and alignment in data without editing C# for every art pass.
 
-The current TinyTown runtime still consumes the legacy `*.sprite.toml` shape through `Dominatus.GodotConn`.
+The current TinyTown runtime consumes the compiled `*.compiled.sprite.toml` shape through `Dominatus.GodotConn`.
 
-The new `*.spriteforge.toml` file exists so SpriteForge can evolve without destabilizing the working sample during M0.
+The guide TOML is not loaded at runtime. It exists so authoring guidance can evolve without destabilizing the running sample.
 
-### Current schema shape
+### Runtime schema shape
 
-The TinyTown sidecar uses:
+The compiled runtime sidecar uses:
 
-- `[atlas]` for `image`, `width`, `height`, `columns`, `rows`, `cell_width`, `cell_height`, and `default_pivot`
-- `[entities.<id>]` for semantic sprite records
-- `[entities.<id>.animations.<name>]` for villager frame lists and `fps`
-- `[frames."<id>"]` for optional named frame overrides
+- `[atlas]` for `image`, `width`, and `height`
+- `[stackframes."<id>"]` for repeated runtime frame strips with `count`, `direction`, `step`, and `labels`
+- `[frames."<id>"]` for exact/manual runtime frame rectangles
+- `[sprites.<id>]` for semantic sprite records and animation wiring
 
-Example villager:
+Example villager animation:
 
 ```toml
-[entities.maya]
-kind = "villager"
-display_name = "Maya"
-row = 0
-scale = 1.0
-offset_x = 0
-offset_y = 0
-
-[entities.maya.animations.down]
-frames = [0, 1, 2]
+[sprites.maya.animations.down]
+frames = [ "maya.down.0", "maya.down.1", "maya.down.2" ]
 fps = 6
 ```
 
 Example static prop:
 
 ```toml
-[entities.market]
-kind = "destination"
+[sprites.market]
 display_name = "Market"
-row = 4
-col = 1
-scale = 1.0
-pivot = "bottom_center"
+frame = "market"
 ```
 
-Example correction table:
+Example explicit frame override:
 
 ```toml
-[entities.market.correction]
-offset_y = -8
-scale = 0.9
+[frames."maya.up.2"]
+x = 1327
+y = 16
+width = 80
+height = 120
+source_kind = "manual"
+source_stackframe = "up.2"
+source_stack_index = 0
 ```
 
-Do not edit code for simple atlas correction if a TOML offset, pivot, scale, or frame override is enough.
+Runtime precedence is:
+
+- expanded `stackframes`
+- overridden by explicit `frames` with the same frame id
+
+Do not point Godot at `guide.toml`; it is authoring IR only.
 
 Rows `1-4` are villagers:
 
@@ -170,7 +168,7 @@ Destinations:
 
 `AnimatedSprites` cycles `walk1` and `walk2` while the villager is in `Travel` and moving above the walk threshold; otherwise it uses the facing-direction idle frame.
 
-TinyTown now prefers the sidecar metadata when the atlas image has a matching `.sprite.toml`.
+TinyTown now prefers the sidecar metadata when the atlas image has a matching `.compiled.sprite.toml`.
 
 If the sidecar is missing or invalid, the sample falls back to the current hardcoded `12x6` TinyTown mapping before dropping to fallback shapes.
 
@@ -240,7 +238,7 @@ Generate a local verification overlay with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/Preview-SpriteAtlasToml.ps1 `
-  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml `
+  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.compiled.sprite.toml `
   -Out artifacts/godot-tinytown/tinytown-atlas-preview.png
 ```
 
@@ -267,8 +265,8 @@ Notes:
 If another model is picking this up, start here:
 
 - sprite image: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.png`
-- current runtime TOML: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml`
-- future-facing SpriteForge fixture: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.spriteforge.toml`
+- current runtime TOML: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.compiled.sprite.toml`
+- authoring guide TOML: `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.guide.toml`
 - runtime consumer today: `samples/Dominatus.GodotTinyTown` through `src/Dominatus.GodotConn/Assets/SpriteAtlasTomlLoader.cs`
 - preview wrapper: `tools/Preview-SpriteAtlasToml.ps1`
 - smoke harness: `tools/Run-GodotTinyTownSmoke.ps1`
@@ -277,7 +275,7 @@ Preview regeneration:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/Preview-SpriteAtlasToml.ps1 `
-  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.sprite.toml `
+  samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.compiled.sprite.toml `
   -Out artifacts/godot-tinytown/tinytown-atlas-preview.png
 ```
 
@@ -298,9 +296,9 @@ What is still imperfect:
 
 What to tune next:
 
-- refine per-frame `offset_*` and `source_rect_*` values in `tinytown_sprite_alpha.sprite.toml`
+- refine exact frame rectangles or stackframe labels in `tinytown_sprite_alpha.compiled.sprite.toml`
 - compare the preview overlay with `artifacts/godot-tinytown/tinytown-screenshot.png`
-- if a correction is only for future SpriteForge migration, mirror the semantic intent into `.spriteforge.toml` after the runtime TOML is stable
+- if authoring guidance changes, keep `tinytown_sprite_alpha.guide.toml` in sync without wiring it into runtime loading
 
 ## Replacing the atlas
 
