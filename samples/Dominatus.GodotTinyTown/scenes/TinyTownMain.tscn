@@ -290,10 +290,10 @@ color = Color(0.423529, 0.658824, 0.862745, 1)
 polygon = PackedVector2Array(-11, -11, 11, -11, 11, 11, -11, 11)
 
 [node name="StatusPlate" type="PanelContainer" parent="DominatusWorld/Villagers/Maya" unique_id=1855344305]
-offset_left = -52.0
-offset_top = -86.0
-offset_right = 52.0
-offset_bottom = -26.0
+offset_left = -53.0
+offset_top = -87.0
+offset_right = 51.0
+offset_bottom = -27.0
 
 [node name="StatusLabel" type="Label" parent="DominatusWorld/Villagers/Maya/StatusPlate" unique_id=927774128]
 layout_mode = 2
