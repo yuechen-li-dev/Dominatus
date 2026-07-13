@@ -5,6 +5,11 @@ or skimmed the Architecture Overview. The worked examples draw from
 `RustSimulator.cs`, which ships in the repo under `src/Ariadne.Console/Scripts/`
 and is a complete, real script that exercises most authoring patterns.
 
+For small deterministic state/event tables that do not need an `AiWorld` or HFSM,
+see [Deterministic transitions](DETERMINISTIC_TRANSITIONS.md). Keep the distinction sharp:
+`Ai.Goto`/`Ai.Push`/`Ai.Pop` navigate the runtime hierarchy, while `Ai.Decide` selects between
+utility preferences; neither is a replacement for pure first-valid-rule dispatch.
+
 ---
 
 ## 1. Project Structure

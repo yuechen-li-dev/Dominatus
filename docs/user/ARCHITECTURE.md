@@ -960,6 +960,8 @@ For explicit LLM context-store doctrine and packet generation, see `docs/llm/LLM
 
 For orchestration sizing guidance (direct code vs dispatch vs HFSM/LLM/human approval), see `docs/user/ORCHESTRATION_LADDER.md`.
 
+For pure typed `(state, event, context) -> next state + ordered effects` dispatch without an agent runtime, see `docs/user/DETERMINISTIC_TRANSITIONS.md`. It is distinct from HFSM `Ai.Goto`/`Ai.Push`/`Ai.Pop` navigation and `Ai.Decide` utility arbitration.
+
 
 ## Dominatus.Server stream inspection (M1)
 

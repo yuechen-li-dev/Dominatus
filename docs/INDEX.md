@@ -8,12 +8,14 @@ Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, 
 - [Dominatus 0.4 release notes](release/DOMINATUS_0_4_RELEASE_NOTES.md) — concise release summary, new package families, samples, compatibility notes, and known limitations.
 - [Architecture](user/ARCHITECTURE.md) — runtime concepts: blackboards, HFSMs, utility decisions, steps, persistence, actuators, server inspection, and LLM boundaries.
 - [Authoring guide](user/AUTHORING_GUIDE.md) — how to write Dominatus nodes and blackboard-driven workflows.
+- [Deterministic transitions](user/DETERMINISTIC_TRANSITIONS.md) — pure typed state/event dispatch tables, validation, inspection, and their boundary with utility and HFSM navigation.
 - [Orchestration ladder](user/ORCHESTRATION_LADDER.md) — direct code, dispatch tables, HFSM/utility, `Llm.Call`, `Llm.Decide`, `MagiDecide`, human approval, and capability surfaces.
 - [Actuation policy](user/ACTUATION_POLICY.md) — policy-gated typed side effects and approval boundaries.
 - [Onboarding templates](user/ONBOARDING_TEMPLATES.md) — runnable starter workflows for LLM and non-LLM users with fake mode first and live configuration through environment variables.
 
 ## Core runtime
 
+- [Deterministic transitions M0](DevLog/TRANSITIONS_M0.md) — transition-authoring design decision, boundaries, and rejected alternatives.
 - [Persistence checkpoint review](user/PERSISTENCE_CHECKPOINT_REVIEW.md) — M0 review of chunk/checkpoint infrastructure for RTSBenchmark tick-boundary checkpoint/resume.
 - [Parallel tick review](user/PARALLEL_TICK_REVIEW.md) — deterministic staged parallel agent tick design review and RTSBenchmark integration notes.
 - [Team coordination](user/TEAM_COORDINATION.md) — shared/team blackboard coordination patterns.

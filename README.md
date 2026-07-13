@@ -50,8 +50,8 @@ These are the intended publishable package projects for the 0.4 NuGet workflow. 
 
 | Package | Purpose | Status |
 | --- | --- | --- |
-| `Dominatus.Core` | Core runtime: blackboards, HFSMs, mailboxes, steps, persistence primitives. | Core |
-| `Dominatus.OptFlow` | Fluent authoring helpers for `Ai.*` control flow. | Core |
+| `Dominatus.Core` | Core runtime: blackboards, typed deterministic transitions, HFSMs, mailboxes, steps, persistence primitives. | Core |
+| `Dominatus.OptFlow` | Collection-expression transition tables and `Ai.*` control-flow authoring helpers. | Core |
 | `Ariadne.OptFlow` | Dialogue-oriented OptFlow package for authored conversation workflows. | Core |
 | `Dominatus.UtilityLite` | Lightweight utility scoring engines and combinators. | Core |
 | `Dominatus.Assets.Toml` | Typed TOML asset loading, diagnostics, validation, and symbolic references. | Tooling |
@@ -116,6 +116,7 @@ Default tests require no API keys. Live provider smoke tests for Stripe, ElevenL
 - [Documentation index](docs/INDEX.md)
 - [Architecture overview](docs/user/ARCHITECTURE.md)
 - [Authoring guide](docs/user/AUTHORING_GUIDE.md)
+- [Deterministic transitions](docs/user/DETERMINISTIC_TRANSITIONS.md) — typed first-valid-rule dispatch tables without activating an agent runtime.
 - [Orchestration ladder](docs/user/ORCHESTRATION_LADDER.md)
 - [Dominatus 0.4 release notes](docs/release/DOMINATUS_0_4_RELEASE_NOTES.md)
 - [NuGet trusted publishing](docs/release/NUGET_TRUSTED_PUBLISHING.md)

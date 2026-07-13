@@ -8,8 +8,8 @@
     <Version>0.2.1</Version>
     <IsAotCompatible>true</IsAotCompatible>
     <Authors>Dominatus Contributors</Authors>
-    <Description>A deterministic .NET runtime kernel for stateful agents, built on hierarchical finite state machines and utility-based decisions.</Description>
-    <PackageTags>ai;agents;hfsm;utility-ai;game-ai;simulation;control-systems;runtime</PackageTags>
+    <Description>A deterministic .NET runtime kernel for stateful agents, typed deterministic transitions, hierarchical finite state machines, and utility-based decisions.</Description>
+    <PackageTags>ai;agents;transitions;hfsm;utility-ai;game-ai;simulation;control-systems;runtime</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>

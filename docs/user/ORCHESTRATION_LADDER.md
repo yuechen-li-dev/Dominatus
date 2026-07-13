@@ -13,7 +13,7 @@ Dominatus is an orchestration kernel, not a universal replacement for simple dis
 | Layer | Use when | Avoid when | Dominatus/Machina API/example |
 |---|---|---|---|
 | Direct code | One-off local logic, no reusable event/state table, no async/effects/orchestration. | Behavior needs inspection/reuse/testing as a table, or behavior becomes a long-lived state machine. | `if (eventName == "counter.increment") count++;` |
-| Dispatch table | Event maps to deterministic field transition; simple UI routing; `field = value`; `field = !field`; `field += n`; `field = event suffix`. | Async effects, timers/retries, waiting, hierarchical state, trace/replay, coordination, tool calls. | MachinaDispatch doctrine (`machinalayout/dispatch`; C# WIP: `Machina.Runtime.Dispatch`). **If Dominatus would be overkill, you probably need a table, not a state manager.** |
+| Dispatch table | Event maps to deterministic field transition; simple UI routing; reusable typed tables with ordered effect data and inspection. | Async effects, timers/retries, waiting, hierarchical state, coordination, or utility preference arbitration. | `Dominatus.Core.Transitions` + `Transition.For(...).Define([...])`; a local `switch` remains best when metadata/reuse are unnecessary. |
 | Dominatus HFSM/Utility | Long-lived behavior, explicit phases/states, effects/actuators, waits/events/timeouts, mailbox communication, blackboard state, utility arbitration, trace/replay/persistence, approval/refusal/accountability boundaries. | Event is just a field update, or a simple sequential function is enough. | HFSM states, `Ai.Decide`, `WorldBb`/`Bb`, mailbox, actuators, trace, checkpoint/replay. |
 | `Llm.Call` | Prompt + context -> text (summarize/rewrite/explain/draft/simple semantic transform). | Runtime needs bounded option choice, refusal must be structured against a closed option set, or multi-perspective judgment is required. | `Llm.Call(...)`; `Dominatus.Llm.Context` packet -> `Llm.Call`. |
 | `Llm.Decide` | Closed authored options, semantic scoring/ranking, option set may need refusal, output should remain bounded. | Simple text transform is enough, deterministic utility scoring is enough, or high-stakes multi-perspective judgment is required. | Mandatory refusal outcome; closed-option sovereignty; optional human approval. |
@@ -31,6 +31,8 @@ Dominatus is an orchestration kernel, not a universal replacement for simple dis
 - Group chat -> `Llm.MagiDecide` or explicit mailbox discussion loop.
 - Magentic / ledger loop -> `WorldBb` task ledger + progress ledger + `Ai.Decide` + workers.
 - Simple UI route -> dispatch table.
+- One valid typed event reaction -> `Transition.For(...).Define([...])` or a local `switch`.
+- Several valid preferences -> `Ai.Decide`; it is not deterministic dispatch.
 - Tool call -> typed actuator.
 - Prompt transform -> `Llm.Call`.
 
