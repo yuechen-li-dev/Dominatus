@@ -317,18 +317,62 @@ public sealed class SpriteForgeTomlLoaderTests
     }
 
     [Fact]
-    public void SpriteForge_TinyTownToml_Loads()
+    public void SpriteForgeLoader_LoadsHermeticGridAndExactFrameFixture()
     {
-        var directory = Path.Combine(AppContext.BaseDirectory, "fixtures");
-        var path = Path.Combine(directory, "tinytown_sprite_alpha.spriteforge.toml");
-        var result = SpriteForgeTomlLoader.LoadFile(path, new SpriteForgeLoadOptions { RequireImageFileExists = true });
+        var directory = Path.Combine(Path.GetTempPath(), $"spriteforge-fixture-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var imagePath = Path.Combine(directory, "atlas.png");
+        var tomlPath = Path.Combine(directory, "atlas.spriteforge.toml");
+        File.WriteAllBytes(imagePath, []);
+        File.WriteAllText(tomlPath, """
+            [atlas]
+            image = "atlas.png"
+            width = 120
+            height = 60
 
-        Assert.True(result.Success, AssetDiagnosticFormatter.FormatMany(result.Diagnostics));
-        var atlas = Assert.IsType<SpriteForgeAtlas>(result.Atlas);
-        Assert.Equal("tinytown_sprite_alpha.png", atlas.Image);
-        Assert.True(atlas.Grids.ContainsKey("villagers_down"));
-        Assert.True(atlas.Sprites.ContainsKey("maya"));
-        Assert.True(atlas.Frames.ContainsKey("maya.down.idle_exact"));
+            [grids.characters]
+            origin_x = 0
+            origin_y = 0
+            columns = 2
+            rows = 1
+            cell_width = 60
+            cell_height = 60
+            default_pivot = "bottom_center"
+
+            [frames."hero.idle.exact"]
+            x = 2
+            y = 1
+            width = 56
+            height = 59
+            pivot = "bottom_center"
+
+            [sprites.hero]
+            kind = "character"
+
+            [sprites.hero.animations.idle]
+            grid = "characters"
+            row = 0
+            frames = ["hero.idle.exact", 1]
+            fps = 6
+            loop = true
+            """.Replace("\n", Environment.NewLine));
+
+        try
+        {
+            var result = SpriteForgeTomlLoader.LoadFile(tomlPath, new SpriteForgeLoadOptions { RequireImageFileExists = true });
+
+            Assert.True(result.Success, AssetDiagnosticFormatter.FormatMany(result.Diagnostics));
+            var atlas = Assert.IsType<SpriteForgeAtlas>(result.Atlas);
+            Assert.Equal("atlas.png", atlas.Image);
+            Assert.True(atlas.Grids.ContainsKey("characters"));
+            Assert.True(atlas.Sprites.ContainsKey("hero"));
+            Assert.True(atlas.Frames.ContainsKey("hero.idle.exact"));
+            Assert.Equal(2, new SpriteForgeResolver().ResolveAnimation(atlas, "hero", "idle").Count);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static string WriteTempToml(string content)

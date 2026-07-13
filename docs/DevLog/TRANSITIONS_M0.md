@@ -31,3 +31,13 @@ that integration.
 Construction rejects invalid definitions early, while `Validate` supports reports without building.
 Validation claims only what it can prove from declared types and missing guards; it does not claim
 guard mutual exclusivity or complete graph reachability.
+
+## M0a stabilization
+
+Rejected dispatches retain the previous state in `NextState` for all state vocabularies, including
+enums and structs. `Rejected` status and `IsAccepted == false` express non-acceptance; `NextState`
+never uses `default(TState)` as an absence marker.
+
+Validation now treats every later compatible rule as shadowed by an earlier unguarded compatible
+rule, including a later guarded rule. Exact unguarded source/event duplicates receive only the
+specific `DuplicateUnguardedCase` diagnostic, not a redundant `ShadowedRule` diagnostic.

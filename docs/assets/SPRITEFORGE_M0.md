@@ -175,13 +175,13 @@ The preview is intentionally simple:
 
 ## TinyTown relationship
 
-TinyTown is the first practical SpriteForge case, but M0 keeps TinyTown runtime integration on the existing `GodotConn` sprite-atlas loader.
+TinyTown was the first practical SpriteForge exploration, but M0 keeps TinyTown runtime integration on its generated `GodotConn` sprite-atlas metadata.
 
 That means:
 
-- TinyTown keeps using `tinytown_sprite_alpha.sprite.toml` for current runtime behavior
-- SpriteForge introduces `tinytown_sprite_alpha.spriteforge.toml` as the forward-looking fixture for the new schema
-- migration to a shared `Dominatus.SpriteForge` runtime path is explicitly deferred to a later pass so M0 does not destabilize the working sample
+- TinyTown uses the generated `tinytown_sprite_alpha.compiled.sprite.toml` runtime sidecar, with `tinytown_sprite_alpha.guide.toml` as its checked-in authoring IR
+- the former `tinytown_sprite_alpha.spriteforge.toml` was a prototype-era forward-looking fixture and is retired; SpriteForge loader coverage now uses a hermetic maintained fixture in its test project
+- migration to a shared `Dominatus.SpriteForge` runtime path is explicitly deferred so this package does not destabilize the working sample
 
 ## Non-goals
 

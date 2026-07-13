@@ -166,7 +166,7 @@ public sealed class TransitionDispatchResult<TState, TEvent, TEffect>
     internal TransitionDispatchResult(
         TState previousState,
         TEvent inputEvent,
-        TState? nextState,
+        TState nextState,
         IReadOnlyList<TEffect> effects,
         TransitionInspection inspection)
     {
@@ -179,7 +179,12 @@ public sealed class TransitionDispatchResult<TState, TEvent, TEffect>
 
     public TState PreviousState { get; }
     public TEvent Event { get; }
-    public TState? NextState { get; }
+    /// <summary>
+    /// The state after this dispatch. It is always a valid state value: rejected and unmatched-stay
+    /// dispatches retain <see cref="PreviousState"/>. Use <see cref="IsAccepted"/> or
+    /// <see cref="Inspection"/> status to determine whether the input was accepted.
+    /// </summary>
+    public TState NextState { get; }
     public IReadOnlyList<TEffect> Effects { get; }
     public TransitionInspection Inspection { get; }
     public bool IsAccepted => Inspection.Status != TransitionDispatchStatus.Rejected;
@@ -318,7 +323,7 @@ public sealed class TransitionDefinition<TState, TEvent, TContext, TEffect>
         for (int laterIndex = 0; laterIndex < rules.Count; laterIndex++)
         {
             var later = rules[laterIndex];
-            if (later is null || later.HasGuard)
+            if (later is null)
                 continue;
 
             for (int earlierIndex = 0; earlierIndex < laterIndex; earlierIndex++)
@@ -329,11 +334,12 @@ public sealed class TransitionDefinition<TState, TEvent, TContext, TEffect>
 
                 bool sameCase = earlier.SourceStateType == later.SourceStateType &&
                     earlier.InputEventType == later.InputEventType;
-                if (sameCase)
+                if (sameCase && !later.HasGuard)
                 {
                     diagnostics.Add(new(TransitionValidationCode.DuplicateUnguardedCase,
                         $"Unguarded rule '{later.Id}' duplicates source/event types of earlier rule '{earlier.Id}'.",
                         later.Id, laterIndex, earlier.Id, earlierIndex));
+                    continue;
                 }
 
                 if (earlier.SourceStateType.IsAssignableFrom(later.SourceStateType) &&
@@ -402,10 +408,18 @@ public sealed class TransitionDefinition<TState, TEvent, TContext, TEffect>
                     new InvalidOperationException("A transition reducer returned null output."));
             }
 
+            var nextState = output.NextState;
+            if (nextState is null)
+            {
+                throw new TransitionRuleExecutionException(rule.Id!, index, TransitionExecutionPhase.Reducer,
+                    previousStateType, eventType,
+                    new InvalidOperationException("A transition reducer returned an output with a null next state."));
+            }
+
             var inspection = new TransitionInspection(
                 TransitionDispatchStatus.Matched, rule.Id, index, previousStateType, eventType,
-                output.NextState!.GetType(), guardEvaluations, UnmatchedBehavior, output.Effects.Count);
-            return new(state, inputEvent, output.NextState, output.Effects, inspection);
+                nextState.GetType(), guardEvaluations, UnmatchedBehavior, output.Effects.Count);
+            return new(state, inputEvent, nextState, output.Effects, inspection);
         }
 
         if (UnmatchedBehavior == UnmatchedEventBehavior.Stay)
@@ -418,8 +432,8 @@ public sealed class TransitionDefinition<TState, TEvent, TContext, TEffect>
 
         var rejected = new TransitionInspection(
             TransitionDispatchStatus.Rejected, null, null, previousStateType, eventType,
-            nextStateType: null, guardEvaluations, UnmatchedBehavior, effectCount: 0);
-        return new(state, inputEvent, default, Array.Empty<TEffect>(), rejected);
+            previousStateType, guardEvaluations, UnmatchedBehavior, effectCount: 0);
+        return new(state, inputEvent, state, Array.Empty<TEffect>(), rejected);
     }
 }
 

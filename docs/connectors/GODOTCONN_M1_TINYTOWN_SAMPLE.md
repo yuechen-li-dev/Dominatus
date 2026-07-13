@@ -7,7 +7,7 @@ For the audio bridge and generated bark follow-up, see [GODOTCONN_AUDIO_M3.md](G
 SpriteForge M0 note:
 
 - TinyTown's `*.sprite.toml` sidecar is the first practical SpriteForge case.
-- The forward-looking SpriteForge fixture now lives beside it at `samples/Dominatus.GodotTinyTown/assets/sprites/tinytown_sprite_alpha.spriteforge.toml`.
+- The retired `*.spriteforge.toml` prototype is no longer a TinyTown fixture; current authoring uses `tinytown_sprite_alpha.guide.toml` and generated `tinytown_sprite_alpha.compiled.sprite.toml`.
 - TinyTown runtime migration to `Dominatus.SpriteForge` is deferred past M0 so the current sample stays stable.
 
 ## Purpose

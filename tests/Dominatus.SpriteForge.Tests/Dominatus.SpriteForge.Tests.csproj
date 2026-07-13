@@ -20,11 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\samples\Dominatus.GodotTinyTown\assets\sprites\tinytown_sprite_alpha.spriteforge.toml" Link="fixtures\tinytown_sprite_alpha.spriteforge.toml" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\samples\Dominatus.GodotTinyTown\assets\sprites\tinytown_sprite_alpha.png" Link="fixtures\tinytown_sprite_alpha.png" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

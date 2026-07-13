@@ -65,13 +65,15 @@ without repeating all four vocabulary types. This lifecycle form is compile-test
 var result = definition.Dispatch(new NotStarted(), new StartRequested(), new Context());
 if (result.Inspection.Status == TransitionDispatchStatus.Matched)
 {
-    var nextState = result.NextState!;
+    var nextState = result.NextState;
     foreach (var effect in result.Effects)
         Interpret(effect); // application-owned, in returned order
 }
 ```
 
-The stop-before-start event is rejected with no next state and no effects. Repeated stop is
+The stop-before-start event is rejected with its previous state retained and no effects. `NextState`
+is always a valid state value for reference, enum, and struct vocabularies; it is not evidence that
+an event was accepted. Check `IsAccepted` or `Inspection.Status` instead. Repeated stop is
 explicitly idempotent with zero effects; unmatched events are data, never ordinary exceptions.
 
 ## UI-shaped deterministic interaction
@@ -104,19 +106,22 @@ dispatch. It examines rules in authored order, tests source-state/event compatib
 compatible guards in order, then executes exactly the first passing rule's reducer. Guards are
 validity predicates, never utility scores. Effects are immutable snapshots which Core never runs.
 
-Every `TransitionDispatchResult` contains previous state, input event, optional next state,
+Every `TransitionDispatchResult` contains previous state, input event, a valid next state,
 effects, and `TransitionInspection`: status, selected rule ID/index, runtime state/event types,
-next-state type when applicable, compatible guard outcomes, unmatched policy, and effect count.
+next-state type, compatible guard outcomes, unmatched policy, and effect count.
 Definition metadata is similarly stable and pull-based: ID, authored index, declared source/event
 types, and guard presence.
 
 `flow.Define(...)` validates and throws `TransitionDefinitionValidationException` with a stable
 report; `flow.Validate(...)` returns a report without building. Validation detects blank/duplicate
 IDs, null rules/reducers, invalid unmatched policy, exact duplicate unguarded cases, and earlier
-unguarded rules that provably shadow later compatible rules. It intentionally cannot prove
-arbitrary guard exclusivity or graph reachability.
+unguarded rules that provably shadow later compatible rules, even if the later rule has a guard.
+An exact unguarded source/event duplicate receives one `DuplicateUnguardedCase` diagnostic rather
+than a redundant shadow diagnostic. It intentionally cannot prove arbitrary guard exclusivity or
+graph reachability.
 
-`Stay` returns the current state with no effects; `Reject` returns no next state and no effects.
+`Stay` and `Reject` both retain the current state with no effects. `Rejected`/`IsAccepted == false`
+mean the input was not accepted; they do not encode absence through `NextState`.
 If a guard or reducer throws, dispatch throws `TransitionRuleExecutionException` with rule ID,
 authored index, phase, runtime state/event types, and the original exception as `InnerException`.
 It never silently treats that error as a non-match.
