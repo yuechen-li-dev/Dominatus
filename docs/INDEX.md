@@ -22,6 +22,7 @@ Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, 
 
 ## OptFlow and UtilityLite
 
+- [OptFlow utility consolidation](user/OPTFLOW_1_0_UTILITY_CONSOLIDATION.md) — canonical OptFlow install, retained utility namespace, and compatibility-package behavior.
 - [Dominatus.OptFlow usage](user/AUTHORING_GUIDE.md) — fluent authoring helpers in the broader authoring guide.
 - [OptFlow flow definitions](user/OPTFLOW_1_0_FLOW_DEFINITIONS.md) — immutable, inspectable graph assembly with zero generated states.
 - [Ariadne stable operation identity](user/ARIADNE_STABLE_OPERATION_IDENTITY.md) — explicit patch-safe dialogue operation IDs and migration guidance.

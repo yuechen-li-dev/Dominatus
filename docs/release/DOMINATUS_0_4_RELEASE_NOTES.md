@@ -60,6 +60,7 @@ Test projects and sample projects are not part of the NuGet publish list.
 
 ## Compatibility notes
 
+- The next package release should publish `Dominatus.Core`, then `Dominatus.OptFlow`, then `Dominatus.UtilityLite`. UtilityLite is a compatibility package that forwards its historical vocabulary to OptFlow; this is a package-content change and should receive a future release version rather than reusing an already published version.
 - Repository build/test targets .NET through the solution and project SDK configuration.
 - Default test runs do not require API keys.
 - Godot TinyTown validation requires a local Godot 4.7 .NET installation.

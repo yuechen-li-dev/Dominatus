@@ -7,7 +7,7 @@
     <PackageId>Dominatus.OptFlow</PackageId>
     <Version>0.2.1</Version>
     <Authors>Dominatus Contributors</Authors>
-    <Description>A concise authoring layer for Dominatus state, deterministic transitions, control-flow, commands, waits, and utility decisions.</Description>
+    <Description>A concise authoring layer for Dominatus state, deterministic transitions, control-flow, commands, waits, and utility scoring decisions.</Description>
     <PackageTags>ai;agents;transitions;hfsm;utility-ai;control-flow;game-ai;simulation</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
@@ -18,6 +18,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Dominatus.UtilityLite\UtilityLite.cs" Link="UtilityLite\UtilityLite.cs" />
+    <Compile Include="..\Dominatus.UtilityLite\When.cs" Link="UtilityLite\When.cs" />
   </ItemGroup>
 
   <ItemGroup>

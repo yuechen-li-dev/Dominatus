@@ -1292,6 +1292,8 @@ This is the intended Dominatus shape for utility-driven agents.
 
 ### `When.*` vs `Utility.*`
 
+Package note: install `Dominatus.OptFlow` for both the flow and utility authoring experience. The utility names intentionally remain in `Dominatus.UtilityLite` for source compatibility, so keep `using Dominatus.UtilityLite;` without adding a separate UtilityLite package reference. The compatibility package remains available for existing consumers and forwards the same types; see [OptFlow utility consolidation](OPTFLOW_1_0_UTILITY_CONSOLIDATION.md).
+
 The preferred surface for authoring decisions is `When.*`.
 
 Example:

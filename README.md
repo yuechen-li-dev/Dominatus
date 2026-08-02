@@ -51,9 +51,9 @@ These are the intended publishable package projects for the 0.4 NuGet workflow. 
 | Package | Purpose | Status |
 | --- | --- | --- |
 | `Dominatus.Core` | Core runtime: blackboards, typed deterministic transitions, HFSMs, mailboxes, steps, persistence primitives. | Core |
-| `Dominatus.OptFlow` | Collection-expression transition tables and `Ai.*` control-flow authoring helpers. | Core |
+| `Dominatus.OptFlow` | Collection-expression transition tables, `Ai.*` control-flow helpers, and utility scoring authoring. | Core |
 | `Ariadne.OptFlow` | Dialogue-oriented OptFlow package for authored conversation workflows. | Core |
-| `Dominatus.UtilityLite` | Lightweight utility scoring engines and combinators. | Core |
+| `Dominatus.UtilityLite` | Compatibility package for the utility vocabulary now implemented by OptFlow. | Core |
 | `Dominatus.Assets.Toml` | Typed TOML asset loading, diagnostics, validation, and symbolic references. | Tooling |
 | `Dominatus.SpriteForge` | Engine-neutral sprite atlas metadata, validation, and Godot preview support. | Tooling |
 | `Dominatus.Llm.Context` | Context packet/loadout/manifest primitives for LLM boundaries. | LLM |
