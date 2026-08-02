@@ -81,7 +81,24 @@ public readonly record struct AiCtx
     public IStateReturnSource Return => _returns ?? EmptyStateReturnSource.Instance;
 
     internal AiCtx WithReturns(IStateReturnSource returns)
-        => new(World, Agent, Events, Cancel, View, Mail, Act, WorldBb, returns);
+        => _surfaces is not null
+            ? new AiCtx(World, Agent, Events, Cancel, _surfaces, returns)
+            : new AiCtx(World, Agent, Events, Cancel, View, Mail, Act, WorldBb, returns);
+
+    private AiCtx(AiWorld world, AiAgent agent, AiEventBus events, CancellationToken cancel,
+        AiCtxSurfaceRef surfaces, IStateReturnSource returns)
+    {
+        World = world;
+        Agent = agent;
+        Events = events;
+        Cancel = cancel;
+        _view = surfaces.View;
+        _mail = surfaces.Mail;
+        _act = surfaces.Act;
+        _worldBb = surfaces.WorldBb;
+        _surfaces = surfaces;
+        _returns = returns;
+    }
 
     private AiCtx(AiWorld world, AiAgent agent, AiEventBus events, CancellationToken cancel,
         IAiWorldView view, IAiMailbox mail, IAiActuator act, IAiWorldBb worldBb, IStateReturnSource returns)

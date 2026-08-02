@@ -147,6 +147,38 @@ public sealed class AiCtxFactoryTests
         Assert.Equal("written", world.Bb.GetOrDefault(ClearKey, "missing"));
     }
 
+    [Fact]
+    public void Hfsm_ReturnAwareContext_TracksFactorySurfaceAfterChildReturn()
+    {
+        static IEnumerator<AiStep> Parent(AiCtx ctx)
+        {
+            yield return Ai.Push((StateId)"child");
+            Assert.True(ctx.Return.TryConsume(out _));
+            ctx.WorldBb.Set(ClearKey, "resumed-live");
+            while (true) yield return Ai.Wait(999f);
+        }
+
+        static IEnumerator<AiStep> Child(AiCtx _)
+        {
+            yield return Ai.Succeed();
+        }
+
+        var graph = new HfsmGraph { Root = "parent" };
+        graph.Add("parent", Parent);
+        graph.Add("child", Child);
+        var world = new AiWorld();
+        var agent = new AiAgent(new HfsmInstance(graph));
+        world.Add(agent);
+        agent.Brain.ContextFactory = CreateFactory(worldBb: new RecordingWorldBb());
+
+        world.Tick(0.016f); // Parent enters and pushes Child.
+        world.Tick(0.016f); // Child returns.
+        agent.Brain.ContextFactory = null;
+        world.Tick(0.016f); // Parent resumes through the updated live surface.
+
+        Assert.Equal("resumed-live", world.Bb.GetOrDefault(ClearKey, "missing"));
+    }
+
     private static (AiWorld World, AiAgent Agent) CreateWorld(AiNode node, IAiActuator? actuator = null)
     {
         var graph = new HfsmGraph { Root = "root" };
