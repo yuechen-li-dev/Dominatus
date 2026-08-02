@@ -1,12 +1,95 @@
 ﻿using Dominatus.Core;
 using Dominatus.Core.Hfsm;
 using Dominatus.Core.Runtime;
+using Dominatus.OptFlow;
 using Xunit;
 
 namespace Dominatus.Core.Tests;
 
 public class HfsmInstanceTests
 {
+    [Fact]
+    public void MatchReturn_RoutesSucceededChildToAuthoredTarget()
+    {
+        var graph = new HfsmGraph { Root = "Parent" };
+        graph.Add(new HfsmStateDef { Id = "Parent", Node = _ => Parent() });
+        graph.Add(new HfsmStateDef { Id = "Child", Node = _ => Child() });
+        graph.Add(new HfsmStateDef { Id = "Neutral", Node = _ => Loop() });
+        graph.Add(new HfsmStateDef { Id = "Success", Node = _ => Loop() });
+        graph.Add(new HfsmStateDef { Id = "Failure", Node = _ => Loop() });
+
+        var world = new AiWorld();
+        var brain = new HfsmInstance(graph);
+        world.Add(new AiAgent(brain));
+
+        world.Tick(0.01f);
+        world.Tick(0.01f);
+        world.Tick(0.01f);
+
+        Assert.Equal(new[] { (StateId)"Success" }, brain.GetActivePath());
+
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Parent()
+        {
+            yield return Ai.Push((StateId)"Child");
+            yield return Ai.MatchReturn(
+                Ai.OnReturn((StateId)"Neutral"),
+                Ai.OnSuccess((StateId)"Success"),
+                Ai.OnFailure((StateId)"Failure"));
+        }
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Child() { yield return Ai.Succeed("done"); }
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Loop() { while (true) yield return Ai.Steady(); }
+    }
+
+    [Theory]
+    [InlineData("Pop", StateReturnKind.Returned)]
+    [InlineData("Succeed", StateReturnKind.Succeeded)]
+    [InlineData("Fail", StateReturnKind.Failed)]
+    public void AuthoredChildReturn_IsAvailableOnlyToDirectParent(string operation, StateReturnKind expected)
+    {
+        var graph = new HfsmGraph { Root = "Parent" };
+        StateReturn observed = default;
+        bool consumed = false;
+
+        graph.Add(new HfsmStateDef
+        {
+            Id = "Parent",
+            Node = context => Parent(context),
+        });
+        graph.Add(new HfsmStateDef
+        {
+            Id = "Child",
+            Node = _ => Child(),
+        });
+
+        var world = new AiWorld();
+        var brain = new HfsmInstance(graph);
+        world.Add(new AiAgent(brain));
+
+        world.Tick(0.01f); // Parent pushes Child.
+        world.Tick(0.01f); // Child returns.
+        world.Tick(0.01f); // Parent consumes its return.
+
+        Assert.True(consumed);
+        Assert.Equal(expected, observed.Kind);
+        Assert.Equal((StateId)"Child", observed.State);
+        Assert.Equal("authored", observed.Reason);
+
+        IEnumerator<Dominatus.Core.Nodes.AiStep> Parent(AiCtx context)
+        {
+            yield return new Dominatus.Core.Nodes.Steps.Push("Child");
+            consumed = context.Return.TryConsume(out observed);
+            while (true) yield return new Dominatus.Core.Nodes.Steps.Steady();
+        }
+        IEnumerator<Dominatus.Core.Nodes.AiStep> Child()
+        {
+            yield return operation switch
+            {
+                "Pop" => new Dominatus.Core.Nodes.Steps.Pop("authored"),
+                "Succeed" => new Dominatus.Core.Nodes.Steps.Succeed("authored"),
+                _ => new Dominatus.Core.Nodes.Steps.Fail("authored"),
+            };
+        }
+    }
     [Fact]
     public void PushPop_WorksAsStack()
     {

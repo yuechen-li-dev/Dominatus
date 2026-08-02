@@ -37,6 +37,21 @@ public static class Ai
 
     public static Fail Fail(string? reason = null) => new(reason);
 
+    public static ReturnRoute OnReturn(StateId target) => new(Dominatus.Core.Hfsm.StateReturnKind.Returned, target);
+    public static ReturnRoute OnSuccess(StateId target) => new(Dominatus.Core.Hfsm.StateReturnKind.Succeeded, target);
+    public static ReturnRoute OnFailure(StateId target) => new(Dominatus.Core.Hfsm.StateReturnKind.Failed, target);
+
+    /// <summary>Explicitly routes every possible direct-child return outcome.</summary>
+    public static MatchReturn MatchReturn(params ReturnRoute[] routes)
+    {
+        ArgumentNullException.ThrowIfNull(routes);
+        if (routes.Length != 3 || routes.Select(route => route.Kind).Distinct().Count() != 3)
+            throw new ArgumentException("A return match must contain exactly one Returned, Succeeded, and Failed route.", nameof(routes));
+        if (routes.Any(route => string.IsNullOrWhiteSpace(route.Target.Value)))
+            throw new ArgumentException("A return route target cannot be empty.", nameof(routes));
+        return new MatchReturn(routes);
+    }
+
     public static UtilityOption Option(string id, Consideration score, StateId target)
     => new(id, target, score);
 

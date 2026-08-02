@@ -313,27 +313,28 @@ public sealed class HfsmInstance
                 break;
 
             case Push p:
+                if (_stack.Count > 0)
+                    _stack[^1].Runner.ClearChildReturn();
                 PushState(world, agent, p.Target, p.Reason ?? "Push");
                 break;
 
             case Pop p:
-                PopState(world, agent, p.Reason ?? "Pop");
-                if (_stack.Count == 0)
-                    Initialize(world, agent);
+                ReturnState(world, agent, StateReturnKind.Returned, p.Reason);
                 break;
 
             case Succeed s:
-                // Treat success as "return": pop this state
-                PopState(world, agent, s.Reason ?? "Succeed");
-                if (_stack.Count == 0)
-                    Initialize(world, agent);
+                ReturnState(world, agent, StateReturnKind.Succeeded, s.Reason);
                 break;
 
             case Fail f:
-                // For M0: failure also pops (later you can add failure routing policies)
-                PopState(world, agent, f.Reason ?? "Fail");
-                if (_stack.Count == 0)
-                    Initialize(world, agent);
+                ReturnState(world, agent, StateReturnKind.Failed, f.Reason);
+                break;
+
+            case MatchReturn match:
+                if (_stack.Count == 0 || !_stack[^1].Runner.TryConsumeChildReturn(out var result))
+                    throw new InvalidOperationException("Ai.MatchReturn requires an unconsumed direct-child return.");
+                var target = match.Resolve(result.Kind);
+                ReplaceTopWith(world, agent, target, $"Return:{result.Kind}", fromState);
                 break;
 
             case Decide d:
@@ -587,6 +588,25 @@ public sealed class HfsmInstance
         top.Runner.Exit();
         Trace?.OnExit(top.Id, world.Clock.Time, reason);
         _stack.RemoveAt(_stack.Count - 1);
+    }
+
+    private void ReturnState(AiWorld world, AiAgent agent, StateReturnKind kind, string? reason)
+    {
+        if (_stack.Count == 0)
+            return;
+
+        var returned = _stack[^1].Id;
+        PopState(world, agent, reason ?? kind.ToString());
+        if (_stack.Count == 0)
+        {
+            Initialize(world, agent);
+            return;
+        }
+
+        var result = new StateReturn(kind, returned, reason);
+        _stack[^1].Runner.SetChildReturn(result);
+        // Existing sinks can inspect this typed yield without a breaking trace-interface change.
+        Trace?.OnYield(_stack[^1].Id, world.Clock.Time, result);
     }
 
     private void UnwindAbove(AiWorld world, AiAgent agent, int indexInclusive, string reason)

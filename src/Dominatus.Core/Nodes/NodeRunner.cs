@@ -23,6 +23,7 @@ public readonly record struct NodeTickResult(
 
 public sealed class NodeRunner(AiNode node)
 {
+    private readonly Dominatus.Core.Hfsm.StateReturnSlot _returns = new();
     private IEnumerator<AiStep>? _it;
 
     private float _waitStartTime;
@@ -57,8 +58,12 @@ public sealed class NodeRunner(AiNode node)
             _surfaces.UpdateFrom(ctx);
         }
 
-        return new AiCtx(world, agent, agent.Events, cancel, _surfaces);
+        return new AiCtx(world, agent, agent.Events, cancel, _surfaces).WithReturns(_returns);
     }
+
+    internal void ClearChildReturn() => _returns.Clear();
+    internal void SetChildReturn(Dominatus.Core.Hfsm.StateReturn result) => _returns.Set(result);
+    internal bool TryConsumeChildReturn(out Dominatus.Core.Hfsm.StateReturn result) => _returns.TryConsume(out result);
 
     public void Enter(AiWorld world, AiAgent agent, AiCtxFactory? contextFactory = null)
     {
@@ -209,7 +214,7 @@ public sealed class NodeRunner(AiNode node)
                     return NodeTickResult.Running();
 
                 // Control / completion signals are emitted upward to HFSM
-                case Goto or Push or Pop or Succeed or Fail:
+                case Goto or Push or Pop or Succeed or Fail or MatchReturn:
                     return NodeTickResult.Emitted(step);
 
                 // Any IWaitEvent should be handled uniformly.
