@@ -18,4 +18,4 @@ Inspection is pull-based: `flow.Inspect()` exposes stable ID, root, options, aut
 
 `Ai.Goto`, `Ai.Push`, and `Ai.Option` accept `FlowState` directly and lower to the existing Core `StateId` values. Existing `StateId` overloads remain available.
 
-Iterator bodies remain opaque. M1 cannot prove dynamic goto/push targets, reachability, eventual yield, root handoff correctness, or dynamically constructed utility targets. It intentionally adds no action persistence, retry machine, result routing, operation-site identity, reflection, source generation, or parsing. Ariadne `Diag` operation identity remains M2 work.
+Iterator bodies remain opaque. M1 cannot prove dynamic goto/push targets, reachability, eventual yield, root handoff correctness, or dynamically constructed utility targets. It intentionally adds no action persistence, retry machine, result routing, reflection, source generation, or parsing. Ariadne dialogue sites now use the explicit patch-stable IDs documented in [Ariadne stable operation identity](ARIADNE_STABLE_OPERATION_IDENTITY.md); `FlowDefinition` does not scan iterator bodies.

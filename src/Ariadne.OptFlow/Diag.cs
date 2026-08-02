@@ -10,6 +10,38 @@ public static class Diag
 {
     public static DiagChoice Option(string key, string text) => new(key, text);
 
+    public static DiagOperationInspection Inspect(DiagOperationId id, DiagOperationKind kind, BbKey<string>? storeAs = null)
+    {
+        if (!Enum.IsDefined(kind))
+            throw new DiagOperationValidationException(new([new(DiagOperationValidationCode.InvalidKind, "Dialogue operation kind is invalid.")]));
+        return new(id.Value, kind, DiagOperationIdentityKind.ExplicitStable,
+            DiagSteps.StartedKey(id.Value), DiagSteps.PendingIdKey(id.Value), storeAs,
+            DiagOperationId.Validate(id.Value));
+    }
+
+    /// <summary>Inspects a legacy source-derived identity without executing it.</summary>
+    public static DiagOperationInspection InspectLegacy(string callsiteFile, int callsiteLine, DiagOperationKind kind, BbKey<string>? storeAs = null)
+    {
+        if (!Enum.IsDefined(kind))
+            throw new DiagOperationValidationException(new([new(DiagOperationValidationCode.InvalidKind, "Dialogue operation kind is invalid.")]));
+        var legacyId = $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}";
+        return new(legacyId, kind, DiagOperationIdentityKind.LegacySourceDerived,
+            DiagSteps.StartedKey(legacyId), DiagSteps.PendingIdKey(legacyId), storeAs,
+            new(Array.Empty<DiagOperationValidationDiagnostic>()));
+    }
+
+    /// <summary>Shows a patch-stable authored dialogue line.</summary>
+    public static AiStep Line(DiagOperationId id, string text, string? speaker = null)
+        => new DiagSteps.LineStep(text, speaker, id.Value);
+
+    /// <summary>Prompts for text using a patch-stable authored operation id.</summary>
+    public static AiStep Ask(DiagOperationId id, string prompt, BbKey<string> storeAs)
+        => new DiagSteps.AskStep(prompt, storeAs, id.Value);
+
+    /// <summary>Presents choices using a patch-stable authored operation id.</summary>
+    public static AiStep Choose(DiagOperationId id, string prompt, IReadOnlyList<DiagChoice> options, BbKey<string> storeAs)
+        => new DiagSteps.ChooseStep(prompt, options, storeAs, id.Value);
+
     /// <summary>
     /// Show a dialogue line. Default contract: waits for "advance" (e.g. Enter/click).
     /// </summary>
@@ -32,6 +64,7 @@ public static class Diag
     /// A cleaner API for explicit ids (e.g. <c>Diag.LineId</c>) is planned for M7.
     /// </para>
     /// </remarks>
+    [Obsolete("Source-derived dialogue identity is not patch-stable. Use the overload requiring an explicit operation id.", error: false)]
     public static AiStep Line(string text, string? speaker = null,
         [CallerFilePath] string callsiteFile = "",
         [CallerLineNumber] int callsiteLine = 0)
@@ -46,6 +79,7 @@ public static class Diag
     /// <param name="callsiteFile">Auto-filled by compiler. Do not pass manually.</param>
     /// <param name="callsiteLine">Auto-filled by compiler. Do not pass manually.</param>
     /// <remarks>See <see cref="Line"/> for full restore contract and post-ship TODO.</remarks>
+    [Obsolete("Source-derived dialogue identity is not patch-stable. Use the overload requiring an explicit operation id.", error: false)]
     public static AiStep Ask(string prompt, BbKey<string> storeAs,
         [CallerFilePath] string callsiteFile = "",
         [CallerLineNumber] int callsiteLine = 0)
@@ -61,6 +95,7 @@ public static class Diag
     /// <param name="callsiteFile">Auto-filled by compiler. Do not pass manually.</param>
     /// <param name="callsiteLine">Auto-filled by compiler. Do not pass manually.</param>
     /// <remarks>See <see cref="Line"/> for full restore contract and post-ship TODO.</remarks>
+    [Obsolete("Source-derived dialogue identity is not patch-stable. Use the overload requiring an explicit operation id.", error: false)]
     public static AiStep Choose(string prompt, IReadOnlyList<DiagChoice> options, BbKey<string> storeAs,
         [CallerFilePath] string callsiteFile = "",
         [CallerLineNumber] int callsiteLine = 0)

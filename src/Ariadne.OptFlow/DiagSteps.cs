@@ -36,14 +36,14 @@ public static class DiagSteps
 {
     // Prefix convention: all synthetic diag keys begin with "__diag." to avoid collisions
     // with user-defined BB keys. BbJsonCodec will snapshot and restore these transparently.
-    private const string KeyPrefix = "__diag.";
+    internal const string KeyPrefix = "__diag.";
 
     /// <summary>
     /// Returns the BB key used to persist the pending <see cref="ActuationId"/> for a step.
     /// The underlying type is <c>long</c> because <c>ActuationId</c> is not in the codec type
     /// table, but <c>long</c> is. Reconstruct via <c>new ActuationId(value)</c>.
     /// </summary>
-    private static BbKey<long> PendingIdKey(string callsiteId)
+    internal static BbKey<long> PendingIdKey(string callsiteId)
         => new($"{KeyPrefix}{callsiteId}.pendingId");
 
     /// <summary>
@@ -51,7 +51,7 @@ public static class DiagSteps
     /// Stored as <c>bool</c> rather than checking <c>pendingId != 0</c> to be explicit —
     /// a zero ActuationId is theoretically valid in some actuator implementations.
     /// </summary>
-    private static BbKey<bool> StartedKey(string callsiteId)
+    internal static BbKey<bool> StartedKey(string callsiteId)
         => new($"{KeyPrefix}{callsiteId}.started");
 
     // Normalise immediate completions so steps are robust against IAiActuator impls

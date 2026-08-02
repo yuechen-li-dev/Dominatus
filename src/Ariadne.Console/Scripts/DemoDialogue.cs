@@ -17,10 +17,10 @@ public static class DemoDialogue
 
     public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
-        yield return Diag.Line("Don’t blink.", speaker: "Scarlett");
-        yield return Diag.Ask("Name?", storeAs: PlayerName);
-        yield return Diag.Line($"Nice to meet you, {ctx.Bb.GetOrDefault(PlayerName, "")}.", speaker: "Scarlett");
-        yield return Diag.Choose("Pick one:",
+        yield return Diag.Line(id: "demo.intro.dont-blink", text: "Don’t blink.", speaker: "Scarlett");
+        yield return Diag.Ask(id: "demo.intro.ask-name", prompt: "Name?", storeAs: PlayerName);
+        yield return Diag.Line(id: "demo.intro.greet-player", text: $"Nice to meet you, {ctx.Bb.GetOrDefault(PlayerName, "")}.", speaker: "Scarlett");
+        yield return Diag.Choose(id: "demo.intro.main-choice", prompt: "Pick one:",
             options:
             [
                 Diag.Option("a", "Open the door"),
@@ -29,8 +29,8 @@ public static class DemoDialogue
             storeAs: Choice);
 
         var c = ctx.Bb.GetOrDefault(Choice, "");
-        yield return Diag.Line($"You picked: {c}", speaker: "Narrator");
-        yield return Diag.Line("End of demo.", speaker: "System");
+        yield return Diag.Line(id: "demo.intro.choice-result", text: $"You picked: {c}", speaker: "Narrator");
+        yield return Diag.Line(id: "demo.ending.complete", text: "End of demo.", speaker: "System");
 
         yield return Ai.Goto(ParkedState, "demo complete");
     }

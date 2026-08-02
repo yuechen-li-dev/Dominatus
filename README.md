@@ -116,6 +116,7 @@ Default tests require no API keys. Live provider smoke tests for Stripe, ElevenL
 - [Documentation index](docs/INDEX.md)
 - [Architecture overview](docs/user/ARCHITECTURE.md)
 - [Authoring guide](docs/user/AUTHORING_GUIDE.md)
+- [Ariadne stable operation identity](docs/user/ARIADNE_STABLE_OPERATION_IDENTITY.md)
 - [Deterministic transitions](docs/user/DETERMINISTIC_TRANSITIONS.md) — typed first-valid-rule dispatch tables without activating an agent runtime.
 - [Orchestration ladder](docs/user/ORCHESTRATION_LADDER.md)
 - [Dominatus 0.4 release notes](docs/release/DOMINATUS_0_4_RELEASE_NOTES.md)

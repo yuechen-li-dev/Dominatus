@@ -97,7 +97,7 @@ A state node should follow these rules:
 * Prefer `static` methods.
 * Return `IEnumerator<AiStep>`.
 * Accept exactly one `AiCtx ctx` parameter.
-* Yield Dominatus steps such as `Ai.Wait(...)`, `Ai.Goto(...)`, `Ai.Push(...)`, `Ai.Pop()`, `Ai.Decide(...)`, `Ai.Act(...)`, or Ariadne dialogue steps like `Diag.Line(...)`.
+* Yield Dominatus steps such as `Ai.Wait(...)`, `Ai.Goto(...)`, `Ai.Push(...)`, `Ai.Pop()`, `Ai.Decide(...)`, `Ai.Act(...)`, or Ariadne dialogue steps like `Diag.Line(...)`. For durable dialogue, use the explicit `id:` overloads; see [Ariadne stable operation identity](ARIADNE_STABLE_OPERATION_IDENTITY.md).
 
 The preferred convention is to treat node methods as named runtime states, not as generic helper methods. Helper routines should usually be written separately and inlined with `Diag.SafeInline(...)` only when they do not emit control-flow steps.
 
