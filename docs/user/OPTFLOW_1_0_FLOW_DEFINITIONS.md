@@ -1,5 +1,7 @@
 # OptFlow 1.0 M1: flow definitions
 
+Durable operation sites are normal `AiStep` values: they introduce no generated flow states or graph nodes. See [durable operation sites](OPTFLOW_1_0_DURABLE_OPERATION_SITES.md).
+
 > Utility scoring authoring is also delivered by the `Dominatus.OptFlow` package. See [utility consolidation](OPTFLOW_1_0_UTILITY_CONSOLIDATION.md) for the retained `Dominatus.UtilityLite` namespace and compatibility package details.
 
 `FlowDefinition` removes the repeated work of assembling an `HfsmGraph`; it does not change what runs. Each `FlowState` has an explicit `StateId` and ordinary C# iterator node. `BuildGraph()` creates a fresh normal Core graph and `CreateBrain()` creates a normal `HfsmInstance`.

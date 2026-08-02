@@ -10,6 +10,8 @@ Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, 
 
 Dominatus is not a prompt-chain framework, chatbot app, workflow SaaS clone, game engine, ECS, payment processor, hidden-fee platform, image editor, or audio model provider. It turns useful .NET capabilities into safe actuators.
 
+For durable external obligations, OptFlow also provides explicit [operation sites](docs/user/OPTFLOW_1_0_DURABLE_OPERATION_SITES.md): `Ai.Perform` persists a stable pending actuation identity across checkpoint/replay without hiding retries, result routing, or HFSM control flow.
+
 ## Why Dominatus exists
 
 LLMs are useful semantic engines: they summarize, classify, transform language, propose plans, and call tools when a boundary is explicit. They are a poor hot-loop/runtime substrate for live systems that need deterministic replay, predictable latency, audit trails, policy gates, idempotency, and typed state.

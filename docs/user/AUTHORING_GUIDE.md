@@ -1,5 +1,7 @@
 # Dominatus Authoring Guide (v0)
 
+For a checkpoint-safe, explicitly named external obligation, use `Operation.Site<T>` with `Ai.Perform`; see [durable operation sites](OPTFLOW_1_0_DURABLE_OPERATION_SITES.md). It replaces only `Act`/`Await` bookkeeping—keep retries, result routing, and transitions as normal authored code.
+
 This guide covers how to write scripts for Dominatus. It assumes you have read
 or skimmed the Architecture Overview. The worked examples draw from
 `RustSimulator.cs`, which ships in the repo under `src/Ariadne.Console/Scripts/`

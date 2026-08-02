@@ -1,6 +1,7 @@
 ﻿using Dominatus.Core;
 using Dominatus.Core.Blackboard;
 using Dominatus.Core.Decision;
+using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
 
@@ -87,4 +88,20 @@ public static class Ai
     // (the inference-friendly overload)
     public static AwaitActuation<T> Await<T>(BbKey<ActuationId> idKey, BbKey<T> storePayloadAs)
         => new(idKey, storePayloadAs);
+
+    /// <summary>Dispatches one explicit operation site and waits for an untyped completion.</summary>
+    public static AiStep Perform(OperationSite site, IActuationCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(site);
+        ArgumentNullException.ThrowIfNull(command);
+        return new OperationStep(site, command);
+    }
+
+    /// <summary>Dispatches one explicit operation site and stores its typed completion payload.</summary>
+    public static AiStep Perform<TResult>(OperationSite<TResult> site, IActuationCommand command, BbKey<TResult> storeAs)
+    {
+        ArgumentNullException.ThrowIfNull(site);
+        ArgumentNullException.ThrowIfNull(command);
+        return new OperationResultStep<TResult>(site, command, storeAs);
+    }
 }

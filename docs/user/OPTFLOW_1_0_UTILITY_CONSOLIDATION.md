@@ -1,5 +1,7 @@
 # OptFlow 1.0 utility consolidation
 
+`Dominatus.OptFlow` additionally contains the explicit pending-safe `Operation`/`Ai.Perform` authoring substrate; it does not alter the retained UtilityLite surface.
+
 Utility decision authoring is part of the `Dominatus.OptFlow` package experience. New projects install one package:
 
 ```xml
