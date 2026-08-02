@@ -490,27 +490,20 @@ public static class RustSimulator
         };
     }
 
-    //State Machine Graph Builder
-    public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
+    public static readonly FlowDefinition Definition = CreateDefinition();
+
+    private static FlowDefinition CreateDefinition()
     {
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Intro", Node = Intro });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Hub", Node = Hub });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Intro", Node = Level1_Intro });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Menu", Node = Level1_Menu });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_ReadError", Node = Level1_ReadError });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskDuck", Node = Level1_AskDuck });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AIHelp", Node = Level1_AIHelp });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskVelvet", Node = Level1_AskVelvet });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskNimbus", Node = Level1_AskNimbus });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_AskMiniJim", Node = Level1_AskMiniJim });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_CloneEverything", Node = Level1_CloneEverything });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_UnderstandOwnership", Node = Level1_UnderstandOwnership });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Level1_Resolve", Node = Level1_Resolve });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Level1Success", Node = Ending_Level1Success });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Level1CursedSuccess", Node = Ending_Level1CursedSuccess });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Level1Failure", Node = Ending_Level1Failure });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_FleeMonitor", Node = Ending_FleeMonitor });
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Ending_Quit", Node = Ending_Quit });
+        FlowState[] states =
+        [
+            Flow.State("Root", Root), Flow.State("Intro", Intro), Flow.State("Hub", Hub), Flow.State("Level1_Intro", Level1_Intro),
+            Flow.State("Level1_Menu", Level1_Menu), Flow.State("Level1_ReadError", Level1_ReadError), Flow.State("Level1_AskDuck", Level1_AskDuck),
+            Flow.State("Level1_AIHelp", Level1_AIHelp), Flow.State("Level1_AskVelvet", Level1_AskVelvet), Flow.State("Level1_AskNimbus", Level1_AskNimbus),
+            Flow.State("Level1_AskMiniJim", Level1_AskMiniJim), Flow.State("Level1_CloneEverything", Level1_CloneEverything),
+            Flow.State("Level1_UnderstandOwnership", Level1_UnderstandOwnership), Flow.State("Level1_Resolve", Level1_Resolve),
+            Flow.State("Ending_Level1Success", Ending_Level1Success), Flow.State("Ending_Level1CursedSuccess", Ending_Level1CursedSuccess),
+            Flow.State("Ending_Level1Failure", Ending_Level1Failure), Flow.State("Ending_FleeMonitor", Ending_FleeMonitor), Flow.State("Ending_Quit", Ending_Quit)
+        ];
+        return Flow.Define("ariadne.rust-simulator", states[0], states, new() { KeepRootFrame = true });
     }
 }

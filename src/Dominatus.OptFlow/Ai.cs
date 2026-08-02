@@ -16,7 +16,19 @@ public static class Ai
 
     public static Goto Goto(StateId target, string? reason = null) => new(target, reason);
 
+    public static Goto Goto(FlowState target, string? reason = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return Goto(target.Id, reason);
+    }
+
     public static Push Push(StateId target, string? reason = null) => new(target, reason);
+
+    public static Push Push(FlowState target, string? reason = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return Push(target.Id, reason);
+    }
 
     public static Pop Pop(string? reason = null) => new(reason);
 
@@ -26,6 +38,12 @@ public static class Ai
 
     public static UtilityOption Option(string id, Consideration score, StateId target)
     => new(id, target, score);
+
+    public static UtilityOption Option(string id, Consideration score, FlowState target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return Option(id, score, target.Id);
+    }
 
     public static Decide Decide(
         IReadOnlyList<UtilityOption> options,

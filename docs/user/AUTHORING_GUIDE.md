@@ -19,7 +19,9 @@ A typical Dominatus project has three things:
 1. **A `Dominatus.Core` reference** — the runtime kernel.
 2. **An `OptFlow` package** — `Dominatus.OptFlow` for the `Ai.*` helpers, and
    optionally `Ariadne.OptFlow` for the `Diag.*` helpers if you're building
-   dialogue.
+dialogue.
+
+For reusable immutable graph assembly and inspection, see [OptFlow flow definitions](OPTFLOW_1_0_FLOW_DEFINITIONS.md).
 3. **One or more script files** — static C# classes containing node methods
    and blackboard key definitions.
 

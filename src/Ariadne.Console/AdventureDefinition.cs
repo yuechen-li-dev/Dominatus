@@ -6,4 +6,4 @@ public sealed record AdventureDefinition(
     string Id,
     string Title,
     string Description,
-    Action<HfsmGraph> RegisterStates);
+    Dominatus.OptFlow.FlowDefinition Flow);

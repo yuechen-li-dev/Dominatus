@@ -23,6 +23,7 @@ Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, 
 ## OptFlow and UtilityLite
 
 - [Dominatus.OptFlow usage](user/AUTHORING_GUIDE.md) — fluent authoring helpers in the broader authoring guide.
+- [OptFlow flow definitions](user/OPTFLOW_1_0_FLOW_DEFINITIONS.md) — immutable, inspectable graph assembly with zero generated states.
 - [UtilityLite TinyTown sample](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation using lightweight scoring.
 - [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — large deterministic utility-decision workload and validation sample.
 

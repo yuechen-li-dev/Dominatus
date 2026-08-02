@@ -11,6 +11,9 @@ public static class DemoDialogue
 {
     public static readonly BbKey<string> PlayerName = new("PlayerName");
     public static readonly BbKey<string> Choice = new("Choice");
+    public static readonly FlowState RootState = Flow.State("Root", Root);
+    public static readonly FlowState ParkedState = Flow.Steady("Parked", "demo complete");
+    public static readonly FlowDefinition Definition = Flow.Define("ariadne.demo", RootState, [RootState, ParkedState], new() { KeepRootFrame = true });
 
     public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
@@ -29,11 +32,6 @@ public static class DemoDialogue
         yield return Diag.Line($"You picked: {c}", speaker: "Narrator");
         yield return Diag.Line("End of demo.", speaker: "System");
 
-        while (true)
-            yield return Ai.Wait(999f);
-    }
-    public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
-    {
-        graph.Add(new Dominatus.Core.Hfsm.HfsmStateDef { Id = "Root", Node = Root });
+        yield return Ai.Goto(ParkedState, "demo complete");
     }
 }

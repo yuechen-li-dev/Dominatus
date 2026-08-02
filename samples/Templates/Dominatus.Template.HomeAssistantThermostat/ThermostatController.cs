@@ -25,10 +25,7 @@ public static class ThermostatController
 
     public static readonly DecisionSlot ModeDecisionSlot = new("thermostat.mode");
 
-    private static readonly StateId Root = new("Root");
-    private static readonly StateId Heating = new("Heating");
-    private static readonly StateId Cooling = new("Cooling");
-    private static readonly StateId Idle = new("Idle");
+    public static readonly FlowDefinition Definition = CreateDefinition(ThermostatPolicy.Default);
 
     public static Consideration HeatScore => new((_, agent) =>
     {
@@ -81,13 +78,7 @@ public static class ThermostatController
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentException.ThrowIfNullOrWhiteSpace(entityId);
 
-        var graph = new HfsmGraph { Root = Root };
-        graph.Add(new HfsmStateDef { Id = Root, Node = _ => RootNode(policy) });
-        graph.Add(new HfsmStateDef { Id = Heating, Node = ctx => ModeNode(ctx, ThermostatMode.Heat) });
-        graph.Add(new HfsmStateDef { Id = Cooling, Node = ctx => ModeNode(ctx, ThermostatMode.Cool) });
-        graph.Add(new HfsmStateDef { Id = Idle, Node = ctx => ModeNode(ctx, ThermostatMode.Idle) });
-
-        var agent = new AiAgent(new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true }));
+        var agent = new AiAgent(CreateDefinition(policy).CreateBrain());
         agent.Bb.Set(EntityId, entityId);
         agent.Bb.Set(CurrentHvacMode, initialMode);
         agent.Bb.Set(CommandedHvacMode, initialMode);
@@ -96,13 +87,23 @@ public static class ThermostatController
         return agent;
     }
 
-    private static IEnumerator<AiStep> RootNode(ThermostatPolicy policy)
+    private static FlowDefinition CreateDefinition(ThermostatPolicy policy)
+    {
+        FlowState? heating = null, cooling = null, idle = null;
+        var root = Flow.State("Root", _ => RootNode(policy, () => heating!, () => cooling!, () => idle!));
+        heating = Flow.State("Heating", ctx => ModeNode(ctx, ThermostatMode.Heat));
+        cooling = Flow.State("Cooling", ctx => ModeNode(ctx, ThermostatMode.Cool));
+        idle = Flow.State("Idle", ctx => ModeNode(ctx, ThermostatMode.Idle));
+        return Flow.Define("template.home-assistant-thermostat", root, [root, heating, cooling, idle], new() { KeepRootFrame = true });
+    }
+
+    private static IEnumerator<AiStep> RootNode(ThermostatPolicy policy, Func<FlowState> heating, Func<FlowState> cooling, Func<FlowState> idle)
     {
         var options = new[]
         {
-            Ai.Option("Heating", HeatScore, Heating),
-            Ai.Option("Cooling", CoolScore, Cooling),
-            Ai.Option("Idle", IdleScore, Idle)
+            Ai.Option("Heating", HeatScore, heating()),
+            Ai.Option("Cooling", CoolScore, cooling()),
+            Ai.Option("Idle", IdleScore, idle())
         };
         var decisionPolicy = new DecisionPolicy(
             Hysteresis: (float)policy.Hysteresis,

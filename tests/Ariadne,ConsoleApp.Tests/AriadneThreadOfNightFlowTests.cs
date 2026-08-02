@@ -22,27 +22,7 @@ public sealed class AriadneThreadOfNightFlowTests
 
         var world = new AiWorld(host);
 
-        var graph = new HfsmGraph { Root = "Root" };
-        graph.Add(new HfsmStateDef { Id = "Root", Node = AriadneThreadOfNight.Root });
-        graph.Add(new HfsmStateDef { Id = "Intro", Node = AriadneThreadOfNight.Intro });
-        graph.Add(new HfsmStateDef { Id = "Chamber", Node = AriadneThreadOfNight.Chamber });
-        graph.Add(new HfsmStateDef { Id = "InspectThread", Node = AriadneThreadOfNight.InspectThread });
-        graph.Add(new HfsmStateDef { Id = "InspectKnife", Node = AriadneThreadOfNight.InspectKnife });
-        graph.Add(new HfsmStateDef { Id = "ReadTablets", Node = AriadneThreadOfNight.ReadTablets });
-        graph.Add(new HfsmStateDef { Id = "VisitShrine", Node = AriadneThreadOfNight.VisitShrine });
-        graph.Add(new HfsmStateDef { Id = "Theseus", Node = AriadneThreadOfNight.Theseus });
-        graph.Add(new HfsmStateDef { Id = "TalkToTheseusWhy", Node = AriadneThreadOfNight.TalkToTheseusWhy });
-        graph.Add(new HfsmStateDef { Id = "TalkToTheseusFear", Node = AriadneThreadOfNight.TalkToTheseusFear });
-        graph.Add(new HfsmStateDef { Id = "TalkToTheseusMonster", Node = AriadneThreadOfNight.TalkToTheseusMonster });
-        graph.Add(new HfsmStateDef { Id = "DemandPromise", Node = AriadneThreadOfNight.DemandPromise });
-        graph.Add(new HfsmStateDef { Id = "Threshold", Node = AriadneThreadOfNight.Threshold });
-        graph.Add(new HfsmStateDef { Id = "Ending_ThreadAndFlight", Node = AriadneThreadOfNight.Ending_ThreadAndFlight });
-        graph.Add(new HfsmStateDef { Id = "Ending_MercyInTheDark", Node = AriadneThreadOfNight.Ending_MercyInTheDark });
-        graph.Add(new HfsmStateDef { Id = "Ending_CrownOfKnives", Node = AriadneThreadOfNight.Ending_CrownOfKnives });
-        graph.Add(new HfsmStateDef { Id = "Ending_TheDescent", Node = AriadneThreadOfNight.Ending_TheDescent });
-        graph.Add(new HfsmStateDef { Id = "Ending_ThreadlessTragedy", Node = AriadneThreadOfNight.Ending_ThreadlessTragedy });
-
-        var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
+        var brain = AriadneThreadOfNight.Definition.CreateBrain();
         var agent = new AiAgent(brain);
         world.Add(agent);
 

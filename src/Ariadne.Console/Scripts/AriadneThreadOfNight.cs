@@ -550,25 +550,22 @@ public static class AriadneThreadOfNight
         yield return Ai.Succeed();
     }
 
-    public static void Register(Dominatus.Core.Hfsm.HfsmGraph graph)
+    public static readonly FlowDefinition Definition = CreateDefinition();
+
+    private static FlowDefinition CreateDefinition()
     {
-        graph.Add(States.Root, Root);
-        graph.Add(States.Intro, Intro);
-        graph.Add(States.Chamber, Chamber);
-        graph.Add(States.InspectThread, InspectThread);
-        graph.Add(States.InspectKnife, InspectKnife);
-        graph.Add(States.ReadTablets, ReadTablets);
-        graph.Add(States.VisitShrine, VisitShrine);
-        graph.Add(States.Theseus, Theseus);
-        graph.Add(States.TalkToTheseusWhy, TalkToTheseusWhy);
-        graph.Add(States.TalkToTheseusFear, TalkToTheseusFear);
-        graph.Add(States.TalkToTheseusMonster, TalkToTheseusMonster);
-        graph.Add(States.DemandPromise, DemandPromise);
-        graph.Add(States.Threshold, Threshold);
-        graph.Add(States.Ending_ThreadAndFlight, Ending_ThreadAndFlight);
-        graph.Add(States.Ending_MercyInTheDark, Ending_MercyInTheDark);
-        graph.Add(States.Ending_CrownOfKnives, Ending_CrownOfKnives);
-        graph.Add(States.Ending_TheDescent, Ending_TheDescent);
-        graph.Add(States.Ending_ThreadlessTragedy, Ending_ThreadlessTragedy);
+        FlowState[] states =
+        [
+            Flow.State(States.Root, Root), Flow.State(States.Intro, Intro), Flow.State(States.Chamber, Chamber),
+            Flow.State(States.InspectThread, InspectThread), Flow.State(States.InspectKnife, InspectKnife),
+            Flow.State(States.ReadTablets, ReadTablets), Flow.State(States.VisitShrine, VisitShrine),
+            Flow.State(States.Theseus, Theseus), Flow.State(States.TalkToTheseusWhy, TalkToTheseusWhy),
+            Flow.State(States.TalkToTheseusFear, TalkToTheseusFear), Flow.State(States.TalkToTheseusMonster, TalkToTheseusMonster),
+            Flow.State(States.DemandPromise, DemandPromise), Flow.State(States.Threshold, Threshold),
+            Flow.State(States.Ending_ThreadAndFlight, Ending_ThreadAndFlight), Flow.State(States.Ending_MercyInTheDark, Ending_MercyInTheDark),
+            Flow.State(States.Ending_CrownOfKnives, Ending_CrownOfKnives), Flow.State(States.Ending_TheDescent, Ending_TheDescent),
+            Flow.State(States.Ending_ThreadlessTragedy, Ending_ThreadlessTragedy)
+        ];
+        return Flow.Define("ariadne.thread-of-night", states[0], states, new() { KeepRootFrame = true });
     }
 }

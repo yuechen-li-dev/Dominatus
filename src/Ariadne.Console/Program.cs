@@ -37,10 +37,7 @@ static void RunAdventure(ConsoleUi ui, AdventureDefinition adventure)
 
     var world = new AiWorld(host);
 
-    var graph = new HfsmGraph { Root = "Root" };
-    adventure.RegisterStates(graph);
-
-    var brain = new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true });
+    var brain = adventure.Flow.CreateBrain();
     var agent = new AiAgent(brain);
     world.Add(agent);
 
