@@ -20,12 +20,14 @@ public sealed class TextWriterTraceSinkTests
         sink.OnYield("Root", 0.0f, Ai.Wait(0.1f));
         sink.OnTransition("Root", "Combat", 2.0f, "Combat");
         sink.OnExit("Root", 2.0f, "Switch");
+        sink.OnReturn(new StateReturn(StateReturnKind.Failed, "Child", "blocked"), "Root", 2.0f);
 
         var output = sw.ToString();
         Assert.Contains("ENTER       Root", output);
         Assert.Contains("YIELD       Root", output);
         Assert.Contains("TRANSITION  Root -> Combat", output);
         Assert.Contains("EXIT        Root", output);
+        Assert.Contains("RETURN      Child Failed -> Root  (blocked)", output);
     }
 
     [Fact]

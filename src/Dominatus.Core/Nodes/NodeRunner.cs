@@ -64,6 +64,7 @@ public sealed class NodeRunner(AiNode node)
     internal void ClearChildReturn() => _returns.Clear();
     internal void SetChildReturn(Dominatus.Core.Hfsm.StateReturn result) => _returns.Set(result);
     internal bool TryConsumeChildReturn(out Dominatus.Core.Hfsm.StateReturn result) => _returns.TryConsume(out result);
+    internal bool HasPendingChildReturn => _returns.HasPending;
 
     public void Enter(AiWorld world, AiAgent agent, AiCtxFactory? contextFactory = null)
     {

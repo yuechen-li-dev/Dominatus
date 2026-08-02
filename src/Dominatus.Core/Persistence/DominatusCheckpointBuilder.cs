@@ -34,6 +34,9 @@ public static class DominatusCheckpointBuilder
         {
             var a = world.Agents[i];
 
+            if (a.Brain.HasPendingChildReturn)
+                throw new InvalidOperationException("Checkpoint capture is only valid at a stable tick boundary after child returns are consumed.");
+
             var path = a.Brain.GetActivePath()
                              .Select(s => s.ToString())
                              .ToArray();

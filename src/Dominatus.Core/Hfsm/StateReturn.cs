@@ -16,6 +16,7 @@ internal sealed class StateReturnSlot : IStateReturnSource
     private StateReturn? pending;
     public void Set(StateReturn result) => pending = result;
     public void Clear() => pending = null;
+    public bool HasPending => pending.HasValue;
     public bool TryConsume(out StateReturn result)
     {
         if (pending is { } value) { pending = null; result = value; return true; }

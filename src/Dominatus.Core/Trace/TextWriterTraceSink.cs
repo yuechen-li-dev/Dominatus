@@ -22,4 +22,7 @@ public sealed class TextWriterTraceSink : IAiTraceSink
 
     public void OnYield(StateId state, float time, object yielded)
         => _writer.WriteLine($"[t={time,6:0.00}] YIELD       {state}  {yielded}");
+
+    public void OnReturn(Hfsm.StateReturn result, StateId? resumedParent, float time)
+        => _writer.WriteLine($"[t={time,6:0.00}] RETURN      {result.State} {result.Kind} -> {resumedParent?.ToString() ?? "<root>"}  ({result.Reason ?? ""})");
 }

@@ -68,6 +68,12 @@ public sealed class HfsmInstance
     }
 
     /// <summary>
+    /// True only at the short boundary after an authored child return and before
+    /// the resumed parent consumes or replaces it. Checkpoints reject this state.
+    /// </summary>
+    public bool HasPendingChildReturn => _stack.Any(frame => frame.Runner.HasPendingChildReturn);
+
+    /// <summary>
     /// Restores the HFSM stack from a previously captured <see cref="GetActivePath"/> array.
     /// Each entry must be a valid state id present in <see cref="Graph"/>.
     /// <para>
@@ -605,8 +611,7 @@ public sealed class HfsmInstance
 
         var result = new StateReturn(kind, returned, reason);
         _stack[^1].Runner.SetChildReturn(result);
-        // Existing sinks can inspect this typed yield without a breaking trace-interface change.
-        Trace?.OnYield(_stack[^1].Id, world.Clock.Time, result);
+        Trace?.OnReturn(result, _stack[^1].Id, world.Clock.Time);
     }
 
     private void UnwindAbove(AiWorld world, AiAgent agent, int indexInclusive, string reason)

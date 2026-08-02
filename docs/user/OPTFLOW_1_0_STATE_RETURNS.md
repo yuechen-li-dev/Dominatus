@@ -7,6 +7,8 @@ result carries the returning child `StateId` and the authored reason.
 The result belongs to the direct parent frame only. Read it once through
 `ctx.Return.TryConsume(out var result)`; it is also cleared before that parent
 pushes another child, preventing stale results from leaking into a later call.
+Checkpoints are legal only at stable boundaries: capture rejects the brief
+pending-return boundary, so an unconsumed return is never silently dropped.
 Natural iterator completion is a successful return. `Goto`, transitions, and
 interrupt unwinds are structural changes and do not produce a return.
 

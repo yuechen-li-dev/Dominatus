@@ -56,6 +56,40 @@ public sealed class OperationSiteTests
         Assert.Equal(0L, agent.Bb.GetOrDefault(new BbKey<long>("__op.standard.log-once.pendingId"), -1));
     }
 
+    [Fact]
+    public void OperationCompletion_CanAuthorSuccessfulChildReturn_AndExplicitParentRoute()
+    {
+        var host = new ActuatorHost(); host.Register(new LogHandler());
+        var graph = new HfsmGraph { Root = "Parent" };
+        graph.Add("Parent", _ => Parent());
+        graph.Add("Attempt", _ => Attempt());
+        graph.Add("Completed", _ => Wait());
+        graph.Add("Blocked", _ => Wait());
+        graph.Add("Continue", _ => Wait());
+        var world = new AiWorld(host);
+        var brain = new HfsmInstance(graph);
+        world.Add(new AiAgent(brain));
+
+        for (var i = 0; i < 8 && !brain.GetActivePath().Contains((StateId)"Completed"); i++) world.Tick(.01f);
+
+        Assert.Equal(new[] { (StateId)"Completed" }, brain.GetActivePath());
+
+        static IEnumerator<AiStep> Parent()
+        {
+            yield return Ai.Push((StateId)"Attempt");
+            yield return Ai.MatchReturn(
+                Ai.OnSuccess((StateId)"Completed"),
+                Ai.OnFailure((StateId)"Blocked"),
+                Ai.OnReturn((StateId)"Continue"));
+        }
+        static IEnumerator<AiStep> Attempt()
+        {
+            yield return Ai.Perform(Site, new LogCommand("move"), Result);
+            yield return Ai.Succeed("operation completed");
+        }
+        static IEnumerator<AiStep> Wait() { while (true) yield return Ai.Wait(100); }
+    }
+
     private static IEnumerator<AiStep> Root(AiCtx _) { yield return Ai.Push("Do"); while (true) yield return Ai.Wait(100); }
     private static IEnumerator<AiStep> Do(AiCtx _) { yield return Ai.Perform(Site, new LogCommand("first"), Result); yield return Ai.Perform(Site, new LogCommand("second"), Result); yield return Ai.Goto("Done"); }
     private static IEnumerator<AiStep> Done(AiCtx _) { while (true) yield return Ai.Wait(100); }

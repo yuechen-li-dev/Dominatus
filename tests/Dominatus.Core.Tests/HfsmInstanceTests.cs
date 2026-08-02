@@ -1,6 +1,8 @@
 ﻿using Dominatus.Core;
 using Dominatus.Core.Hfsm;
 using Dominatus.Core.Runtime;
+using Dominatus.Core.Persistence;
+using Dominatus.Core.Trace;
 using Dominatus.OptFlow;
 using Xunit;
 
@@ -8,6 +10,54 @@ namespace Dominatus.Core.Tests;
 
 public class HfsmInstanceTests
 {
+    [Fact]
+    public void AuthoredReturn_IsTracedWithKindReasonAndResumedParent()
+    {
+        var graph = new HfsmGraph { Root = "Parent" };
+        graph.Add("Parent", _ => Parent());
+        graph.Add("Child", _ => Child());
+        var trace = new ReturnTrace();
+        var world = new AiWorld();
+        var brain = new HfsmInstance(graph) { Trace = trace };
+        world.Add(new AiAgent(brain));
+
+        world.Tick(.01f);
+        world.Tick(.01f);
+
+        var returned = Assert.Single(trace.Returns);
+        Assert.Equal(StateReturnKind.Failed, returned.Result.Kind);
+        Assert.Equal((StateId)"Child", returned.Result.State);
+        Assert.Equal("blocked", returned.Result.Reason);
+        Assert.Equal((StateId)"Parent", returned.Parent);
+
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Parent() { yield return Ai.Push((StateId)"Child"); }
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Child() { yield return Ai.Fail("blocked"); }
+    }
+
+    [Fact]
+    public void Checkpoint_RejectsUnconsumedChildReturn_AndAllowsStableBoundary()
+    {
+        var graph = new HfsmGraph { Root = "Parent" };
+        graph.Add("Parent", ctx => Parent(ctx));
+        graph.Add("Child", _ => Child());
+        var world = new AiWorld();
+        world.Add(new AiAgent(new HfsmInstance(graph)));
+
+        world.Tick(.01f);
+        world.Tick(.01f);
+        Assert.Throws<InvalidOperationException>(() => DominatusCheckpointBuilder.Capture(world));
+
+        world.Tick(.01f);
+        Assert.NotNull(DominatusCheckpointBuilder.Capture(world));
+
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Parent(AiCtx ctx)
+        {
+            yield return Ai.Push((StateId)"Child");
+            Assert.True(ctx.Return.TryConsume(out _));
+            while (true) yield return Ai.Steady();
+        }
+        static IEnumerator<Dominatus.Core.Nodes.AiStep> Child() { yield return Ai.Succeed(); }
+    }
     [Fact]
     public void MatchReturn_RoutesSucceededChildToAuthoredTarget()
     {
@@ -225,5 +275,15 @@ public class HfsmInstanceTests
 
         // With KeepRootFrame enabled, Root stays and Combat is pushed above it.
         Assert.Equal(new[] { (StateId)"Root", (StateId)"Combat" }, brain.GetActivePath());
+    }
+
+    private sealed class ReturnTrace : IAiTraceSink
+    {
+        public List<(StateReturn Result, StateId? Parent)> Returns { get; } = new();
+        public void OnEnter(StateId state, float time, string reason) { }
+        public void OnExit(StateId state, float time, string reason) { }
+        public void OnTransition(StateId from, StateId to, float time, string reason) { }
+        public void OnYield(StateId state, float time, object yielded) { }
+        public void OnReturn(StateReturn result, StateId? resumedParent, float time) => Returns.Add((result, resumedParent));
     }
 }
