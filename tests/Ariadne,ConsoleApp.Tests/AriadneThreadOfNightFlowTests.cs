@@ -9,6 +9,22 @@ namespace Ariadne.ConsoleApp.Tests;
 public sealed class AriadneThreadOfNightFlowTests
 {
     [Fact]
+    public void GeneratedDefinition_ContainsExactlyTheAuthoredAriadneStates()
+    {
+        var inspection = AriadneThreadOfNight.Definition.Inspect();
+        Assert.Equal("ariadne.thread-of-night", inspection.Id);
+        Assert.Equal("Root", inspection.Root.Value);
+        Assert.True(inspection.Options.KeepRootFrame);
+        Assert.Equal(18, inspection.States.Count);
+        Assert.Empty(inspection.GeneratedArtifacts);
+        Assert.Equal("Root", inspection.States[0].Id.Value);
+        var first = AriadneThreadOfNight.Definition.BuildGraph();
+        var second = AriadneThreadOfNight.Definition.BuildGraph();
+        Assert.NotSame(first, second);
+        foreach (var state in inspection.States) Assert.NotNull(first.Get(state.Id));
+    }
+
+    [Fact]
     public void Chamber_KnifeChoice_ReturnsToChamber_Then_AllowsTheseusSelection()
     {
         var choosePrompts = new List<string>();

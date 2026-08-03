@@ -9,29 +9,8 @@ using Dominatus.OptFlow;
 
 namespace Ariadne.ConsoleApp.Scripts;
 
-public static class AriadneThreadOfNight
+public static partial class AriadneThreadOfNight
 {
-    public static class States
-    {
-        public static readonly StateId Root = StateId.Of(nameof(Root));
-        public static readonly StateId Intro = StateId.Of(nameof(Intro));
-        public static readonly StateId Chamber = StateId.Of(nameof(Chamber));
-        public static readonly StateId InspectThread = StateId.Of(nameof(InspectThread));
-        public static readonly StateId InspectKnife = StateId.Of(nameof(InspectKnife));
-        public static readonly StateId ReadTablets = StateId.Of(nameof(ReadTablets));
-        public static readonly StateId VisitShrine = StateId.Of(nameof(VisitShrine));
-        public static readonly StateId Theseus = StateId.Of(nameof(Theseus));
-        public static readonly StateId TalkToTheseusWhy = StateId.Of(nameof(TalkToTheseusWhy));
-        public static readonly StateId TalkToTheseusFear = StateId.Of(nameof(TalkToTheseusFear));
-        public static readonly StateId TalkToTheseusMonster = StateId.Of(nameof(TalkToTheseusMonster));
-        public static readonly StateId DemandPromise = StateId.Of(nameof(DemandPromise));
-        public static readonly StateId Threshold = StateId.Of(nameof(Threshold));
-        public static readonly StateId Ending_ThreadAndFlight = StateId.Of(nameof(Ending_ThreadAndFlight));
-        public static readonly StateId Ending_MercyInTheDark = StateId.Of(nameof(Ending_MercyInTheDark));
-        public static readonly StateId Ending_CrownOfKnives = StateId.Of(nameof(Ending_CrownOfKnives));
-        public static readonly StateId Ending_TheDescent = StateId.Of(nameof(Ending_TheDescent));
-        public static readonly StateId Ending_ThreadlessTragedy = StateId.Of(nameof(Ending_ThreadlessTragedy));
-    }
     // ---------------------------------------------------------------------
     // Blackboard keys
     // ---------------------------------------------------------------------
@@ -69,6 +48,7 @@ public static class AriadneThreadOfNight
     // Root / state graph
     // ---------------------------------------------------------------------
 
+    [DominatusState("Root", Root = true)]
     public static IEnumerator<AiStep> Root(AiCtx ctx)
     {
         yield return Ai.Goto(States.Intro);
@@ -76,6 +56,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Steady("Root parked after handoff");
     }
 
+    [DominatusState("Intro")]
     public static IEnumerator<AiStep> Intro(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.intro.the-palace-is-quiet-in-the-deliberat", "The palace is quiet in the deliberate way of places that expect blood by morning.", speaker: "Narrator");
@@ -89,6 +70,7 @@ public static class AriadneThreadOfNight
     // Scene 1: The Chamber
     // ---------------------------------------------------------------------
 
+    [DominatusState("Chamber")]
     public static IEnumerator<AiStep> Chamber(AiCtx ctx)
     {
         while (true)
@@ -139,6 +121,7 @@ public static class AriadneThreadOfNight
         }
     }
 
+    [DominatusState("InspectThread")]
     public static IEnumerator<AiStep> InspectThread(AiCtx ctx)
     {
         ctx.Bb.Set(SeenThread, true);
@@ -170,6 +153,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Pop();
     }
 
+    [DominatusState("InspectKnife")]
     public static IEnumerator<AiStep> InspectKnife(AiCtx ctx)
     {
         ctx.Bb.Set(SeenKnife, true);
@@ -182,6 +166,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Pop();
     }
 
+    [DominatusState("ReadTablets")]
     public static IEnumerator<AiStep> ReadTablets(AiCtx ctx)
     {
         ctx.Bb.Set(SeenTablets, true);
@@ -195,6 +180,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Pop();
     }
 
+    [DominatusState("VisitShrine")]
     public static IEnumerator<AiStep> VisitShrine(AiCtx ctx)
     {
         ctx.Bb.Set(SeenShrine, true);
@@ -231,6 +217,7 @@ public static class AriadneThreadOfNight
     // Scene 2: Theseus
     // ---------------------------------------------------------------------
 
+    [DominatusState("Theseus")]
     public static IEnumerator<AiStep> Theseus(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.theseus.he-comes-without-escort-which-is-eit", "He comes without escort, which is either brave or theatrical.", speaker: "Narrator");
@@ -315,6 +302,7 @@ public static class AriadneThreadOfNight
         }
     }
 
+    [DominatusState("TalkToTheseusWhy")]
     public static IEnumerator<AiStep> TalkToTheseusWhy(AiCtx ctx)
     {
         ctx.Bb.Set(AskedWhy, true);
@@ -336,6 +324,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Pop();
     }
 
+    [DominatusState("TalkToTheseusFear")]
     public static IEnumerator<AiStep> TalkToTheseusFear(AiCtx ctx)
     {
         ctx.Bb.Set(AskedFear, true);
@@ -352,6 +341,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Pop();
     }
 
+    [DominatusState("TalkToTheseusMonster")]
     public static IEnumerator<AiStep> TalkToTheseusMonster(AiCtx ctx)
     {
         ctx.Bb.Set(AskedMonster, true);
@@ -374,6 +364,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Pop();
     }
 
+    [DominatusState("DemandPromise")]
     public static IEnumerator<AiStep> DemandPromise(AiCtx ctx)
     {
         ctx.Bb.Set(AskedPromise, true);
@@ -414,6 +405,7 @@ public static class AriadneThreadOfNight
     // Scene 3: Threshold
     // ---------------------------------------------------------------------
 
+    [DominatusState("Threshold")]
     public static IEnumerator<AiStep> Threshold(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.threshold.at-the-threshold-of-the-labyrinth-to", "At the threshold of the labyrinth, torchlight becomes hesitant.", speaker: "Narrator");
@@ -465,6 +457,7 @@ public static class AriadneThreadOfNight
     // Endings
     // ---------------------------------------------------------------------
 
+    [DominatusState("Ending_ThreadAndFlight")]
     public static IEnumerator<AiStep> Ending_ThreadAndFlight(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.ending_thread-and-flight.you-place-the-thread-in-his-hand", "You place the thread in his hand.", speaker: "Narrator");
@@ -494,6 +487,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Succeed();
     }
 
+    [DominatusState("Ending_MercyInTheDark")]
     public static IEnumerator<AiStep> Ending_MercyInTheDark(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.ending_mercy-in-the-dark.you-choose-the-dark-not-to-conquer-i", "You choose the dark not to conquer it, but to warn what waits inside.", speaker: "Narrator");
@@ -510,6 +504,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Succeed();
     }
 
+    [DominatusState("Ending_CrownOfKnives")]
     public static IEnumerator<AiStep> Ending_CrownOfKnives(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.ending_crown-of-knives.you-turn-back-toward-the-palace", "You turn back toward the palace.", speaker: "Narrator");
@@ -524,6 +519,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Succeed();
     }
 
+    [DominatusState("Ending_TheDescent")]
     public static IEnumerator<AiStep> Ending_TheDescent(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.ending_the-descent.you-take-the-thread-yourself", "You take the thread yourself.", speaker: "Narrator");
@@ -540,6 +536,7 @@ public static class AriadneThreadOfNight
         yield return Ai.Succeed();
     }
 
+    [DominatusState("Ending_ThreadlessTragedy")]
     public static IEnumerator<AiStep> Ending_ThreadlessTragedy(AiCtx ctx)
     {
         yield return Diag.Line(id: "thread.ending_threadless-tragedy.morning-comes-whether-or-not-anyone", "Morning comes whether or not anyone is ready for it.", speaker: "Narrator");
@@ -550,22 +547,8 @@ public static class AriadneThreadOfNight
         yield return Ai.Succeed();
     }
 
-    public static readonly FlowDefinition Definition = CreateDefinition();
+    public static readonly FlowDefinition Definition = Define();
 
-    private static FlowDefinition CreateDefinition()
-    {
-        FlowState[] states =
-        [
-            Flow.State(States.Root, Root), Flow.State(States.Intro, Intro), Flow.State(States.Chamber, Chamber),
-            Flow.State(States.InspectThread, InspectThread), Flow.State(States.InspectKnife, InspectKnife),
-            Flow.State(States.ReadTablets, ReadTablets), Flow.State(States.VisitShrine, VisitShrine),
-            Flow.State(States.Theseus, Theseus), Flow.State(States.TalkToTheseusWhy, TalkToTheseusWhy),
-            Flow.State(States.TalkToTheseusFear, TalkToTheseusFear), Flow.State(States.TalkToTheseusMonster, TalkToTheseusMonster),
-            Flow.State(States.DemandPromise, DemandPromise), Flow.State(States.Threshold, Threshold),
-            Flow.State(States.Ending_ThreadAndFlight, Ending_ThreadAndFlight), Flow.State(States.Ending_MercyInTheDark, Ending_MercyInTheDark),
-            Flow.State(States.Ending_CrownOfKnives, Ending_CrownOfKnives), Flow.State(States.Ending_TheDescent, Ending_TheDescent),
-            Flow.State(States.Ending_ThreadlessTragedy, Ending_ThreadlessTragedy)
-        ];
-        return Flow.Define("ariadne.thread-of-night", states[0], states, new() { KeepRootFrame = true });
-    }
+    [DominatusFlow("ariadne.thread-of-night", KeepRootFrame = true)]
+    public static partial FlowDefinition Define();
 }

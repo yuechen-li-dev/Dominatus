@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Ariadne.OptFlow\Ariadne.OptFlow.csproj" />
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\Dominatus.OptFlow.Generators\Dominatus.OptFlow.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
