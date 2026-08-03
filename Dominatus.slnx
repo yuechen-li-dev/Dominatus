@@ -23,6 +23,7 @@
   <Project Path="src/Dominatus.Assets.Toml/Dominatus.Assets.Toml.csproj" />
   <Project Path="src/Dominatus.SpriteForge/Dominatus.SpriteForge.csproj" />
   <Project Path="src/Dominatus.OptFlow/Dominatus.OptFlow.csproj" Id="31fe4a4a-c059-4ea0-a3c8-2837b15f8b77" />
+  <Project Path="src/Dominatus.OptFlow.Generators/Dominatus.OptFlow.Generators.csproj" />
   <Project Path="src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj" />
   <Project Path="src/Dominatus.Llm.Context/Dominatus.Llm.Context.csproj" />
   <Project Path="src/Dominatus.StrideConn/Dominatus.StrideConn.csproj" />
@@ -31,6 +32,7 @@
   <Project Path="src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj" Id="467f35b4-f8be-4770-a516-75c2afb21db9" />
   <Project Path="tests/Ariadne,ConsoleApp.Tests/Ariadne,ConsoleApp.Tests.csproj" Id="9b598c48-2ebd-4917-acdd-05dcd18a212b" />
   <Project Path="tests/Dominatus.Core.Tests/Dominatus.Core.Tests.csproj" Id="b37f6e51-ca1b-4df8-b58f-7345ccc8d904" />
+  <Project Path="tests/Dominatus.OptFlow.Generators.Tests/Dominatus.OptFlow.Generators.Tests.csproj" />
   <Project Path="tests/Dominatus.Assets.Toml.Tests/Dominatus.Assets.Toml.Tests.csproj" />
   <Project Path="tests/Dominatus.SpriteForge.Tests/Dominatus.SpriteForge.Tests.csproj" />
   <Project Path="tests/Dominatus.Llm.OptFlow.Tests/Dominatus.Llm.OptFlow.Tests.csproj" />

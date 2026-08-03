@@ -2815,3 +2815,6 @@ no step processed). This is legal but should be intentional. Prefer explicit
 If a node yields `Ai.Goto("SomeName")` and `"SomeName"` was never registered
 via `graph.Add(...)`, the HFSM will throw `KeyNotFoundException` at runtime.
 Register every state used by any node.
+# Generated OptFlow factories
+
+OptFlow also supports a narrow compile-time construction generator for explicit partial factories and durable `[DominatusState]` IDs. See [OptFlow source-generated flows](OPTFLOW_SOURCE_GENERATED_FLOWS.md). It is optional: all existing manual `Flow.State` and `Flow.Define` authoring remains supported.

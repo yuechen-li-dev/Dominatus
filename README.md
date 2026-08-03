@@ -1,5 +1,7 @@
 # Dominatus
 
+OptFlow flows can optionally use compile-time source-generated construction while retaining explicit durable state IDs and the normal runtime APIs. See [the source-generated flow guide](docs/user/OPTFLOW_SOURCE_GENERATED_FLOWS.md).
+
 [![NuGet](https://img.shields.io/nuget/v/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
