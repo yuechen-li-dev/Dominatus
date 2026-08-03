@@ -1,58 +1,45 @@
-# Quadcopter control authored with Dominatus
+# Robotics control with Dominatus
 
-The `Dominatus.Robotics.Quadcopter` fixture asks a deliberately provocative question: what does a feedback controller look like when the control law itself is authored as an explicit Dominatus flow instead of as one traditional PID or nonlinear equation?
+Dominatus is a general-purpose hybrid control kernel. It composes continuous numerical control, explicit automata, utility decisions, delayed typed operations, recovery state, and optional higher-level reasoning in one inspectable execution model.
 
-This is a simulation-only architectural experiment. Dominatus directly chooses the control regime and emits a normalized collective/roll motor mix to a deterministic roll-axis plant. There is no separate PID or nonlinear controller underneath the flow.
+Dominatus does not replace control theory. It gives control theory a coherent software execution model for realistic systems.
+
+The M7 quadcopter demonstration uses this hierarchy:
 
 ```text
-simulated roll angle and roll rate
-    ↓ blackboard observations
+bounded attitude/rate feedback and delay prediction
+    ↓
 Dominatus utility arbitration
-    ↓ explicit control regime
-authored correction / braking / hold state
-    ↓ typed MotorMixCommand
-simulated quadcopter roll plant
-    ↓ next roll angle and roll rate
+    ↓
+persistent recovery and safety states
+    ↓
+optional bounded LLM decision for an unclassified anomaly
 ```
 
-## Traditional PID and nonlinear control
+The numerical layer still matters. M7 uses confidence-weighted estimation, proportional attitude correction, angular-rate damping, a four-motor mixer, saturation limiting, known-authority compensation, and a small delay-horizon predictor. Dominatus selects and persists the regime in which those calculations run.
 
-A roll-axis PID controller typically calculates a command on every sample:
+## Why the composition layer matters
 
-```text
-error = desiredRoll - measuredRoll
-torque = Kp·error + Ki·∫error·dt + Kd·d(error)/dt
-```
+Real robots do more than solve one feedback equation. They arm and disarm, synchronize observations with different timestamps, notice stale or contradictory sensors, compensate for degraded actuators, limit commands under saturation, preserve recovery attempts, and coordinate operations that complete later. A mature conventional stack can do all of this well. Its complexity naturally appears in estimator objects, mode flags, callback ordering, watchdogs, publishers, recovery coordinators, and diagnostic mirrors.
 
-A nonlinear geometric quadcopter controller instead works from the vehicle model and orientation on SO(3). In broad form it computes attitude and angular-velocity errors, adds feed-forward and gyroscopic terms, and produces a continuous body-moment vector:
+Dominatus makes those temporal and policy concerns authored states and typed operations. In the M7 sample, `SensorDegraded`, `SensorConflict`, `ActuatorDegraded`, `SafeHover`, `ControlledDescent`, and `EmergencyStop` are durable identities rather than incidental combinations of flags. Utility scores make safety dominance and tie behavior visible. OpenCV vision and LLM escalation are explicit external obligations.
 
-```text
-M = -KR·eR - KΩ·eΩ + Ω×JΩ + model/feed-forward terms
-```
+This is a programming-model claim, not a claim that state machines outperform PID, geometric control, Kalman filters, MPC, Lyapunov analysis, or PX4. Those techniques answer important estimation, control, and assurance questions. “Nonlinear” describes most physical systems but does not by itself specify how estimation, switching, recovery, timing, and mission logic should be composed in software.
 
-Both approaches encode control primarily as a compact numerical law. Mode changes, saturation, arming, and fault handling normally surround that law in separate control logic.
+## The role of frontier LLMs
 
-## The Dominatus-authored alternative
+Frontier LLMs belong above the fast control loop in most cases. They author, inspect, adapt, and escalate control policies rather than manually issuing every actuator command.
 
-The fixture expresses roll stabilization as a hybrid controller with inspectable states:
+M7 never asks an LLM whether motor 2 should change by three percent on the next 20 ms tick. Known wind, sensor dropout, sensor conflict, actuator loss, delay, and saturation all use authored bounded behavior with zero LLM calls. Only a persistent unclassified anomaly first enters `SafeHover` and may then invoke a fake deterministic LLM to choose among authored strategies. Its output routes through an explicit state transition and can never become a raw motor command.
 
-- `CorrectPositiveRoll` and `CorrectNegativeRoll` apply angle-dependent counter-torque.
-- `BrakePositiveRate` and `BrakeNegativeRate` damp residual angular motion.
-- `HoldLevel` applies a small rate-damping command inside the level band.
-- `Disarmed` dominates arbitration and emits zero collective and zero torque.
+A useful LLM-authored policy is closer to:
 
-Utility considerations select a regime from measured angle and angular rate. The selected state computes a bounded motor-mix command, sends it through the explicit `quad.control.apply-motor-mix` operation site, waits one authored control period, and reevaluates when its guard no longer holds. In other words, Dominatus is the controller here; the plant adapter only integrates the toy dynamics.
+> When IMU confidence falls but vision remains stable, reduce authority, use vision-corrected attitude, limit aggressive motion, and escalate only if the disagreement remains unexplained.
 
-| Property | PID / nonlinear law | Dominatus fixture |
-| --- | --- | --- |
-| Primary representation | Continuous equation | Explicit hybrid states and utility policy |
-| Control output | Torque/motor command | Typed `MotorMixCommand` |
-| Switching behavior | Usually surrounding logic | First-class authored states |
-| Inspection | Gains, errors, numerical logs | Active mode, scores, state, pending command |
-| Persistence | Usually controller-specific | Explicit operation/state boundaries |
-| Mathematical guarantees | Established analysis methods may apply | Not established by this fixture |
-| Timing overhead | Suitable for tight embedded loops | Current runtime is not claimed hard real-time |
+Dominatus executes that policy quickly and transparently. The LLM can remain the most general and slowest decider: control-system author, planner, anomaly interpreter, recovery-strategy selector, test author, and controller reviewer.
 
-This comparison is not a claim that the authored hybrid policy outperforms geometric control, MPC, or a tuned PID. The one-axis plant omits coupling, motor lag, estimator noise, saturation dynamics, translation, and disturbances. The useful evidence is narrower: ordinary Dominatus APIs can author a deterministic closed feedback loop that stabilizes the bounded test plant, makes mode switching explicit, and commands the simulated motors directly.
+## Evidence and limits
 
-Do not connect this fixture to physical hardware. Real flight software would require verified timing, sensor validation, actuator saturation, watchdogs, estimator integration, formal safety work, and much broader plant testing.
+The one-axis regression remains as a compact proof. M7 adds a deterministic three-axis attitude plant with unequal inertia, cross-axis coupling, damping, delayed commands, wind torque, motor saturation, sensor noise/dropout/conflict, and front-left authority loss. Both the Dominatus and conventional controllers run the same plant and criteria. See [the M7 comparison](../experiments/DOMINATUS_VS_CONVENTIONAL_ROBOTICS_CONTROL.md) for results and threats to validity.
+
+The demonstration is not a formal stability proof, a hard-real-time benchmark, certified flight software, a complete rigid-body/aerodynamic model, or a comparison against production PX4. Do not connect it to physical hardware.
