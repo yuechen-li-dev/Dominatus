@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Actuators.Standard</PackageId>
-    <Version>0.2.2</Version>
+    <Version>1.0.0</Version>
     <Authors>Yuechen Li</Authors>
     <Description>Standard actuator pack for Dominatus. Provides sandboxed file text, wall-clock time, calendar, HTTP, process, HTTP WebSafety, and WebContentSafety helpers behind typed Dominatus actuation boundaries.</Description>
     <PackageTags>ai;agent;actuator;automation;files;time;http;web-safety;dominatus</PackageTags>

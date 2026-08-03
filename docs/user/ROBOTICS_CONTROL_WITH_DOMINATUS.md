@@ -43,3 +43,7 @@ Dominatus executes that policy quickly and transparently. The LLM can remain the
 The one-axis regression remains as a compact proof. M7 adds a deterministic three-axis attitude plant with unequal inertia, cross-axis coupling, damping, delayed commands, wind torque, motor saturation, sensor noise/dropout/conflict, and front-left authority loss. Both the Dominatus and conventional controllers run the same plant and criteria. See [the M7 comparison](../experiments/DOMINATUS_VS_CONVENTIONAL_ROBOTICS_CONTROL.md) for results and threats to validity.
 
 The demonstration is not a formal stability proof, a hard-real-time benchmark, certified flight software, a complete rigid-body/aerodynamic model, or a comparison against production PX4. Do not connect it to physical hardware.
+
+## M8 closeout
+
+This robotics line is a completed architecture experiment and is intentionally paused. It is simulation-only, not production flight software, and does not establish certification or formal stability. The conventional controller remained shorter and faster in this bounded fixture. Dominatus' value was durable recovery state, typed obligations, inspection, and keeping LLM escalation above the fast loop. See [deferred work](../experiments/DOMINATUS_ROBOTICS_DEFERRED_WORK.md); next active work is Skyrim MarionetteSSE.

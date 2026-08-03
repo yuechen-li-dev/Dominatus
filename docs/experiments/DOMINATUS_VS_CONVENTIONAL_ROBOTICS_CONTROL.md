@@ -66,7 +66,11 @@ Representative Release/net8.0 deterministic run, 900 ticks at 20 ms:
 
 Peak nominal errors equal the initial errors and nominal overshoot is zero. Under the deliberately sustained saturation torque, peak roll reached about 82 degrees; recovery after removal satisfies the bounded fixture criterion but is not evidence of flight safety.
 
-Approximate end-to-end test timing was 59–157 ms per Dominatus scenario and 2.5–16 ms per conventional scenario on the development machine. Allocations were roughly 39–54 MB versus 2.5 MB. OpenCV encoding, operation/state scheduling, and copied trace snapshots dominate the Dominatus measurement. These are test-harness observations, not hard-real-time benchmarks.
+Approximate end-to-end test timing was 59–157 ms per Dominatus scenario and 2.5–16 ms per conventional scenario on the development machine. Allocations were roughly 39–54 MB versus 2.5 MB. OpenCV encoding, operation/state scheduling, and copied trace snapshots dominate the Dominatus measurement. These are test-harness observations, not hard-real-time benchmarks. M8 records this as a diagnostic-trace-heavy baseline, preserves full trace capability, and intentionally defers an allocation redesign.
+
+## M8 closeout
+
+The sample is a completed simulation experiment, not production flight software, certification evidence, formal stability analysis, or a claim to replace control theory. The conventional implementation was shorter and faster in this fixture; Dominatus demonstrated stateful recovery, typed obligations, inspection, and bounded LLM escalation above the loop. Further robotics work is paused; see [deferred work](DOMINATUS_ROBOTICS_DEFERRED_WORK.md).
 
 ## 10. Programming-model measurements
 

@@ -1,5 +1,7 @@
 # M7 controller engineering notebook
 
+> M8 closeout: this is a simulation-only architectural experiment, not certified or production flight software and not a formal stability result. Robotics work is paused; deferred items and resumption evidence are recorded in [DOMINATUS_ROBOTICS_DEFERRED_WORK.md](DOMINATUS_ROBOTICS_DEFERRED_WORK.md). The next active integration target is Skyrim MarionetteSSE.
+
 These notes were recorded as the shared plant and both controllers converged. They describe implementation observations, not reconstructed marketing claims.
 
 ## Shared plant and sensing

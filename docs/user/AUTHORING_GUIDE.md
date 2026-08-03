@@ -1,5 +1,7 @@
 # Dominatus Authoring Guide (v0)
 
+For 1.0, source-generated OptFlow flows are preferred for new code; manual flow authoring remains supported. Align public package references to the [1.0 manifest](../release/DOMINATUS_1_0_PACKAGE_MANIFEST.md).
+
 For a checkpoint-safe, explicitly named external obligation, use `Operation.Site<T>` with `Ai.Perform`; see [durable operation sites](OPTFLOW_1_0_DURABLE_OPERATION_SITES.md). It replaces only `Act`/`Await` bookkeeping—keep retries, result routing, and transitions as normal authored code.
 
 This guide covers how to write scripts for Dominatus. It assumes you have read

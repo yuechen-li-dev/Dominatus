@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Dominatus.OptFlow</PackageId>
-    <Version>0.2.2</Version>
+    <Version>1.0.0</Version>
     <Authors>Dominatus Contributors</Authors>
     <Description>OptFlow HFSM and utility authoring with durable operation sites, compile-time flow construction, and incremental-generator validation.</Description>
     <PackageTags>ai;agents;transitions;hfsm;utility-ai;control-kernel;control-flow;source-generator;incremental-generator;compile-time-validation;durable-operations</PackageTags>

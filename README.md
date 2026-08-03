@@ -1,5 +1,7 @@
 # Dominatus
 
+> **1.0 release candidate:** Core, OptFlow, UtilityLite compatibility, Ariadne, and the approved actuator packages are frozen for the 1.0 release set. See the [release notes](docs/release/DOMINATUS_1_0_RELEASE_NOTES.md), [upgrade guide](docs/release/DOMINATUS_1_0_UPGRADE_GUIDE.md), and [package manifest](docs/release/DOMINATUS_1_0_PACKAGE_MANIFEST.md).
+
 OptFlow flows can optionally use compile-time source-generated construction while retaining explicit durable state IDs and the normal runtime APIs. `Dominatus.OptFlow` packages its analyzer automatically, so no second generator reference is required. See [the source-generated flow guide](docs/user/OPTFLOW_SOURCE_GENERATED_FLOWS.md).
 
 [![NuGet](https://img.shields.io/nuget/v/Dominatus.Core)](https://www.nuget.org/packages/Dominatus.Core/)

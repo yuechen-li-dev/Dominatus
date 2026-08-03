@@ -1,5 +1,7 @@
 # OptFlow durable operation sites
 
+Use explicit operation-site IDs for persistence-safe work. Completed-result caching remains intentionally deferred in 1.0.
+
 `Ai.Perform` removes only the repeated dispatch/resume bookkeeping around one external actuation. It remains one visible `AiStep`/`IWaitEvent`; it does not add states, routing, retries, compensation, or control-flow transitions.
 
 ```csharp

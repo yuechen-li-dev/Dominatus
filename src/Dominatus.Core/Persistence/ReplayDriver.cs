@@ -155,7 +155,7 @@ public sealed class ReplayDriver
         if (agent is null) return;
 
         var id = NextId(agentId);
-        agent.Events.Publish(new ActuationCompleted(id, Ok: true));
+        CompleteActuation(agent, id, payload: null, publishStringPayload: false);
     }
 
     /// <summary>
@@ -168,8 +168,7 @@ public sealed class ReplayDriver
         if (agent is null) return;
 
         var id = NextId(agentId);
-        agent.Events.Publish(new ActuationCompleted(id, Ok: true, Payload: value));
-        agent.Events.Publish(new ActuationCompleted<string>(id, Ok: true, Payload: value));
+        CompleteActuation(agent, id, value, publishStringPayload: true);
     }
 
     /// <summary>
@@ -182,8 +181,7 @@ public sealed class ReplayDriver
         if (agent is null) return;
 
         var id = NextId(agentId);
-        agent.Events.Publish(new ActuationCompleted(id, Ok: true, Payload: choiceKey));
-        agent.Events.Publish(new ActuationCompleted<string>(id, Ok: true, Payload: choiceKey));
+        CompleteActuation(agent, id, choiceKey, publishStringPayload: true);
     }
 
     /// <summary>
@@ -205,6 +203,19 @@ public sealed class ReplayDriver
 
     private AiAgent? FindAgent(string agentId)
         => _world.Agents.FirstOrDefault(a => a.Id.ToString() == agentId);
+
+    // Replay is itself a completion dispatcher for obligations restored from a checkpoint.
+    // Keep its bookkeeping symmetric with ActuatorHost.Tick: remove only the obligation
+    // whose id just completed, before publishing the completion that resumes its waiter.
+    // A synthetic id has no restored obligation, so this is intentionally a no-op.
+    private static void CompleteActuation(AiAgent agent, ActuationId id, string? payload, bool publishStringPayload)
+    {
+        agent.InFlightActuations.Remove(new PendingActuation(id.Value, null));
+        agent.Events.Publish(new ActuationCompleted(id, Ok: true, Payload: payload));
+
+        if (publishStringPayload)
+            agent.Events.Publish(new ActuationCompleted<string>(id, Ok: true, Payload: payload));
+    }
 
     /// <summary>
     /// Returns the next pending <see cref="ActuationId"/> for <paramref name="agentId"/>.

@@ -1,5 +1,7 @@
 # OptFlow state returns
 
+`Pop`, `Succeed`, `Fail`, and `MatchReturn` are explicit state-return semantics. Checkpoints reject an unconsumed child-return boundary rather than guessing its continuation.
+
 `Ai.Pop`, `Ai.Succeed`, and `Ai.Fail` are authored returns from a pushed child.
 They respectively produce `Returned`, `Succeeded`, and `Failed` results.  The
 result carries the returning child `StateId` and the authored reason.

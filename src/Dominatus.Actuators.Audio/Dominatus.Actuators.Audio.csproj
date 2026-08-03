@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Dominatus.Actuators.Audio</PackageId>
-    <Version>0.3.0</Version>
+    <Version>1.0.0</Version>
     <Authors>Yuechen Li</Authors>
     <Description>Provider-neutral audio actuator primitives for Dominatus, including deterministic fake audio generation and open metadata sidecars.</Description>
     <PackageTags>ai;agent;actuator;audio;text-to-speech;dominatus</PackageTags>

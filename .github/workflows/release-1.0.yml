@@ -1,0 +1,67 @@
+name: Dominatus 1.0 release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        required: true
+        default: 1.0.0
+      publish_nuget:
+        description: Publish manifest packages to NuGet
+        required: true
+        type: boolean
+        default: false
+      create_github_release:
+        description: Create a GitHub release
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Validate version
+        run: |
+          [[ '${{ inputs.version }}' =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          test '${{ inputs.version }}' = 1.0.0
+      - run: dotnet restore Dominatus.slnx
+      - run: dotnet build Dominatus.slnx -c Release --no-restore
+      - run: dotnet test Dominatus.slnx -c Release --no-build
+      - name: Pack approved packages
+        run: |
+          mkdir -p artifacts/packages
+          for p in Dominatus.Core Dominatus.OptFlow Dominatus.UtilityLite Ariadne.OptFlow Dominatus.Actuators.Standard Dominatus.Actuators.HomeAssistant Dominatus.Actuators.Audio Dominatus.Actuators.Payments Dominatus.Actuators.Payments.Stripe Dominatus.Actuators.Payments.PayPal; do
+            dotnet pack "src/$p/$p.csproj" -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
+          done
+      - name: Validate package contents and package-only smoke
+        run: |
+          unzip -l artifacts/packages/Dominatus.OptFlow.${{ inputs.version }}.nupkg | grep 'analyzers/dotnet/cs/Dominatus.OptFlow.Generators.dll'
+          ! unzip -l artifacts/packages/Dominatus.OptFlow.${{ inputs.version }}.nupkg | grep -q 'lib/.*/Dominatus.OptFlow.Generators.dll'
+          DOTNET_NOLOGO=1 NUGET_PACKAGES="$RUNNER_TEMP/nuget" dotnet restore tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj --source "${{ github.workspace }}/artifacts/packages"
+          DOTNET_NOLOGO=1 NUGET_PACKAGES="$RUNNER_TEMP/nuget" dotnet run --project tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj -c Release --no-restore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dominatus-${{ inputs.version }}-packages
+          path: artifacts/packages/*.*nupkg
+      - name: Publish approved packages
+        if: ${{ inputs.publish_nuget }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          test -n "$NUGET_API_KEY" || (echo 'NUGET_API_KEY is required when publish_nuget is true.' && exit 1)
+          dotnet nuget push 'artifacts/packages/*.nupkg' --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: Create GitHub release
+        if: ${{ inputs.create_github_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ inputs.version }}" artifacts/packages/*.*nupkg --title "Dominatus ${{ inputs.version }}" --notes-file docs/release/DOMINATUS_1_0_RELEASE_NOTES.md

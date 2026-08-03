@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Dominatus.UtilityLite</PackageId>
-    <Version>0.2.2</Version>
+    <Version>1.0.0</Version>
     <Authors>Dominatus Contributors</Authors>
     <Description>Compatibility package for Dominatus utility authoring. The canonical implementation now ships with Dominatus.OptFlow.</Description>
     <PackageTags>utility-ai;ai;hfsm;scoring;decision-making;game-ai</PackageTags>

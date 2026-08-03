@@ -1,5 +1,7 @@
 # OptFlow source-generated flows
 
+Generated authoring is the preferred 1.0 path. One generated flow is supported per top-level static partial type, and iterator bodies are not graph-analysed.
+
 OptFlow can generate the repetitive construction linker for a flow. The generator emits ordinary C# that calls the same `Flow.State` and `Flow.Define` APIs authors previously called by hand. Manual authoring remains fully supported.
 
 Install only the normal package; no explicit generator package or analyzer project reference is required:

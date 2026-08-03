@@ -251,6 +251,28 @@ public sealed class M5c_ReplayDriverTests
     }
 
     [Fact]
+    public void ReplayDriver_Completion_ClearsOnlyTheMatchingRestoredInFlightActuation()
+    {
+        var (world, agent, _) = BuildWorld();
+        var completedId = agent.InFlightActuations.Single().ActuationIdValue;
+        var unrelatedId = completedId + 1000;
+        agent.InFlightActuations.Add(new PendingActuation(unrelatedId, null));
+        var checkpoint = DominatusCheckpointBuilder.Capture(world);
+
+        var cursors = DominatusCheckpointBuilder.Restore(world, checkpoint);
+        new ReplayDriver(world, new ReplayLog(1,
+        [new ReplayEvent.Text(agent.Id.ToString(), "replayed")]), cursors).ApplyAll();
+
+        Assert.DoesNotContain(agent.InFlightActuations, p => p.ActuationIdValue == completedId);
+        Assert.Contains(agent.InFlightActuations, p => p.ActuationIdValue == unrelatedId);
+
+        var subsequent = DominatusCheckpointBuilder.Capture(world);
+        var pending = EventCursorCodec.Deserialize(subsequent.Agents[0].EventCursorBlob).Pending;
+        Assert.DoesNotContain(pending, p => p.ActuationIdValue == completedId);
+        Assert.Contains(pending, p => p.ActuationIdValue == unrelatedId);
+    }
+
+    [Fact]
     public void ReplayDriver_IsComplete_AfterApplyAll()
     {
         var (world, agent, _) = BuildWorld();

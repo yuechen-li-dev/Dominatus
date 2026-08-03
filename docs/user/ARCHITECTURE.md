@@ -1,5 +1,7 @@
 # Dominatus Architecture Overview (v0)
 
+The 1.0 release boundary and persistence, tracing, and real-time limitations are recorded in the [release notes](../release/DOMINATUS_1_0_RELEASE_NOTES.md).
+
 **Dominatus** is a .NET 8 agent runtime kernel built around hierarchical finite state machines and utility-based decision-making.
 
 Its purpose is to execute stateful AI behavior in a way that is deterministic, inspectable, and persistable.

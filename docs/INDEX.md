@@ -1,10 +1,11 @@
 # Dominatus documentation index
 
-Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, auditable automation. This index is organized for 0.4 visitors: start with the public overview, then choose the runtime, actuator, connector, sample, tooling, or release track you need.
+Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, auditable automation. This index is organized for 1.0 visitors: start with the public overview, then choose the runtime, actuator, connector, sample, tooling, or release track you need.
 
 ## Start here
 
 - [Root README](../README.md) — public positioning, pick-your-path onboarding, package matrix, samples, build/test commands, and safety doctrine.
+- [Dominatus 1.0 release notes](release/DOMINATUS_1_0_RELEASE_NOTES.md), [upgrade guide](release/DOMINATUS_1_0_UPGRADE_GUIDE.md), and [package manifest](release/DOMINATUS_1_0_PACKAGE_MANIFEST.md).
 - [Dominatus 0.4 release notes](release/DOMINATUS_0_4_RELEASE_NOTES.md) — concise release summary, new package families, samples, compatibility notes, and known limitations.
 - [Architecture](user/ARCHITECTURE.md) — runtime concepts: blackboards, HFSMs, utility decisions, steps, persistence, actuators, server inspection, and LLM boundaries.
 - [Authoring guide](user/AUTHORING_GUIDE.md) — how to write Dominatus nodes and blackboard-driven workflows.
