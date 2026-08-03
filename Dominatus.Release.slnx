@@ -1,0 +1,22 @@
+<Solution>
+  <Project Path="src/Dominatus.Core/Dominatus.Core.csproj" />
+  <Project Path="src/Dominatus.OptFlow/Dominatus.OptFlow.csproj" />
+  <Project Path="src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj" />
+  <Project Path="src/Ariadne.OptFlow/Ariadne.OptFlow.csproj" />
+  <Project Path="src/Dominatus.Actuators.Standard/Dominatus.Actuators.Standard.csproj" />
+  <Project Path="src/Dominatus.Actuators.HomeAssistant/Dominatus.Actuators.HomeAssistant.csproj" />
+  <Project Path="src/Dominatus.Actuators.Audio/Dominatus.Actuators.Audio.csproj" />
+  <Project Path="src/Dominatus.Actuators.Payments/Dominatus.Actuators.Payments.csproj" />
+  <Project Path="src/Dominatus.Actuators.Payments.Stripe/Dominatus.Actuators.Payments.Stripe.csproj" />
+  <Project Path="src/Dominatus.Actuators.Payments.PayPal/Dominatus.Actuators.Payments.PayPal.csproj" />
+  <Project Path="tests/Dominatus.Core.Tests/Dominatus.Core.Tests.csproj" />
+  <Project Path="tests/Dominatus.OptFlow.Generators.Tests/Dominatus.OptFlow.Generators.Tests.csproj" />
+  <Project Path="tests/Dominatus.UtilityLite.Tests/Dominatus.UtilityLite.Tests.csproj" />
+  <Project Path="tests/Ariadne,ConsoleApp.Tests/Ariadne,ConsoleApp.Tests.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Standard.Tests/Dominatus.Actuators.Standard.Tests.csproj" />
+  <Project Path="tests/Dominatus.Actuators.HomeAssistant.Tests/Dominatus.Actuators.HomeAssistant.Tests.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Audio.Tests/Dominatus.Actuators.Audio.Tests.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Payments.Tests/Dominatus.Actuators.Payments.Tests.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Payments.Stripe.Tests/Dominatus.Actuators.Payments.Stripe.Tests.csproj" />
+  <Project Path="tests/Dominatus.Actuators.Payments.PayPal.Tests/Dominatus.Actuators.Payments.PayPal.Tests.csproj" />
+</Solution>
