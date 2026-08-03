@@ -12,7 +12,7 @@ namespace Dominatus.Template.HomeAssistantThermostat;
 /// Thin Dominatus runtime adapter for the thermostat template. The HFSM and DecisionPolicy own
 /// orchestration, utility choice, hysteresis, and min-commit behavior.
 /// </summary>
-public static class ThermostatController
+public static partial class ThermostatController
 {
     public static readonly BbKey<double> CurrentTemp = new("thermostat.current_temp");
     public static readonly BbKey<double> TargetTemp = new("thermostat.target_temp");
@@ -87,23 +87,17 @@ public static class ThermostatController
         return agent;
     }
 
-    private static FlowDefinition CreateDefinition(ThermostatPolicy policy)
-    {
-        FlowState? heating = null, cooling = null, idle = null;
-        var root = Flow.State("Root", _ => RootNode(policy, () => heating!, () => cooling!, () => idle!));
-        heating = Flow.State("Heating", ctx => ModeNode(ctx, ThermostatMode.Heat));
-        cooling = Flow.State("Cooling", ctx => ModeNode(ctx, ThermostatMode.Cool));
-        idle = Flow.State("Idle", ctx => ModeNode(ctx, ThermostatMode.Idle));
-        return Flow.Define("template.home-assistant-thermostat", root, [root, heating, cooling, idle], new() { KeepRootFrame = true });
-    }
+    [DominatusFlow("template.home-assistant-thermostat", KeepRootFrame = true)]
+    private static partial FlowDefinition CreateDefinition(ThermostatPolicy policy);
 
-    private static IEnumerator<AiStep> RootNode(ThermostatPolicy policy, Func<FlowState> heating, Func<FlowState> cooling, Func<FlowState> idle)
+    [DominatusState("Root", Root = true)]
+    private static IEnumerator<AiStep> Root(AiCtx _, ThermostatPolicy policy)
     {
         var options = new[]
         {
-            Ai.Option("Heating", HeatScore, heating()),
-            Ai.Option("Cooling", CoolScore, cooling()),
-            Ai.Option("Idle", IdleScore, idle())
+            Ai.Option("Heating", HeatScore, States.Heating),
+            Ai.Option("Cooling", CoolScore, States.Cooling),
+            Ai.Option("Idle", IdleScore, States.Idle)
         };
         var decisionPolicy = new DecisionPolicy(
             Hysteresis: (float)policy.Hysteresis,
@@ -116,6 +110,15 @@ public static class ThermostatController
             yield return Ai.Wait(0.01f);
         }
     }
+
+    [DominatusState("Heating")]
+    private static IEnumerator<AiStep> Heating(AiCtx ctx) => ModeNode(ctx, ThermostatMode.Heat);
+
+    [DominatusState("Cooling")]
+    private static IEnumerator<AiStep> Cooling(AiCtx ctx) => ModeNode(ctx, ThermostatMode.Cool);
+
+    [DominatusState("Idle")]
+    private static IEnumerator<AiStep> Idle(AiCtx ctx) => ModeNode(ctx, ThermostatMode.Idle);
 
     private static IEnumerator<AiStep> ModeNode(AiCtx ctx, ThermostatMode desiredMode)
     {

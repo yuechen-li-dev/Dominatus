@@ -12,7 +12,7 @@ namespace Dominatus.Robotics.Quadcopter;
 /// A simulation-only hybrid roll controller authored as an explicit Dominatus flow.
 /// It directly selects and emits motor-mix commands; it is not a mission supervisor.
 /// </summary>
-public static class QuadcopterAttitudeController
+public static partial class QuadcopterAttitudeController
 {
     public const float ControlPeriodSeconds = .02f;
     public const float LevelToleranceDegrees = 1.0f;
@@ -30,27 +30,8 @@ public static class QuadcopterAttitudeController
     public static readonly OperationSite<string> ApplyMotorMix = Operation.Site<string>("quad.control.apply-motor-mix");
     public static readonly DecisionSlot RollControl = Utility.Slot("quad.control.roll-mode");
 
-    public static readonly StateId ControlLoop = "ControlLoop";
-    public static readonly StateId CorrectPositiveRoll = "CorrectPositiveRoll";
-    public static readonly StateId CorrectNegativeRoll = "CorrectNegativeRoll";
-    public static readonly StateId BrakePositiveRate = "BrakePositiveRate";
-    public static readonly StateId BrakeNegativeRate = "BrakeNegativeRate";
-    public static readonly StateId HoldLevel = "HoldLevel";
-    public static readonly StateId Disarmed = "Disarmed";
-
-    public static FlowDefinition Define()
-    {
-        var root = Flow.State(ControlLoop.Value, ControlLoopNode);
-        var positive = Flow.State(CorrectPositiveRoll.Value, ctx => ApplyMode(ctx, CorrectPositiveRoll, torqueSign: -1f));
-        var negative = Flow.State(CorrectNegativeRoll.Value, ctx => ApplyMode(ctx, CorrectNegativeRoll, torqueSign: 1f));
-        var brakePositive = Flow.State(BrakePositiveRate.Value, ctx => ApplyMode(ctx, BrakePositiveRate, torqueSign: -1f));
-        var brakeNegative = Flow.State(BrakeNegativeRate.Value, ctx => ApplyMode(ctx, BrakeNegativeRate, torqueSign: 1f));
-        var hold = Flow.State(HoldLevel.Value, ctx => ApplyMode(ctx, HoldLevel, torqueSign: 0f));
-        var disarmed = Flow.State(Disarmed.Value, DisarmedNode);
-        return Flow.Define("robotics.quadcopter.attitude-control", root,
-            [root, positive, negative, brakePositive, brakeNegative, hold, disarmed],
-            new() { KeepRootFrame = false });
-    }
+    [DominatusFlow("robotics.quadcopter.attitude-control", KeepRootFrame = false)]
+    public static partial FlowDefinition Define();
 
     public static AiWorld CreateSimulation(float initialRollDegrees, out AiAgent vehicle, out QuadcopterRollPlant plant)
     {
@@ -65,18 +46,34 @@ public static class QuadcopterAttitudeController
         return world;
     }
 
-    private static IEnumerator<AiStep> ControlLoopNode(AiCtx _)
+    [DominatusState("ControlLoop", Root = true)]
+    private static IEnumerator<AiStep> ControlLoop(AiCtx _)
     {
         yield return Ai.Decide(RollControl,
         [
-            Utility.Option("Disarm", Utility.Bb(Memory.DisarmRequested), Disarmed),
-            Utility.Option("PositiveAngle", PositiveAngleScore, CorrectPositiveRoll),
-            Utility.Option("NegativeAngle", NegativeAngleScore, CorrectNegativeRoll),
-            Utility.Option("PositiveRate", PositiveRateScore, BrakePositiveRate),
-            Utility.Option("NegativeRate", NegativeRateScore, BrakeNegativeRate),
-            Utility.Option("Level", Utility.Score((_, _) => .05f), HoldLevel)
+            Utility.Option("Disarm", Utility.Bb(Memory.DisarmRequested), States.Disarmed),
+            Utility.Option("PositiveAngle", PositiveAngleScore, States.CorrectPositiveRoll),
+            Utility.Option("NegativeAngle", NegativeAngleScore, States.CorrectNegativeRoll),
+            Utility.Option("PositiveRate", PositiveRateScore, States.BrakePositiveRate),
+            Utility.Option("NegativeRate", NegativeRateScore, States.BrakeNegativeRate),
+            Utility.Option("Level", Utility.Score((_, _) => .05f), States.HoldLevel)
         ], hysteresis: .02f, minCommitSeconds: 0f);
     }
+
+    [DominatusState("CorrectPositiveRoll")]
+    private static IEnumerator<AiStep> CorrectPositiveRoll(AiCtx ctx) => ApplyMode(ctx, States.CorrectPositiveRoll, torqueSign: -1f);
+
+    [DominatusState("CorrectNegativeRoll")]
+    private static IEnumerator<AiStep> CorrectNegativeRoll(AiCtx ctx) => ApplyMode(ctx, States.CorrectNegativeRoll, torqueSign: 1f);
+
+    [DominatusState("BrakePositiveRate")]
+    private static IEnumerator<AiStep> BrakePositiveRate(AiCtx ctx) => ApplyMode(ctx, States.BrakePositiveRate, torqueSign: -1f);
+
+    [DominatusState("BrakeNegativeRate")]
+    private static IEnumerator<AiStep> BrakeNegativeRate(AiCtx ctx) => ApplyMode(ctx, States.BrakeNegativeRate, torqueSign: 1f);
+
+    [DominatusState("HoldLevel")]
+    private static IEnumerator<AiStep> HoldLevel(AiCtx ctx) => ApplyMode(ctx, States.HoldLevel, torqueSign: 0f);
 
     private static readonly Consideration PositiveAngleScore = Utility.Score((_, agent) =>
         agent.Bb.GetOrDefault(Memory.RollDegrees, 0f) > LevelToleranceDegrees
@@ -95,7 +92,7 @@ public static class QuadcopterAttitudeController
     {
         while (ShouldRemainInMode(ctx, mode))
         {
-            if (ctx.Bb.GetOrDefault(Memory.DisarmRequested, false)) { yield return Ai.Goto(Disarmed, "disarm requested"); yield break; }
+            if (ctx.Bb.GetOrDefault(Memory.DisarmRequested, false)) { yield return Ai.Goto(States.Disarmed, "disarm requested"); yield break; }
             var roll = ctx.Bb.GetOrDefault(Memory.RollDegrees, 0f);
             var rate = ctx.Bb.GetOrDefault(Memory.RollRateDegreesPerSecond, 0f);
             var torque = torqueSign == 0f
@@ -105,23 +102,24 @@ public static class QuadcopterAttitudeController
             yield return Ai.Perform(ApplyMotorMix, new MotorMixCommand(Collective: .52f, RollTorque: torque), Memory.LastMixResult);
             yield return Ai.Wait(ControlPeriodSeconds);
         }
-        yield return Ai.Goto(ControlLoop, $"applied {mode}");
+        yield return Ai.Goto(States.ControlLoop, $"applied {mode}");
     }
 
     private static bool ShouldRemainInMode(AiCtx ctx, StateId mode)
     {
         var roll = ctx.Bb.GetOrDefault(Memory.RollDegrees, 0f);
         var rate = ctx.Bb.GetOrDefault(Memory.RollRateDegreesPerSecond, 0f);
-        if (mode == CorrectPositiveRoll) return roll > LevelToleranceDegrees;
-        if (mode == CorrectNegativeRoll) return roll < -LevelToleranceDegrees;
-        if (mode == BrakePositiveRate) return rate > RateToleranceDegreesPerSecond;
-        if (mode == BrakeNegativeRate) return rate < -RateToleranceDegreesPerSecond;
+        if (mode == States.CorrectPositiveRoll) return roll > LevelToleranceDegrees;
+        if (mode == States.CorrectNegativeRoll) return roll < -LevelToleranceDegrees;
+        if (mode == States.BrakePositiveRate) return rate > RateToleranceDegreesPerSecond;
+        if (mode == States.BrakeNegativeRate) return rate < -RateToleranceDegreesPerSecond;
         return MathF.Abs(roll) <= LevelToleranceDegrees;
     }
 
-    private static IEnumerator<AiStep> DisarmedNode(AiCtx ctx)
+    [DominatusState("Disarmed")]
+    private static IEnumerator<AiStep> Disarmed(AiCtx ctx)
     {
-        ctx.Bb.Set(Memory.LastControlMode, Disarmed.Value);
+        ctx.Bb.Set(Memory.LastControlMode, States.Disarmed.Value);
         yield return Ai.Perform(ApplyMotorMix, new MotorMixCommand(0f, 0f), Memory.LastMixResult);
         while (true) yield return Ai.Steady("motors disarmed");
     }

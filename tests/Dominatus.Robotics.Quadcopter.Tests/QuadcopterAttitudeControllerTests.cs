@@ -25,7 +25,7 @@ public sealed class QuadcopterAttitudeControllerTests
     {
         var world = QuadcopterAttitudeController.CreateSimulation(15f, out var vehicle, out var plant);
         TickUntilCommand(world, plant);
-        Assert.Equal(QuadcopterAttitudeController.CorrectPositiveRoll.Value,
+        Assert.Equal(QuadcopterAttitudeController.States.CorrectPositiveRoll.Value,
             vehicle.Bb.GetOrDefault(QuadcopterAttitudeController.Memory.LastControlMode, ""));
         Assert.True(plant.Commands[0].RollTorque < 0f);
     }
@@ -47,6 +47,13 @@ public sealed class QuadcopterAttitudeControllerTests
         Assert.Equal(7, inspection.States.Count);
         Assert.Empty(inspection.GeneratedArtifacts);
         Assert.Equal("quad.control.apply-motor-mix", QuadcopterAttitudeController.ApplyMotorMix.Id.Value);
+    }
+
+    [Fact]
+    public void GeneratedDefinition_ContainsOnlyTheSevenAuthoredDurableIds()
+    {
+        var ids = QuadcopterAttitudeController.Define().Inspect().States.Select(state => state.Id.Value).ToArray();
+        Assert.Equal(["ControlLoop", "BrakeNegativeRate", "BrakePositiveRate", "CorrectNegativeRoll", "CorrectPositiveRoll", "Disarmed", "HoldLevel"], ids);
     }
 
     private static void TickUntilCommand(Dominatus.Core.Runtime.AiWorld world, QuadcopterRollPlant plant)

@@ -16,6 +16,17 @@ The strongest finding is architectural: OptFlow can express a readable hybrid co
 
 No production API change is made. There are seven explicit states, zero generated states, one explicit motor-mix operation identity, and no reflection, hidden retry, arbitrary serialization, or implicit exception conversion.
 
+## M6a source-generated construction comparison
+
+The M6a generator removes linker synchronization without changing the authored controller or runtime state count.
+
+| Fixture | IDs retained | Manual `StateId` / `Flow.State` / registration entries removed | Forward declarations / callback thunks removed | Construction plumbing before → after | Runtime / hidden states before → after |
+| --- | ---: | --- | --- | --- | --- |
+| Quadcopter | 7 | 7 / 7 / 7 | 0 / 0 | ~17 → 2 factory declaration lines | 7 / 0 → 7 / 0 |
+| Thermostat | 4 | 0 / 4 / 4 | 3 / 3 | ~9 → 2 factory declaration lines | 4 / 0 → 4 / 0 |
+
+Each durable ID remains explicit in `[DominatusState("…")]`; line-count reduction is a consequence of removing duplicate declarations, not compressed node code. Generated registration is root first and then durable ID ordinal order.
+
 ## Minimally ideal sketch
 
 ```csharp

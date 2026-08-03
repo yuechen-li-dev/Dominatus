@@ -188,6 +188,18 @@ public sealed class ThermostatControllerTests
         Assert.Contains("Ai.Act", combined);
     }
 
+    [Fact]
+    public void GeneratedDefinition_HasStableAuthoredStatesAndNoForwardReferenceCeremony()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "samples/Templates/Dominatus.Template.HomeAssistantThermostat/ThermostatController.cs"));
+        var inspection = ThermostatController.Definition.Inspect();
+
+        Assert.Equal(["Root", "Cooling", "Heating", "Idle"], inspection.States.Select(state => state.Id.Value));
+        Assert.Empty(inspection.GeneratedArtifacts);
+        Assert.DoesNotContain("FlowState?", source);
+        Assert.DoesNotContain("Func<FlowState>", source);
+    }
+
     private static Task<ThermostatRunResult> RunFakeAsync(IReadOnlyList<ThermostatTickInput> ticks, double hysteresis = 0.5, int minCommit = 0)
     {
         var actuator = new FakeHomeAssistantThermostatActuator();

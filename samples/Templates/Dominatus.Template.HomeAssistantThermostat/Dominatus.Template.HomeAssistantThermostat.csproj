@@ -9,5 +9,6 @@
     <ProjectReference Include="..\..\..\src\Dominatus.Core\Dominatus.Core.csproj" />
     <ProjectReference Include="..\..\..\src\Dominatus.OptFlow\Dominatus.OptFlow.csproj" />
     <ProjectReference Include="..\..\..\src\Dominatus.Actuators.HomeAssistant\Dominatus.Actuators.HomeAssistant.csproj" />
+    <ProjectReference Include="..\..\..\src\Dominatus.OptFlow.Generators\Dominatus.OptFlow.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>
