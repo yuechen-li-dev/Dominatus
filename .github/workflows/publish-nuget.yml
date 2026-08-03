@@ -7,6 +7,11 @@ on:
         description: Release version
         required: true
         default: 1.0.0
+      validate_trusted_publishing:
+        description: Authenticate with NuGet OIDC without publishing
+        required: true
+        type: boolean
+        default: false
       publish_nuget:
         description: Publish manifest packages to NuGet
         required: true
@@ -20,12 +25,12 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
-    # The checked-in OpenCV runtime used by the bounded robotics sample is Windows-only.
-    # Keep the full release suite on its supported platform; Linux packaging is deferred.
     runs-on: windows-latest
+    environment: release
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -55,26 +60,27 @@ jobs:
         run: |
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead('artifacts/packages/Dominatus.OptFlow.${{ inputs.version }}.nupkg')
-          try {
-            $entries = $archive.Entries.FullName
-            if ($entries -notcontains 'analyzers/dotnet/cs/Dominatus.OptFlow.Generators.dll') { throw 'OptFlow analyzer is missing from its package.' }
-            if ($entries -match '^lib/.*/Dominatus\.OptFlow\.Generators\.dll$') { throw 'OptFlow generator was incorrectly packaged as a runtime library.' }
-          } finally { $archive.Dispose() }
+          try { $entries = $archive.Entries.FullName; if ($entries -notcontains 'analyzers/dotnet/cs/Dominatus.OptFlow.Generators.dll') { throw 'OptFlow analyzer is missing from its package.' }; if ($entries -match '^lib/.*/Dominatus\.OptFlow\.Generators\.dll$') { throw 'OptFlow generator was incorrectly packaged as a runtime library.' } } finally { $archive.Dispose() }
           $env:NUGET_PACKAGES = Join-Path $env:RUNNER_TEMP 'nuget'
-          $feed = Join-Path $env:GITHUB_WORKSPACE 'artifacts/packages'
-          dotnet restore tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj --source $feed
+          dotnet restore tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj --source (Join-Path $env:GITHUB_WORKSPACE 'artifacts/packages')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet run --project tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj -c Release --no-restore
       - uses: actions/upload-artifact@v4
         with:
           name: dominatus-${{ inputs.version }}-packages
           path: artifacts/packages/*.*nupkg
+      - name: NuGet trusted publishing login
+        if: ${{ inputs.validate_trusted_publishing || inputs.publish_nuget }}
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
       - name: Publish approved packages
         if: ${{ inputs.publish_nuget }}
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) { throw 'NUGET_API_KEY is required when publish_nuget is true.' }
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) { throw 'NuGet trusted publishing did not provide a temporary API key.' }
           dotnet nuget push 'artifacts/packages/*.nupkg' --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
       - name: Create GitHub release
         if: ${{ inputs.create_github_release }}

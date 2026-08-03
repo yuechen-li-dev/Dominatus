@@ -29,14 +29,14 @@ Configure this GitHub Actions repository variable:
 
 Do not add `NUGET_API_KEY` as a repository secret. The workflow uses `permissions: id-token: write` so `NuGet/login@v1` can exchange the GitHub OIDC token for a short-lived temporary NuGet API key.
 
-## How to publish Dominatus 0.4.0
+## How to validate or publish Dominatus 1.0.0
 
 1. Confirm the NuGet Trusted Publishing policy fields above are present on NuGet.org.
 2. Confirm the GitHub `release` environment exists and any desired reviewers/approvals are configured there.
 3. Confirm the repository variable `NUGET_USER` contains the NuGet profile username.
-4. In GitHub, open **Actions** → **Publish NuGet** → **Run workflow**.
-5. Enter version `0.4.0` or keep the default.
-6. Start the workflow.
+4. In GitHub, open **Actions** → **Dominatus 1.0 release** → **Run workflow**.
+5. For an authentication-only proof, set `validate_trusted_publishing` to true and leave publication disabled.
+6. For an authorized release, set `publish_nuget` to true. No long-lived API key is used.
 
 The workflow restores, builds, tests, packs the publishable projects under `src/`, uploads generated `.nupkg` files as an artifact named `nuget-packages-<version>`, authenticates with `NuGet/login@v1`, and runs `dotnet nuget push` with the temporary API key and `--skip-duplicate`.
 
