@@ -12,11 +12,15 @@
   <Project Path="samples/Dominatus.SemanticKernelGraphAssistant/Dominatus.SemanticKernelGraphAssistant.csproj" />
   <Project Path="samples/Dominatus.TinyTown/Dominatus.TinyTown.csproj" />
   <Project Path="samples/Dominatus.Robotics.Quadcopter/Dominatus.Robotics.Quadcopter.csproj" />
+  <Project Path="samples/Dominatus.Robotics.Quadcopter3D.Shared/Dominatus.Robotics.Quadcopter3D.Shared.csproj" />
+  <Project Path="samples/Dominatus.Robotics.Quadcopter3D/Dominatus.Robotics.Quadcopter3D.csproj" />
+  <Project Path="samples/Dominatus.Robotics.Quadcopter3D.Conventional/Dominatus.Robotics.Quadcopter3D.Conventional.csproj" />
   <Project Path="samples/Dominatus.GodotTinyTown/Dominatus.GodotTinyTown.csproj" />
   <Project Path="samples/Dominatus.Assets.Toml.AriadneDialogue/Dominatus.Assets.Toml.AriadneDialogue.csproj" />
   <Project Path="tools/Dominatus.SpriteForge.PreviewGodot/Dominatus.SpriteForge.PreviewGodot.csproj" />
   <Project Path="tests/Dominatus.TinyTown.Tests/Dominatus.TinyTown.Tests.csproj" />
   <Project Path="tests/Dominatus.Robotics.Quadcopter.Tests/Dominatus.Robotics.Quadcopter.Tests.csproj" />
+  <Project Path="tests/Dominatus.Robotics.Quadcopter3D.Tests/Dominatus.Robotics.Quadcopter3D.Tests.csproj" />
   <Project Path="src/Ariadne.Console/Ariadne.ConsoleApp.csproj" Id="4ffe8ebb-8ad5-4faa-bdad-afddf42b99e7" />
   <Project Path="src/Ariadne.OptFlow/Ariadne.OptFlow.csproj" Id="7f70086a-7f3d-4fcf-a681-49c83963a640" />
   <Project Path="src/Dominatus.Core/Dominatus.Core.csproj" />
