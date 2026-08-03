@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Dominatus.Robotics.Quadcopter3D.Shared/Dominatus.Robotics.Quadcopter3D.Shared.csproj" />
+    <ProjectReference Include="../../src/Dominatus.Core/Dominatus.Core.csproj" />
+    <ProjectReference Include="../../src/Dominatus.OptFlow/Dominatus.OptFlow.csproj" />
+    <ProjectReference Include="../../src/Dominatus.UtilityLite/Dominatus.UtilityLite.csproj" />
+    <ProjectReference Include="../../src/Dominatus.Llm.OptFlow/Dominatus.Llm.OptFlow.csproj" />
+    <ProjectReference Include="../../src/Dominatus.OptFlow.Generators/Dominatus.OptFlow.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
