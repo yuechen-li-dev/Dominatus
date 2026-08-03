@@ -81,7 +81,12 @@ jobs:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) { throw 'NuGet trusted publishing did not provide a temporary API key.' }
-          dotnet nuget push 'artifacts/packages/*.nupkg' --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+          $packages = Get-ChildItem artifacts/packages -Filter '*.nupkg' | Sort-Object Name
+          if ($packages.Count -eq 0) { throw 'No packages were produced for publication.' }
+          foreach ($package in $packages) {
+            dotnet nuget push $package.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Create GitHub release
         if: ${{ inputs.create_github_release }}
         env:
