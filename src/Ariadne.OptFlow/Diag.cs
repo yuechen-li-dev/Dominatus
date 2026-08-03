@@ -24,7 +24,7 @@ public static class Diag
     {
         if (!Enum.IsDefined(kind))
             throw new DiagOperationValidationException(new([new(DiagOperationValidationCode.InvalidKind, "Dialogue operation kind is invalid.")]));
-        var legacyId = $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}";
+        var legacyId = $"{LegacyFileStem(callsiteFile)}:{callsiteLine}";
         return new(legacyId, kind, DiagOperationIdentityKind.LegacySourceDerived,
             DiagSteps.StartedKey(legacyId), DiagSteps.PendingIdKey(legacyId), storeAs,
             new(Array.Empty<DiagOperationValidationDiagnostic>()));
@@ -69,7 +69,7 @@ public static class Diag
         [CallerFilePath] string callsiteFile = "",
         [CallerLineNumber] int callsiteLine = 0)
         => new DiagSteps.LineStep(text, speaker,
-            $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
+            $"{LegacyFileStem(callsiteFile)}:{callsiteLine}");
 
     /// <summary>
     /// Prompt for free text and store the result into the blackboard.
@@ -84,7 +84,7 @@ public static class Diag
         [CallerFilePath] string callsiteFile = "",
         [CallerLineNumber] int callsiteLine = 0)
         => new DiagSteps.AskStep(prompt, storeAs,
-            $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
+            $"{LegacyFileStem(callsiteFile)}:{callsiteLine}");
 
     /// <summary>
     /// Present a set of options and store the chosen key string into the blackboard.
@@ -100,7 +100,16 @@ public static class Diag
         [CallerFilePath] string callsiteFile = "",
         [CallerLineNumber] int callsiteLine = 0)
         => new DiagSteps.ChooseStep(prompt, options, storeAs,
-            $"{Path.GetFileNameWithoutExtension(callsiteFile)}:{callsiteLine}");
+            $"{LegacyFileStem(callsiteFile)}:{callsiteLine}");
+
+    // Caller-file paths use the host compiler's separator. Normalize both forms so
+    // legacy IDs remain machine-readable when a checkpoint moves across platforms.
+    private static string LegacyFileStem(string callsiteFile)
+    {
+        var fileNameStart = Math.Max(callsiteFile.LastIndexOf('/'), callsiteFile.LastIndexOf('\\')) + 1;
+        var fileName = callsiteFile[fileNameStart..];
+        return Path.GetFileNameWithoutExtension(fileName);
+    }
 
     public static IEnumerable<AiStep> SafeInline(IEnumerable<AiStep> steps)
     {

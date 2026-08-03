@@ -23,7 +23,9 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # The checked-in OpenCV runtime used by the bounded robotics sample is Windows-only.
+    # Keep the full release suite on its supported platform; Linux packaging is deferred.
+    runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -32,23 +34,33 @@ jobs:
           dotnet-version: 10.0.x
       - name: Validate version
         run: |
-          [[ '${{ inputs.version }}' =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-          test '${{ inputs.version }}' = 1.0.0
+          $version = '${{ inputs.version }}'
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') { throw "Invalid semantic version: $version" }
+          if ($version -ne '1.0.0') { throw "This workflow freezes the 1.0 release at 1.0.0; received $version." }
       - run: dotnet restore Dominatus.slnx
       - run: dotnet build Dominatus.slnx -c Release --no-restore
       - run: dotnet test Dominatus.slnx -c Release --no-build
       - name: Pack approved packages
         run: |
-          mkdir -p artifacts/packages
-          for p in Dominatus.Core Dominatus.OptFlow Dominatus.UtilityLite Ariadne.OptFlow Dominatus.Actuators.Standard Dominatus.Actuators.HomeAssistant Dominatus.Actuators.Audio Dominatus.Actuators.Payments Dominatus.Actuators.Payments.Stripe Dominatus.Actuators.Payments.PayPal; do
+          New-Item -ItemType Directory -Force artifacts/packages | Out-Null
+          foreach ($p in 'Dominatus.Core','Dominatus.OptFlow','Dominatus.UtilityLite','Ariadne.OptFlow','Dominatus.Actuators.Standard','Dominatus.Actuators.HomeAssistant','Dominatus.Actuators.Audio','Dominatus.Actuators.Payments','Dominatus.Actuators.Payments.Stripe','Dominatus.Actuators.Payments.PayPal') {
             dotnet pack "src/$p/$p.csproj" -c Release --no-build -o artifacts/packages /p:Version=${{ inputs.version }}
-          done
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Validate package contents and package-only smoke
         run: |
-          unzip -l artifacts/packages/Dominatus.OptFlow.${{ inputs.version }}.nupkg | grep 'analyzers/dotnet/cs/Dominatus.OptFlow.Generators.dll'
-          ! unzip -l artifacts/packages/Dominatus.OptFlow.${{ inputs.version }}.nupkg | grep -q 'lib/.*/Dominatus.OptFlow.Generators.dll'
-          DOTNET_NOLOGO=1 NUGET_PACKAGES="$RUNNER_TEMP/nuget" dotnet restore tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj --source "${{ github.workspace }}/artifacts/packages"
-          DOTNET_NOLOGO=1 NUGET_PACKAGES="$RUNNER_TEMP/nuget" dotnet run --project tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj -c Release --no-restore
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead('artifacts/packages/Dominatus.OptFlow.${{ inputs.version }}.nupkg')
+          try {
+            $entries = $archive.Entries.FullName
+            if ($entries -notcontains 'analyzers/dotnet/cs/Dominatus.OptFlow.Generators.dll') { throw 'OptFlow analyzer is missing from its package.' }
+            if ($entries -match '^lib/.*/Dominatus\.OptFlow\.Generators\.dll$') { throw 'OptFlow generator was incorrectly packaged as a runtime library.' }
+          } finally { $archive.Dispose() }
+          $env:NUGET_PACKAGES = Join-Path $env:RUNNER_TEMP 'nuget'
+          $feed = Join-Path $env:GITHUB_WORKSPACE 'artifacts/packages'
+          dotnet restore tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj --source $feed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project tests/Dominatus.Release.PackageSmoke/Dominatus.Release.PackageSmoke.csproj -c Release --no-restore
       - uses: actions/upload-artifact@v4
         with:
           name: dominatus-${{ inputs.version }}-packages
@@ -58,8 +70,8 @@ jobs:
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          test -n "$NUGET_API_KEY" || (echo 'NUGET_API_KEY is required when publish_nuget is true.' && exit 1)
-          dotnet nuget push 'artifacts/packages/*.nupkg' --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) { throw 'NUGET_API_KEY is required when publish_nuget is true.' }
+          dotnet nuget push 'artifacts/packages/*.nupkg' --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
       - name: Create GitHub release
         if: ${{ inputs.create_github_release }}
         env:
