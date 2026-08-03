@@ -5,10 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Dominatus.OptFlow</PackageId>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <Authors>Dominatus Contributors</Authors>
-    <Description>A concise authoring layer for Dominatus state, explicit durable operation sites, deterministic transitions, control-flow, commands, waits, and utility scoring decisions.</Description>
-    <PackageTags>ai;agents;transitions;hfsm;utility-ai;control-flow;durable-operations;actuators;game-ai;simulation</PackageTags>
+    <Description>OptFlow HFSM and utility authoring with durable operation sites, compile-time flow construction, and incremental-generator validation.</Description>
+    <PackageTags>ai;agents;transitions;hfsm;utility-ai;control-kernel;control-flow;source-generator;incremental-generator;compile-time-validation;durable-operations</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/yuechen-li-dev/Dominatus</RepositoryUrl>
     <PackageProjectUrl>https://github.com/yuechen-li-dev/Dominatus</PackageProjectUrl>
@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Dominatus.Core\Dominatus.Core.csproj" />
+    <ProjectReference Include="..\Dominatus.OptFlow.Generators\Dominatus.OptFlow.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+    <None Include="..\Dominatus.OptFlow.Generators\bin\$(Configuration)\netstandard2.0\Dominatus.OptFlow.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
 </Project>

@@ -69,7 +69,7 @@ public sealed class OptFlowGenerator : IIncrementalGenerator
         if (factory.IsGenericMethod) { Report(context, Rules[1], factory, factory.Name); invalid = true; }
         if (factory.ReturnType.ToDisplayString() != FlowDefinition) { Report(context, Rules[1], factory, factory.Name); invalid = true; }
         if (type.TypeParameters.Length != 0) { Report(context, Rules[18], factory, type.Name); invalid = true; }
-        if (!type.IsStatic || !IsPartial(type)) { Report(context, Rules[2], factory, type.Name); invalid = true; }
+        if (type.ContainingType is not null || !type.IsStatic || !IsPartial(type)) { Report(context, Rules[2], factory, type.Name); invalid = true; }
         if (type.GetMembers("States").Length != 0) { Report(context, Rules[11], factory, "States"); invalid = true; }
         foreach (var parameter in factory.Parameters)
             if (parameter.RefKind != RefKind.None || parameter.Type.IsRefLikeType || parameter.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer)
