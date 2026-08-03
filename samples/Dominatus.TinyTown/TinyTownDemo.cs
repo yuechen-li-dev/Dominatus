@@ -115,7 +115,7 @@ public sealed record TinyTownScenarioOptions
     public string? ForcedDialogueResponseJson { get; init; }
 }
 
-public static class TinyTownDemo
+public static partial class TinyTownDemo
 {
     public const string Home = "Home";
     public const string Cafe = "Cafe";
@@ -281,19 +281,13 @@ public static class TinyTownDemo
 
     private static AiAgent CreateTownieAgent()
     {
-        var graph = new HfsmGraph { Root = "Root" };
-        graph.Add(new HfsmStateDef { Id = "Root", Node = DecideNode });
-        foreach (var action in ActionIds)
-        {
-            var local = action;
-            graph.Add(new HfsmStateDef { Id = local, Node = ctx => ActionNode(ctx, local) });
-        }
-
-        return new AiAgent(new HfsmInstance(graph, new HfsmOptions { KeepRootFrame = true }));
+        return new AiAgent(Define().CreateBrain());
     }
 
-    private static readonly string[] ActionIds = ["UseBathroom", "Eat", "Sleep", "Shower", "GoToWork", "HaveFun", "VisitFriend", "Chat", "Idle"];
+    [DominatusFlow("tinytown.townie", KeepRootFrame = true)]
+    private static partial FlowDefinition Define();
 
+    [DominatusState("Root", Root = true)]
     private static IEnumerator<AiStep> DecideNode(AiCtx ctx)
     {
         while (true)
@@ -302,15 +296,15 @@ public static class TinyTownDemo
             var profile = ProfileFrom(ctx.Bb.GetOrDefault(ProfileIdKey, "maya"));
             yield return Ai.Decide(new DecisionSlot($"TinyTown.{profile.Id}.NextAction"),
             [
-                Ai.Option("UseBathroom", NeedUrgency(BladderKey), "UseBathroom"),
-                Ai.Option("Eat", NeedUrgency(HungerKey), "Eat"),
-                Ai.Option("Sleep", NeedUrgency(EnergyKey), "Sleep"),
-                Ai.Option("Shower", NeedUrgency(HygieneKey), "Shower"),
-                Ai.Option("GoToWork", new Consideration((w, a) => ScoreWork(w, a, profile)), "GoToWork"),
-                Ai.Option("HaveFun", NeedUrgency(FunKey), "HaveFun"),
-                Ai.Option("VisitFriend", new Consideration((w, a) => ScoreVisitFriend(a, profile)), "VisitFriend"),
-                Ai.Option("Chat", new Consideration((w, a) => ScoreChat(w, a, profile)), "Chat"),
-                Ai.Option("Idle", Consideration.Constant(0.05f), "Idle")
+                Ai.Option("UseBathroom", NeedUrgency(BladderKey), States.UseBathroom),
+                Ai.Option("Eat", NeedUrgency(HungerKey), States.Eat),
+                Ai.Option("Sleep", NeedUrgency(EnergyKey), States.Sleep),
+                Ai.Option("Shower", NeedUrgency(HygieneKey), States.Shower),
+                Ai.Option("GoToWork", new Consideration((w, a) => ScoreWork(w, a, profile)), States.GoToWork),
+                Ai.Option("HaveFun", NeedUrgency(FunKey), States.HaveFun),
+                Ai.Option("VisitFriend", new Consideration((w, a) => ScoreVisitFriend(a, profile)), States.VisitFriend),
+                Ai.Option("Chat", new Consideration((w, a) => ScoreChat(w, a, profile)), States.Chat),
+                Ai.Option("Idle", Consideration.Constant(0.05f), States.Idle)
             ], hysteresis: 0.02f, minCommitSeconds: 0f, tieEpsilon: 0.0001f);
         }
     }
@@ -323,6 +317,25 @@ public static class TinyTownDemo
             yield return Ai.Steady(action);
         }
     }
+
+    [DominatusState("UseBathroom")]
+    private static IEnumerator<AiStep> UseBathroom(AiCtx ctx) => ActionNode(ctx, States.UseBathroom.Value);
+    [DominatusState("Eat")]
+    private static IEnumerator<AiStep> Eat(AiCtx ctx) => ActionNode(ctx, States.Eat.Value);
+    [DominatusState("Sleep")]
+    private static IEnumerator<AiStep> Sleep(AiCtx ctx) => ActionNode(ctx, States.Sleep.Value);
+    [DominatusState("Shower")]
+    private static IEnumerator<AiStep> Shower(AiCtx ctx) => ActionNode(ctx, States.Shower.Value);
+    [DominatusState("GoToWork")]
+    private static IEnumerator<AiStep> GoToWork(AiCtx ctx) => ActionNode(ctx, States.GoToWork.Value);
+    [DominatusState("HaveFun")]
+    private static IEnumerator<AiStep> HaveFun(AiCtx ctx) => ActionNode(ctx, States.HaveFun.Value);
+    [DominatusState("VisitFriend")]
+    private static IEnumerator<AiStep> VisitFriend(AiCtx ctx) => ActionNode(ctx, States.VisitFriend.Value);
+    [DominatusState("Chat")]
+    private static IEnumerator<AiStep> Chat(AiCtx ctx) => ActionNode(ctx, States.Chat.Value);
+    [DominatusState("Idle")]
+    private static IEnumerator<AiStep> Idle(AiCtx ctx) => ActionNode(ctx, States.Idle.Value);
 
     private static Consideration NeedUrgency(BbKey<float> key) => new((_, a) => 1f - a.Bb.GetOrDefault(key, 1f));
 

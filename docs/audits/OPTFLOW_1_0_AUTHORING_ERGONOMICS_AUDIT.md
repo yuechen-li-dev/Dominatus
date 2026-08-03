@@ -25,6 +25,13 @@ The M6a generator removes linker synchronization without changing the authored c
 | Quadcopter | 7 | 7 / 7 / 7 | 0 / 0 | ~17 → 2 factory declaration lines | 7 / 0 → 7 / 0 |
 | Thermostat | 4 | 0 / 4 / 4 | 3 / 3 | ~9 → 2 factory declaration lines | 4 / 0 → 4 / 0 |
 
+M6b extends the proof to two first-party graphs. Ariadne is the large dialogue/hierarchical route fixture; TinyTown is the smaller non-dialogue utility-arbitration fixture. Both retain all node bodies and durable identities while replacing duplicated registration.
+
+| Fixture | IDs retained | Manual IDs / `Flow.State` / registration entries removed | Root wiring removed | Construction plumbing before → after | Runtime / hidden states before → after |
+| --- | ---: | --- | --- | --- | --- |
+| Ariadne Thread of Night | 18 | 18 / 18 / 18 | 1 | ~14 → 2 factory declaration lines | 18 / 0 → 18 / 0 |
+| TinyTown townie utility flow | 10 | 10 inline IDs / 10 / 10 | 1 | ~10 → 2 factory declaration lines | 10 / 0 → 10 / 0 |
+
 Each durable ID remains explicit in `[DominatusState("…")]`; line-count reduction is a consequence of removing duplicate declarations, not compressed node code. Generated registration is root first and then durable ID ordinal order.
 
 ## Minimally ideal sketch
