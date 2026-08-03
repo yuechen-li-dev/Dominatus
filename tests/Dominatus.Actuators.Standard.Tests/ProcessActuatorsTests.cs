@@ -416,26 +416,10 @@ public sealed class ProcessActuatorsTests
         if (!isDotnetName)
             return false;
 
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = path,
-                Arguments = "--info",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            });
-            if (process is null)
-                return false;
-            process.WaitForExit(5000);
-            return process.ExitCode == 0;
-        }
-        catch
-        {
-            return false;
-        }
+        // Do not probe by spawning `dotnet --info`: this helper is called by many
+        // process tests and a host startup issue turned each assertion into a 20 s
+        // delay on GitHub-hosted Windows. The tests themselves exercise the host.
+        return true;
     }
 
     private static string? FindToolAssemblyInProjectOutput()
