@@ -274,4 +274,46 @@ public sealed class CheckpointSnapshotRestoreTests
 
         Assert.Equal(DominatusSave.CurrentVersion, checkpoint.Version);
     }
+
+    [Fact]
+    public void Restore_ReservesActuationIdsPastRestoredPendingOperations()
+    {
+        static IEnumerator<AiStep> LoopForever(AiCtx _)
+        {
+            while (true)
+                yield return null!;
+        }
+
+        var graph = new HfsmGraph { Root = "idle" };
+        graph.Add(new HfsmStateDef { Id = "idle", Node = LoopForever });
+        var host = new ActuatorHost();
+        host.Register<ImmediateCommand>(new ImmediateCommandHandler());
+        var world = new AiWorld(host);
+        var agent = new AiAgent(new HfsmInstance(graph));
+        world.Add(agent);
+        world.Tick(0f);
+
+        agent.InFlightActuations.Add(new PendingActuation(41L, null));
+        DominatusCheckpoint checkpoint = DominatusCheckpointBuilder.Capture(world);
+
+        DominatusCheckpointBuilder.Restore(world, checkpoint);
+        var context = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        ActuationDispatchResult result = host.Dispatch(context, new ImmediateCommand());
+
+        Assert.Equal(42L, result.Id.Value);
+    }
+
+    private sealed record ImmediateCommand : IActuationCommand;
+
+    private sealed class ImmediateCommandHandler : IActuationHandler<ImmediateCommand>
+    {
+        public ActuatorHost.HandlerResult Handle(
+            ActuatorHost host,
+            AiCtx context,
+            ActuationId id,
+            ImmediateCommand command)
+        {
+            return ActuatorHost.HandlerResult.CompletedOk();
+        }
+    }
 }

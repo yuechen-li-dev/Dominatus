@@ -17,6 +17,20 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
     // Deferred completions: emitted later as ActuationCompleted into the target agent's event bus.
     private readonly List<PendingCompletion> _pending = new();
 
+    /// <summary>
+    /// Ensures future actuation ids cannot collide with ids restored from a checkpoint.
+    /// Checkpoint restoration calls this with the largest in-flight id it restores.
+    /// </summary>
+    public void ReserveIdsThrough(long actuationId)
+    {
+        if (actuationId < 0)
+            throw new ArgumentOutOfRangeException(nameof(actuationId));
+
+        long requiredNextId = checked(actuationId + 1);
+        if (_nextId < requiredNextId)
+            _nextId = requiredNextId;
+    }
+
     private readonly struct PendingCompletion(
         AgentId agentId,
         ActuationId id,

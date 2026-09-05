@@ -124,6 +124,16 @@ public static class DominatusCheckpointBuilder
             agent.Brain.RestoreActivePath(world, agent, ac.ActiveStatePath);
         }
 
+        if (world.Actuator is ActuatorHost host)
+        {
+            long largestRestoredActuationId = cursorSnapshots
+                .SelectMany(snapshot => snapshot.Pending)
+                .Select(pending => pending.ActuationIdValue)
+                .DefaultIfEmpty(0L)
+                .Max();
+            host.ReserveIdsThrough(largestRestoredActuationId);
+        }
+
         return cursorSnapshots;
     }
 }
