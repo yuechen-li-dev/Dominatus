@@ -467,9 +467,9 @@ The bridge code lives in `samples/Dominatus.Assets.Toml.AriadneDialogue`, not in
 
 ### Ariadne/OptFlow inspection result
 
-`Ariadne.OptFlow` currently provides dialogue-oriented runtime commands and authoring helpers (`Diag.Line`, `Diag.Ask`, `Diag.Choose`, and `DiagChoice`) that dispatch through Dominatus actuation and HFSM state delegates. Existing Ariadne samples author traversal directly in C# by yielding `AiStep` values and using Dominatus/HFSM transitions. There is not yet a standalone data-driven dialogue graph API that TOML records can be mapped into directly.
+`Ariadne.OptFlow` now provides immutable `DialogueDefinition<TConsequence>` data plus structural validation and canonical OptFlow lowering. A future TOML adapter can map validated records into that definition model, then use the same lowerer as C# authoring.
 
-For M4, the sample therefore uses an Ariadne-compatible traversal adapter: choices can be projected to `DiagChoice`, but TOML remains data and C# owns traversal, conditions, effects, state, and side effects. Direct HFSM/Ariadne state generation from TOML is intentionally deferred until Ariadne exposes a suitable runtime graph surface.
+The M4 sample-local `DialogueTraversal` remains historical sample code and is not promoted. The intended replacement is `TOML records -> DialogueDefinition -> DialogueValidator -> DialogueLowerer -> OptFlow`. Implementing that thin adapter is deferred; application-owned typed conditions and consequences remain required.
 
 ### Symbolic conditions and effects
 

@@ -1,5 +1,7 @@
 # Ariadne stable operation identity
 
+For ordinary conversations, prefer the [high-level Dialogue API](../Ariadne/high-level-dialogue.md). It derives these durable operation identities from typed `(DialogueId, local ID)` composites. Use raw `Diag.*` and OptFlow when unrestricted control-flow composition is required.
+
 Every durable Ariadne dialogue operation must use an authored ID. A source line is a location, not story identity: moving it can otherwise cause a restored save to dispatch a duplicate prompt.
 
 ```csharp

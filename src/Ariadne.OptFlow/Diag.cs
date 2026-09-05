@@ -32,15 +32,24 @@ public static class Diag
 
     /// <summary>Shows a patch-stable authored dialogue line.</summary>
     public static AiStep Line(DiagOperationId id, string text, string? speaker = null)
-        => new DiagSteps.LineStep(text, speaker, id.Value);
+        => new DiagSteps.LineStep(text, speaker, id.Value)
+        {
+            SemanticOperationId = id
+        };
 
     /// <summary>Prompts for text using a patch-stable authored operation id.</summary>
     public static AiStep Ask(DiagOperationId id, string prompt, BbKey<string> storeAs)
-        => new DiagSteps.AskStep(prompt, storeAs, id.Value);
+        => new DiagSteps.AskStep(prompt, storeAs, id.Value)
+        {
+            SemanticOperationId = id
+        };
 
     /// <summary>Presents choices using a patch-stable authored operation id.</summary>
     public static AiStep Choose(DiagOperationId id, string prompt, IReadOnlyList<DiagChoice> options, BbKey<string> storeAs)
-        => new DiagSteps.ChooseStep(prompt, options, storeAs, id.Value);
+        => new DiagSteps.ChooseStep(prompt, options, storeAs, id.Value)
+        {
+            SemanticOperationId = id
+        };
 
     /// <summary>
     /// Show a dialogue line. Default contract: waits for "advance" (e.g. Enter/click).

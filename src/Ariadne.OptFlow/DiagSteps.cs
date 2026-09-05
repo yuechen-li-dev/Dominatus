@@ -4,6 +4,8 @@ using Dominatus.Core.Nodes;
 using Dominatus.Core.Nodes.Steps;
 using Dominatus.Core.Runtime;
 
+using Ariadne.OptFlow.Dialogue;
+
 namespace Ariadne.OptFlow;
 
 /// <summary>
@@ -67,7 +69,10 @@ public static class DiagSteps
     {
         EnsureCompletionEvents(ctx, res);
         if (res.Completed)
-            ctx.Events.Publish(new ActuationCompleted<T>(res.Id, res.Ok, res.Error, (T?)res.Payload));
+        {
+            T? payload = res.Payload is T typed ? typed : default;
+            ctx.Events.Publish(new ActuationCompleted<T>(res.Id, res.Ok, res.Error, payload));
+        }
     }
 
     /// <summary>
@@ -79,7 +84,20 @@ public static class DiagSteps
     /// </param>
     public sealed record LineStep(string Text, string? Speaker, string CallsiteId) : AiStep, IWaitEvent
     {
-        private readonly DiagLineCommand _cmd = new(Text, Speaker);
+        public DiagOperationId? SemanticOperationId { get; init; }
+
+        public DialogueId? DialogueId { get; init; }
+
+        public DialogueLineId? LineId { get; init; }
+
+        public DialogueContentId? ContentId { get; init; }
+
+        EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx)
+        {
+            return ctx.Bb.GetOrDefault(StartedKey(CallsiteId), false)
+                ? default
+                : ctx.Events.TailCursor<ActuationCompleted>();
+        }
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
@@ -88,23 +106,36 @@ public static class DiagSteps
 
             if (!ctx.Bb.GetOrDefault(startedKey, false))
             {
-                var res = ctx.Act.Dispatch(ctx, _cmd);
+                var command = new DiagLineCommand(Text, Speaker)
+                {
+                    SemanticOperationId = SemanticOperationId,
+                    DialogueId = DialogueId,
+                    LineId = LineId,
+                    ContentId = ContentId
+                };
+                var res = ctx.Act.Dispatch(ctx, command);
                 ctx.Bb.Set(pendingIdKey, res.Id.Value);
                 ctx.Bb.Set(startedKey, true);
                 EnsureCompletionEvents(ctx, res);
+                if (!res.Accepted)
+                {
+                    Clear(ctx, startedKey, pendingIdKey);
+                    throw new DiagDispatchException(CallsiteId, res.Id, res.Error);
+                }
             }
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));
 
             if (!ctx.Events.TryConsume(ref cursor,
                     (ActuationCompleted e) => e.Id.Equals(id),
-                    out _))
+                    out var got))
                 return false;
 
             // Step completed successfully — clear restore bookkeeping so this same
             // callsite can be used again later in a loop/menu without reusing stale ids.
-            ctx.Bb.Set(startedKey, false);
-            ctx.Bb.Set(pendingIdKey, 0L);
+            Clear(ctx, startedKey, pendingIdKey);
+            if (!got.Ok)
+                throw new DiagCompletionException(CallsiteId, id, got.Error);
             return true;
         }
     }
@@ -115,7 +146,14 @@ public static class DiagSteps
     /// <param name="callsiteId">Stable unique string identifying this step within its dialogue node.</param>
     public sealed record AskStep(string Prompt, BbKey<string> StoreAs, string CallsiteId) : AiStep, IWaitEvent
     {
-        private readonly DiagAskCommand _cmd = new(Prompt);
+        public DiagOperationId? SemanticOperationId { get; init; }
+
+        EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx)
+        {
+            return ctx.Bb.GetOrDefault(StartedKey(CallsiteId), false)
+                ? default
+                : ctx.Events.TailCursor<ActuationCompleted<string>>();
+        }
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
@@ -124,10 +162,19 @@ public static class DiagSteps
 
             if (!ctx.Bb.GetOrDefault(startedKey, false))
             {
-                var res = ctx.Act.Dispatch(ctx, _cmd);
+                var command = new DiagAskCommand(Prompt)
+                {
+                    SemanticOperationId = SemanticOperationId
+                };
+                var res = ctx.Act.Dispatch(ctx, command);
                 ctx.Bb.Set(pendingIdKey, res.Id.Value);
                 ctx.Bb.Set(startedKey, true);
                 EnsureCompletionEvents<string>(ctx, res);
+                if (!res.Accepted)
+                {
+                    Clear(ctx, startedKey, pendingIdKey);
+                    throw new DiagDispatchException(CallsiteId, res.Id, res.Error);
+                }
             }
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));
@@ -137,12 +184,13 @@ public static class DiagSteps
                     out var got))
                 return false;
 
-            ctx.Bb.Set(StoreAs, got.Payload ?? "");
+            Clear(ctx, startedKey, pendingIdKey);
+            if (!got.Ok)
+                throw new DiagCompletionException(CallsiteId, id, got.Error);
+            if (got.Payload is null)
+                throw new DiagPayloadException(CallsiteId, id, "text");
 
-            // Step completed successfully — clear restore bookkeeping so this same
-            // callsite can be used again later in a loop/menu without reusing stale ids.
-            ctx.Bb.Set(startedKey, false);
-            ctx.Bb.Set(pendingIdKey, 0L);
+            ctx.Bb.Set(StoreAs, got.Payload);
             return true;
         }
     }
@@ -157,7 +205,18 @@ public static class DiagSteps
         BbKey<string> StoreAs,
         string CallsiteId) : AiStep, IWaitEvent
     {
-        private readonly DiagChooseCommand _cmd = new(Prompt, Options);
+        public DiagOperationId? SemanticOperationId { get; init; }
+
+        public DialogueId? DialogueId { get; init; }
+
+        public DialogueChoiceId? ChoiceId { get; init; }
+
+        EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx)
+        {
+            return ctx.Bb.GetOrDefault(StartedKey(CallsiteId), false)
+                ? default
+                : ctx.Events.TailCursor<ActuationCompleted<string>>();
+        }
 
         public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
         {
@@ -166,10 +225,21 @@ public static class DiagSteps
 
             if (!ctx.Bb.GetOrDefault(startedKey, false))
             {
-                var res = ctx.Act.Dispatch(ctx, _cmd);
+                var command = new DiagChooseCommand(Prompt, Options)
+                {
+                    SemanticOperationId = SemanticOperationId,
+                    DialogueId = DialogueId,
+                    ChoiceId = ChoiceId
+                };
+                var res = ctx.Act.Dispatch(ctx, command);
                 ctx.Bb.Set(pendingIdKey, res.Id.Value);
                 ctx.Bb.Set(startedKey, true);
                 EnsureCompletionEvents<string>(ctx, res);
+                if (!res.Accepted)
+                {
+                    Clear(ctx, startedKey, pendingIdKey);
+                    throw new DiagDispatchException(CallsiteId, res.Id, res.Error);
+                }
             }
 
             var id = new ActuationId(ctx.Bb.GetOrDefault(pendingIdKey, 0L));
@@ -179,13 +249,20 @@ public static class DiagSteps
                     out var got))
                 return false;
 
-            ctx.Bb.Set(StoreAs, got.Payload ?? "");
+            Clear(ctx, startedKey, pendingIdKey);
+            if (!got.Ok)
+                throw new DiagCompletionException(CallsiteId, id, got.Error);
+            if (got.Payload is null)
+                throw new DiagPayloadException(CallsiteId, id, "choice id");
 
-            // Step completed successfully — clear restore bookkeeping so this same
-            // callsite can be used again later in a loop/menu without reusing stale ids.
-            ctx.Bb.Set(startedKey, false);
-            ctx.Bb.Set(pendingIdKey, 0L);
+            ctx.Bb.Set(StoreAs, got.Payload);
             return true;
         }
+    }
+
+    private static void Clear(AiCtx ctx, BbKey<bool> startedKey, BbKey<long> pendingIdKey)
+    {
+        ctx.Bb.Set(startedKey, false);
+        ctx.Bb.Set(pendingIdKey, 0L);
     }
 }

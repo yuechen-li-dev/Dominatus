@@ -150,6 +150,11 @@ public sealed class OperationPayloadException : OperationException
 
 internal sealed record OperationStep(OperationSite Site, IActuationCommand Command) : AiStep, IWaitEvent
 {
+    EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx)
+        => ctx.Bb.GetOrDefault(Site.StartedKey, false)
+            ? default
+            : ctx.Events.TailCursor<ActuationCompleted>();
+
     public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
     {
         var started = ctx.Bb.GetOrDefault(Site.StartedKey, false);
@@ -171,6 +176,11 @@ internal sealed record OperationStep(OperationSite Site, IActuationCommand Comma
 
 internal sealed record OperationResultStep<TResult>(OperationSite<TResult> Site, IActuationCommand Command, BbKey<TResult> StoreAs) : AiStep, IWaitEvent
 {
+    EventCursor IWaitEvent.CreateInitialCursor(AiCtx ctx)
+        => ctx.Bb.GetOrDefault(Site.StartedKey, false)
+            ? default
+            : ctx.Events.TailCursor<ActuationCompleted<TResult>>();
+
     public bool TryConsume(AiCtx ctx, ref EventCursor cursor)
     {
         if (!ctx.Bb.GetOrDefault(Site.StartedKey, false))

@@ -3,4 +3,7 @@
 namespace Ariadne.OptFlow.Commands;
 
 /// <summary>Prompt user for free text.</summary>
-public sealed record DiagAskCommand(string Prompt) : IActuationCommand;
+public sealed record DiagAskCommand(string Prompt) : IActuationCommand
+{
+    public DiagOperationId? SemanticOperationId { get; init; }
+}

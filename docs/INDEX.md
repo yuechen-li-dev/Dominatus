@@ -30,6 +30,9 @@ Dominatus is a deterministic .NET agent runtime kernel for typed, policy-gated, 
 - [DOMFLOW diagnostics](reference/DOMFLOW_DIAGNOSTICS.md) — authored-flow compiler diagnostics and corrections.
 - [OptFlow durable operation sites](user/OPTFLOW_1_0_DURABLE_OPERATION_SITES.md) — explicit pending-safe dispatch/resume sites with no hidden control flow.
 - [Ariadne stable operation identity](user/ARIADNE_STABLE_OPERATION_IDENTITY.md) — explicit patch-safe dialogue operation IDs and migration guidance.
+- [High-level Ariadne dialogue](Ariadne/high-level-dialogue.md) — immutable C# dialogue definitions, structural validation, and typed consequences lowered to OptFlow.
+- [Dialogue lowering and durability](Ariadne/dialogue-lowering.md) — operation-per-state mapping, generated identities, calls, and checkpoint law.
+- [Dialogue footgun prevention](Ariadne/dialogue-footgun-prevention.md) — high-level API and validation dispositions with the raw OptFlow escape hatch.
 - [UtilityLite TinyTown sample](samples/SAMPLE_TINYTOWN.md) — utility-driven life simulation using lightweight scoring.
 - [RTS Benchmark](samples/SAMPLE_RTS_BENCHMARK.md) — large deterministic utility-decision workload and validation sample.
 
