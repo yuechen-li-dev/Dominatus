@@ -20,6 +20,32 @@ public sealed record SpriteForgeAtlas
 
     public IReadOnlyDictionary<string, SpriteForgeFrame> Frames { get; init; } =
         new Dictionary<string, SpriteForgeFrame>(StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, SpriteForgeNineSlicePanel> UiPanels { get; init; } =
+        new Dictionary<string, SpriteForgeNineSlicePanel>(StringComparer.Ordinal);
+}
+
+public enum SpriteForgeTileMode
+{
+    Stretch,
+    Tile,
+}
+
+public sealed record SpriteForgeNineSlicePanel
+{
+    public required string Id { get; init; }
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int Left { get; init; }
+    public int Top { get; init; }
+    public int Right { get; init; }
+    public int Bottom { get; init; }
+    public SpriteForgeTileMode EdgeMode { get; init; }
+    public SpriteForgeTileMode CenterMode { get; init; }
+    public float BorderScale { get; init; } = 1f;
+    public int Extrusion { get; init; }
 }
 
 public sealed record SpriteForgeGrid

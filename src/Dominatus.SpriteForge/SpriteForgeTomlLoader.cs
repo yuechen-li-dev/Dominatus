@@ -68,6 +68,7 @@ public static class SpriteForgeTomlLoader
         var grids = BuildGrids(document, sourcePath, diagnostics, sourceMap);
         var frames = BuildFrames(document, sourcePath, diagnostics, sourceMap);
         var sprites = BuildSprites(document, sourcePath, diagnostics, sourceMap);
+        var uiPanels = BuildUiPanels(document, sourcePath, diagnostics, sourceMap);
 
         return new SpriteForgeAtlas
         {
@@ -78,8 +79,91 @@ public static class SpriteForgeTomlLoader
             Height = atlas.Height,
             Grids = grids,
             Sprites = sprites,
-            Frames = frames
+            Frames = frames,
+            UiPanels = uiPanels
         };
+    }
+
+    private static IReadOnlyDictionary<string, SpriteForgeNineSlicePanel> BuildUiPanels(
+        SpriteForgeAtlasTomlDocument document,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap)
+    {
+        var panels = new Dictionary<string, SpriteForgeNineSlicePanel>(StringComparer.Ordinal);
+        foreach ((string panelId, SpriteForgeNineSliceTomlDocument panel) in document.UiPanels)
+        {
+            string keyPath = $"ui_panels.{QuoteKey(panelId)}";
+            if (!IsValidId(panelId))
+            {
+                diagnostics.Add(CreateError(
+                    "spriteforge.invalid_ui_panel_id",
+                    $"UI panel id '{panelId}' is invalid. Use letters, numbers, '.', '_' or '-'.",
+                    sourcePath,
+                    keyPath,
+                    sourceMap));
+                continue;
+            }
+
+            if (!TryParseTileMode(panel.EdgeMode, out SpriteForgeTileMode edgeMode))
+            {
+                diagnostics.Add(CreateError(
+                    "spriteforge.invalid_ui_edge_mode",
+                    $"UI panel '{panelId}' edge_mode must be 'stretch' or 'tile'.",
+                    sourcePath,
+                    $"{keyPath}.edge_mode",
+                    sourceMap));
+                continue;
+            }
+
+            if (!TryParseTileMode(panel.CenterMode, out SpriteForgeTileMode centerMode))
+            {
+                diagnostics.Add(CreateError(
+                    "spriteforge.invalid_ui_center_mode",
+                    $"UI panel '{panelId}' center_mode must be 'stretch' or 'tile'.",
+                    sourcePath,
+                    $"{keyPath}.center_mode",
+                    sourceMap));
+                continue;
+            }
+
+            panels.Add(panelId, new SpriteForgeNineSlicePanel
+            {
+                Id = panelId,
+                X = panel.X,
+                Y = panel.Y,
+                Width = panel.Width,
+                Height = panel.Height,
+                Left = panel.Left,
+                Top = panel.Top,
+                Right = panel.Right,
+                Bottom = panel.Bottom,
+                EdgeMode = edgeMode,
+                CenterMode = centerMode,
+                BorderScale = panel.BorderScale ?? 1f,
+                Extrusion = panel.Extrusion ?? 0,
+            });
+        }
+
+        return panels;
+    }
+
+    private static bool TryParseTileMode(string? value, out SpriteForgeTileMode mode)
+    {
+        if (string.Equals(value, "stretch", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = SpriteForgeTileMode.Stretch;
+            return true;
+        }
+
+        if (string.Equals(value, "tile", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = SpriteForgeTileMode.Tile;
+            return true;
+        }
+
+        mode = default;
+        return false;
     }
 
     private static IReadOnlyDictionary<string, SpriteForgeGrid> BuildGrids(
@@ -405,6 +489,7 @@ public static class SpriteForgeTomlLoader
             ValidateGrids(asset, sourcePath, diagnostics, context);
             ValidateFrames(asset, sourcePath, diagnostics, context);
             ValidateSprites(asset, sourcePath, diagnostics, context);
+            ValidateUiPanels(asset, sourcePath, diagnostics, context);
 
             if (_options.RequireImageFileExists
                 && !string.IsNullOrWhiteSpace(asset.Atlas.Image)
@@ -423,6 +508,83 @@ public static class SpriteForgeTomlLoader
             }
 
             return diagnostics;
+        }
+
+        private static void ValidateUiPanels(
+            SpriteForgeAtlasTomlDocument asset,
+            string sourcePath,
+            List<AssetDiagnostic> diagnostics,
+            AssetValidationContext context)
+        {
+            foreach ((string panelId, SpriteForgeNineSliceTomlDocument panel) in asset.UiPanels)
+            {
+                string keyPath = $"ui_panels.{QuoteKey(panelId)}";
+                RequirePositive(panel.Width, $"{keyPath}.width", "spriteforge.ui_width_invalid", $"UI panel '{panelId}' width must be greater than zero.", sourcePath, diagnostics, context);
+                RequirePositive(panel.Height, $"{keyPath}.height", "spriteforge.ui_height_invalid", $"UI panel '{panelId}' height must be greater than zero.", sourcePath, diagnostics, context);
+
+                if (panel.X < 0 || panel.Y < 0 || panel.X + panel.Width > asset.Atlas!.Width || panel.Y + panel.Height > asset.Atlas.Height)
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "spriteforge.ui_panel_out_of_bounds",
+                        $"UI panel '{panelId}' exceeds atlas bounds.",
+                        sourcePath,
+                        keyPath: keyPath,
+                        span: context.GetSpan(keyPath)));
+                }
+
+                if (panel.Left < 0 || panel.Top < 0 || panel.Right < 0 || panel.Bottom < 0)
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "spriteforge.ui_margin_negative",
+                        $"UI panel '{panelId}' slice margins must be non-negative.",
+                        sourcePath,
+                        keyPath: keyPath,
+                        span: context.GetSpan(keyPath)));
+                }
+
+                if (panel.Left + panel.Right > panel.Width || panel.Top + panel.Bottom > panel.Height)
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "spriteforge.ui_margins_exceed_source",
+                        $"UI panel '{panelId}' slice margins exceed its source dimensions.",
+                        sourcePath,
+                        keyPath: keyPath,
+                        span: context.GetSpan(keyPath)));
+                }
+
+                bool needsCenter = string.Equals(panel.CenterMode, "tile", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(panel.EdgeMode, "tile", StringComparison.OrdinalIgnoreCase);
+                if (needsCenter && (panel.Width - panel.Left - panel.Right <= 0 || panel.Height - panel.Top - panel.Bottom <= 0))
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "spriteforge.ui_tile_region_empty",
+                        $"UI panel '{panelId}' uses tiling but has an empty center dimension.",
+                        sourcePath,
+                        keyPath: keyPath,
+                        span: context.GetSpan(keyPath)));
+                }
+
+                if ((panel.Extrusion ?? 0) is < 0 or > 2)
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "spriteforge.ui_extrusion_invalid",
+                        $"UI panel '{panelId}' extrusion must be between 0 and 2 pixels.",
+                        sourcePath,
+                        keyPath: $"{keyPath}.extrusion",
+                        span: context.GetSpan($"{keyPath}.extrusion")));
+                }
+
+                float borderScale = panel.BorderScale ?? 1f;
+                if (!float.IsFinite(borderScale) || borderScale <= 0)
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "spriteforge.ui_border_scale_invalid",
+                        $"UI panel '{panelId}' border_scale must be finite and greater than zero.",
+                        sourcePath,
+                        keyPath: $"{keyPath}.border_scale",
+                        span: context.GetSpan($"{keyPath}.border_scale")));
+                }
+            }
         }
 
         private static void ValidateAtlas(
@@ -684,6 +846,24 @@ public static class SpriteForgeTomlLoader
         public Dictionary<string, SpriteForgeSpriteTomlDocument> Sprites { get; init; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, SpriteForgeFrameTomlDocument> Frames { get; init; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, SpriteForgeNineSliceTomlDocument> UiPanels { get; init; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed record SpriteForgeNineSliceTomlDocument
+    {
+        public int X { get; init; }
+        public int Y { get; init; }
+        public int Width { get; init; }
+        public int Height { get; init; }
+        public int Left { get; init; }
+        public int Top { get; init; }
+        public int Right { get; init; }
+        public int Bottom { get; init; }
+        public string? EdgeMode { get; init; }
+        public string? CenterMode { get; init; }
+        public float? BorderScale { get; init; }
+        public int? Extrusion { get; init; }
     }
 
     private sealed record SpriteForgeAtlasSection

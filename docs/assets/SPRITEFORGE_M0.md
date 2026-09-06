@@ -45,7 +45,7 @@ In short: image models produce pixels, and SpriteForge turns those pixels into u
 
 ## Core schema
 
-SpriteForge TOML uses four top-level domains:
+SpriteForge TOML uses five top-level domains:
 
 - `[atlas]`
   - atlas image path and declared pixel dimensions
@@ -55,6 +55,8 @@ SpriteForge TOML uses four top-level domains:
   - semantic sprite records for game-facing assets
 - `[frames."<id>"]`
   - absolute source rectangles with precision correction metadata
+- `[ui_panels.<id>]`
+  - atlas-backed nine-slice source rectangles and bounded presentation metadata
 
 Example:
 
@@ -89,6 +91,32 @@ pivot = "bottom_center"
 offset_y = -4
 ```
 
+## UI panel and nine-slice authoring
+
+`[ui_panels.<id>]` is the bounded UI-tileset extension. It records atlas truth only; applications choose which panel ID to present, Machina owns the renderer-neutral primitive, and a graphics backend owns realization.
+
+```toml
+[ui_panels.dialogue]
+x = 26
+y = 34
+width = 970
+height = 942
+left = 76
+top = 76
+right = 76
+bottom = 76
+edge_mode = "stretch"
+center_mode = "stretch"
+border_scale = 0.5
+extrusion = 0
+```
+
+The four margins cut the source image in atlas pixels. `border_scale` converts those source margins to logical destination thickness without discarding or recutting the corner artwork. A value of `0.5` therefore samples the full authored 76-pixel corner and presents it as a 38-logical-pixel corner.
+
+`edge_mode` controls each edge only along its long axis: a horizontal edge stretches or tiles in X, while a vertical edge stretches or tiles in Y. `center_mode` independently stretches or tiles the center in both axes. Corners are never tiled or independently distorted. Hardware atlas repeat is not implied by `tile`; backends should repeat bounded source regions and crop a final partial tile.
+
+Validation rejects non-positive source extents, out-of-atlas rectangles, negative or oversized margins, empty tiled regions, invalid IDs or modes, non-finite/non-positive `border_scale`, and extrusion outside 0–2 pixels. `extrusion` is metadata for atlas bleed protection; v1 does not perform general image processing.
+
 ## Grids vs absolute frames
 
 Use grids when:
@@ -121,6 +149,7 @@ Current validation covers:
 - absolute frame rectangles inside atlas bounds
 - supported pivot values only
 - invalid identifier names
+- UI panel bounds, margins, modes, border scale, tiled-region dimensions, and 0–2 pixel extrusion
 
 Image existence is optional in the core API and can be required by callers with `SpriteForgeLoadOptions.RequireImageFileExists`.
 

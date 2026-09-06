@@ -1,5 +1,7 @@
+using System.Text.Json;
 using System.Reflection;
 using Tomlyn;
+using Tomlyn.Parsing;
 using Tomlyn.Syntax;
 
 namespace Dominatus.Assets.Toml;
@@ -25,7 +27,11 @@ public static class TomlAssetLoader
         DocumentSyntax document;
         try
         {
-            document = global::Tomlyn.Toml.Parse(toml, sourcePath ?? string.Empty);
+            document = SyntaxParser.Parse(
+                toml,
+                ResolveSerializerOptions(options.SerializerOptions, sourcePath),
+                sourcePath ?? string.Empty,
+                false);
         }
         catch (Exception ex)
         {
@@ -42,10 +48,17 @@ public static class TomlAssetLoader
 
         try
         {
-            var bindResult = TryBindToModel<T>(document, options.ModelOptions);
+            var bindResult = TryBindToModel<T>(toml, options.SerializerOptions, sourcePath);
             if (!bindResult.Success)
             {
                 diagnostics.AddRange(bindResult.Diagnostics.Select(d => ConvertDiagnostic(d, sourcePath, "toml.bind", sourceMap)));
+                if (!diagnostics.Any(d => d.Code == "toml.bind"))
+                {
+                    diagnostics.Add(AssetValidation.Error(
+                        "toml.bind",
+                        $"TOML content could not bind to {typeof(T).Name}.",
+                        sourcePath));
+                }
                 return new TomlAssetLoadResult<T> { Value = default, Diagnostics = diagnostics, SourceMap = sourceMap };
             }
 
@@ -96,27 +109,27 @@ public static class TomlAssetLoader
         return LoadString(toml, validator, effectiveOptions);
     }
 
-    private static TomlynBindResult<T> TryBindToModel<T>(DocumentSyntax document, TomlModelOptions? modelOptions) where T : class
+    private static TomlynBindResult<T> TryBindToModel<T>(
+        string toml,
+        TomlSerializerOptions? serializerOptions,
+        string? sourcePath) where T : class
     {
-        var method = typeof(global::Tomlyn.Toml)
-            .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Single(method =>
-                method.Name == nameof(global::Tomlyn.Toml.TryToModel) &&
-                method.IsGenericMethodDefinition &&
-                method.GetParameters() is
-                [
-                    { ParameterType: var first },
-                    { IsOut: true },
-                    { IsOut: true },
-                    { ParameterType: var fourth }
-                ] &&
-                first == typeof(DocumentSyntax) &&
-                fourth == typeof(TomlModelOptions));
+        TomlSerializerOptions options = ResolveSerializerOptions(serializerOptions, sourcePath);
+        bool success = TomlSerializer.TryDeserialize(toml, out T? value, options);
+        return new TomlynBindResult<T>(value, new DiagnosticsBag(), success);
+    }
 
-        var genericMethod = method.MakeGenericMethod(typeof(T));
-        object?[] parameters = [document, null, null, modelOptions];
-        var success = (bool)genericMethod.Invoke(null, parameters)!;
-        return new TomlynBindResult<T>((T?)parameters[1], (DiagnosticsBag)parameters[2]!, success);
+    private static TomlSerializerOptions ResolveSerializerOptions(
+        TomlSerializerOptions? options,
+        string? sourcePath)
+    {
+        return (options ?? new TomlSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        }) with
+        {
+            SourceName = sourcePath ?? string.Empty,
+        };
     }
 
     private sealed record TomlynBindResult<T>(T? Value, DiagnosticsBag Diagnostics, bool Success);

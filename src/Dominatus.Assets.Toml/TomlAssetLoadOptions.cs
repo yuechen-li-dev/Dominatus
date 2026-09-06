@@ -8,5 +8,5 @@ public sealed record TomlAssetLoadOptions
 
     public bool RequireNoDiagnostics { get; init; }
 
-    public TomlModelOptions? ModelOptions { get; init; }
+    public TomlSerializerOptions? SerializerOptions { get; init; }
 }
