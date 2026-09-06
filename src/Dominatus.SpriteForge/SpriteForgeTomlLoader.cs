@@ -69,6 +69,8 @@ public static class SpriteForgeTomlLoader
         var frames = BuildFrames(document, sourcePath, diagnostics, sourceMap);
         var sprites = BuildSprites(document, sourcePath, diagnostics, sourceMap);
         var uiPanels = BuildUiPanels(document, sourcePath, diagnostics, sourceMap);
+        var regions = BuildRegions(document, sourcePath, diagnostics, sourceMap, atlas);
+        var programmablePanels = BuildProgrammablePanels(document, sourcePath, diagnostics, sourceMap, regions);
 
         return new SpriteForgeAtlas
         {
@@ -77,11 +79,224 @@ public static class SpriteForgeTomlLoader
             ResolvedImagePath = ResolveImagePath(sourcePath, atlas.Image),
             Width = atlas.Width,
             Height = atlas.Height,
+            AuthoringKind = ParseAuthoringKind(atlas.SourceKind),
             Grids = grids,
             Sprites = sprites,
             Frames = frames,
-            UiPanels = uiPanels
+            UiPanels = uiPanels,
+            Regions = regions,
+            ProgrammablePanels = programmablePanels,
         };
+    }
+
+    private static IReadOnlyDictionary<string, SpriteForgeRegion> BuildRegions(
+        SpriteForgeAtlasTomlDocument document,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        SpriteForgeAtlasSection atlas)
+    {
+        var result = new Dictionary<string, SpriteForgeRegion>(StringComparer.Ordinal);
+        foreach ((string id, SpriteForgeRegionTomlDocument region) in document.Regions)
+        {
+            string keyPath = $"regions.{QuoteKey(id)}";
+            if (!IsValidId(id))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_region_id", $"Region id '{id}' is invalid.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+
+            if (region.X < 0 || region.Y < 0 || region.Width <= 0 || region.Height <= 0
+                || (long)region.X + region.Width > atlas.Width
+                || (long)region.Y + region.Height > atlas.Height)
+            {
+                diagnostics.Add(CreateError("spriteforge.region_out_of_bounds", $"Region '{id}' must be positive and inside the atlas.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+
+            result.Add(id, new SpriteForgeRegion
+            {
+                Id = id,
+                X = region.X,
+                Y = region.Y,
+                Width = region.Width,
+                Height = region.Height,
+            });
+        }
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, SpriteForgeProgrammablePanel> BuildProgrammablePanels(
+        SpriteForgeAtlasTomlDocument document,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap,
+        IReadOnlyDictionary<string, SpriteForgeRegion> regions)
+    {
+        var result = new Dictionary<string, SpriteForgeProgrammablePanel>(StringComparer.Ordinal);
+        foreach ((string id, SpriteForgeProgrammablePanelTomlDocument panel) in document.ProgrammablePanels)
+        {
+            string keyPath = $"programmable_panels.{QuoteKey(id)}";
+            if (!IsValidId(id))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_programmable_panel_id", $"Programmable panel id '{id}' is invalid.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+
+            if (!TryParseCenterPolicy(panel.CenterPolicy, out SpriteForgeCenterPolicy centerPolicy))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_center_policy", $"Panel '{id}' has invalid center_policy '{panel.CenterPolicy}'.", sourcePath, keyPath + ".center_policy", sourceMap));
+                continue;
+            }
+
+            string[] requiredRegions = [panel.TopLeft, panel.TopRight, panel.BottomRight, panel.BottomLeft];
+            if (centerPolicy != SpriteForgeCenterPolicy.AnalyticFill && panel.CenterRegion is not null)
+            {
+                requiredRegions = [.. requiredRegions, panel.CenterRegion];
+            }
+            if (requiredRegions.Any(region => string.IsNullOrWhiteSpace(region) || !regions.ContainsKey(region)))
+            {
+                diagnostics.Add(CreateError("spriteforge.missing_panel_region", $"Panel '{id}' references one or more missing regions.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+
+            SpriteForgeEdgeProgram top = BuildEdge(id, "top", panel.Top, regions, sourcePath, diagnostics, sourceMap);
+            SpriteForgeEdgeProgram right = BuildEdge(id, "right", panel.Right, regions, sourcePath, diagnostics, sourceMap);
+            SpriteForgeEdgeProgram bottom = BuildEdge(id, "bottom", panel.Bottom, regions, sourcePath, diagnostics, sourceMap);
+            SpriteForgeEdgeProgram left = BuildEdge(id, "left", panel.Left, regions, sourcePath, diagnostics, sourceMap);
+            if (new[] { top, right, bottom, left }.Any(edge => edge.Segments.Count == 0))
+            {
+                continue;
+            }
+
+            if (panel.BorderScale is not > 0 || !float.IsFinite(panel.BorderScale.Value))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_panel_border_scale", $"Panel '{id}' border_scale must be finite and positive.", sourcePath, keyPath + ".border_scale", sourceMap));
+                continue;
+            }
+
+            result.Add(id, new SpriteForgeProgrammablePanel
+            {
+                Id = id,
+                TopLeftRegionId = panel.TopLeft,
+                TopRightRegionId = panel.TopRight,
+                BottomRightRegionId = panel.BottomRight,
+                BottomLeftRegionId = panel.BottomLeft,
+                Top = top,
+                Right = right,
+                Bottom = bottom,
+                Left = left,
+                CenterPolicy = centerPolicy,
+                CenterRegionId = panel.CenterRegion,
+                BorderScale = panel.BorderScale.Value,
+                PaddingLeft = panel.PaddingLeft,
+                PaddingTop = panel.PaddingTop,
+                PaddingRight = panel.PaddingRight,
+                PaddingBottom = panel.PaddingBottom,
+                MinimumWidth = panel.MinimumWidth,
+                MinimumHeight = panel.MinimumHeight,
+            });
+        }
+        return result;
+    }
+
+    private static SpriteForgeEdgeProgram BuildEdge(
+        string panelId,
+        string edgeName,
+        IReadOnlyList<SpriteForgeEdgeSegmentTomlDocument> authored,
+        IReadOnlyDictionary<string, SpriteForgeRegion> regions,
+        string sourcePath,
+        List<AssetDiagnostic> diagnostics,
+        TomlAssetSourceMap? sourceMap)
+    {
+        string keyPath = $"programmable_panels.{QuoteKey(panelId)}.{edgeName}";
+        if (authored.Count == 0)
+        {
+            diagnostics.Add(CreateError("spriteforge.empty_panel_edge", $"Panel '{panelId}' requires a non-empty {edgeName} edge.", sourcePath, keyPath, sourceMap));
+            return new SpriteForgeEdgeProgram();
+        }
+
+        var result = new List<SpriteForgeEdgeSegment>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (SpriteForgeEdgeSegmentTomlDocument segment in authored)
+        {
+            if (!IsValidId(segment.Id) || !ids.Add(segment.Id))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_edge_segment_id", $"Panel '{panelId}' {edgeName} has invalid or duplicate segment id '{segment.Id}'.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+            if (!regions.ContainsKey(segment.Region))
+            {
+                diagnostics.Add(CreateError("spriteforge.missing_edge_region", $"Segment '{segment.Id}' references missing region '{segment.Region}'.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+            if (!TryParseAllocation(segment.Allocation, out SpriteForgeAllocationKind allocation)
+                || segment.Length < 0
+                || (allocation == SpriteForgeAllocationKind.Flex ? segment.Weight <= 0 : segment.Weight != 0))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_allocation", $"Segment '{segment.Id}' has an invalid fixed/flex allocation.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+            if (!TryParseSampling(segment.Sampling, out SpriteForgeSamplingMode sampling))
+            {
+                diagnostics.Add(CreateError("spriteforge.invalid_sampling", $"Segment '{segment.Id}' sampling must be stretch, tile, or crop.", sourcePath, keyPath, sourceMap));
+                continue;
+            }
+
+            result.Add(new SpriteForgeEdgeSegment
+            {
+                Id = segment.Id,
+                RegionId = segment.Region,
+                Allocation = allocation,
+                MinimumLength = segment.Length,
+                Weight = segment.Weight,
+                Sampling = sampling,
+            });
+        }
+        return new SpriteForgeEdgeProgram { Segments = result };
+    }
+
+    private static SpriteForgeAssetAuthoringKind ParseAuthoringKind(string? value)
+    {
+        return value switch
+        {
+            "generated-obj-ts" => SpriteForgeAssetAuthoringKind.GeneratedObjectTypeScript,
+            "runtime-toml" => SpriteForgeAssetAuthoringKind.RuntimeToml,
+            _ => SpriteForgeAssetAuthoringKind.LegacyAuthoredToml,
+        };
+    }
+
+    private static bool TryParseAllocation(string? value, out SpriteForgeAllocationKind kind)
+    {
+        if (value == "fixed")
+        {
+            kind = SpriteForgeAllocationKind.Fixed;
+            return true;
+        }
+        if (value == "flex")
+        {
+            kind = SpriteForgeAllocationKind.Flex;
+            return true;
+        }
+        kind = default;
+        return false;
+    }
+
+    private static bool TryParseSampling(string? value, out SpriteForgeSamplingMode mode)
+    {
+        return Enum.TryParse(value, ignoreCase: true, out mode) && Enum.IsDefined(mode);
+    }
+
+    private static bool TryParseCenterPolicy(string? value, out SpriteForgeCenterPolicy policy)
+    {
+        policy = value switch
+        {
+            "analytic-fill" => SpriteForgeCenterPolicy.AnalyticFill,
+            "stretch-region" => SpriteForgeCenterPolicy.StretchRegion,
+            "tile-region" => SpriteForgeCenterPolicy.TileRegion,
+            _ => (SpriteForgeCenterPolicy)(-1),
+        };
+        return Enum.IsDefined(policy);
     }
 
     private static IReadOnlyDictionary<string, SpriteForgeNineSlicePanel> BuildUiPanels(
@@ -848,6 +1063,49 @@ public static class SpriteForgeTomlLoader
         public Dictionary<string, SpriteForgeFrameTomlDocument> Frames { get; init; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, SpriteForgeNineSliceTomlDocument> UiPanels { get; init; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, SpriteForgeRegionTomlDocument> Regions { get; init; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, SpriteForgeProgrammablePanelTomlDocument> ProgrammablePanels { get; init; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed record SpriteForgeRegionTomlDocument
+    {
+        public int X { get; init; }
+        public int Y { get; init; }
+        public int Width { get; init; }
+        public int Height { get; init; }
+    }
+
+    private sealed record SpriteForgeProgrammablePanelTomlDocument
+    {
+        public string TopLeft { get; init; } = string.Empty;
+        public string TopRight { get; init; } = string.Empty;
+        public string BottomRight { get; init; } = string.Empty;
+        public string BottomLeft { get; init; } = string.Empty;
+        public List<SpriteForgeEdgeSegmentTomlDocument> Top { get; init; } = [];
+        public List<SpriteForgeEdgeSegmentTomlDocument> Right { get; init; } = [];
+        public List<SpriteForgeEdgeSegmentTomlDocument> Bottom { get; init; } = [];
+        public List<SpriteForgeEdgeSegmentTomlDocument> Left { get; init; } = [];
+        public string? CenterPolicy { get; init; }
+        public string? CenterRegion { get; init; }
+        public float? BorderScale { get; init; }
+        public int PaddingLeft { get; init; }
+        public int PaddingTop { get; init; }
+        public int PaddingRight { get; init; }
+        public int PaddingBottom { get; init; }
+        public int MinimumWidth { get; init; }
+        public int MinimumHeight { get; init; }
+    }
+
+    private sealed record SpriteForgeEdgeSegmentTomlDocument
+    {
+        public string Id { get; init; } = string.Empty;
+        public string Region { get; init; } = string.Empty;
+        public string? Allocation { get; init; }
+        public int Length { get; init; }
+        public int Weight { get; init; }
+        public string? Sampling { get; init; }
     }
 
     private sealed record SpriteForgeNineSliceTomlDocument
@@ -873,6 +1131,8 @@ public static class SpriteForgeTomlLoader
         public int Width { get; init; }
 
         public int Height { get; init; }
+
+        public string? SourceKind { get; init; }
     }
 
     private sealed record SpriteForgeGridTomlDocument

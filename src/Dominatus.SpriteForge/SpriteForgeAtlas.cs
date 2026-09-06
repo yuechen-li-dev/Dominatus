@@ -12,6 +12,8 @@ public sealed record SpriteForgeAtlas
 
     public required int Height { get; init; }
 
+    public SpriteForgeAssetAuthoringKind AuthoringKind { get; init; } = SpriteForgeAssetAuthoringKind.LegacyAuthoredToml;
+
     public IReadOnlyDictionary<string, SpriteForgeGrid> Grids { get; init; } =
         new Dictionary<string, SpriteForgeGrid>(StringComparer.Ordinal);
 
@@ -23,6 +25,86 @@ public sealed record SpriteForgeAtlas
 
     public IReadOnlyDictionary<string, SpriteForgeNineSlicePanel> UiPanels { get; init; } =
         new Dictionary<string, SpriteForgeNineSlicePanel>(StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, SpriteForgeRegion> Regions { get; init; } =
+        new Dictionary<string, SpriteForgeRegion>(StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, SpriteForgeProgrammablePanel> ProgrammablePanels { get; init; } =
+        new Dictionary<string, SpriteForgeProgrammablePanel>(StringComparer.Ordinal);
+}
+
+public enum SpriteForgeAssetAuthoringKind
+{
+    LegacyAuthoredToml,
+    GeneratedObjectTypeScript,
+    RuntimeToml,
+}
+
+public sealed record SpriteForgeRegion
+{
+    public required string Id { get; init; }
+    public int X { get; init; }
+    public int Y { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+}
+
+public enum SpriteForgeAllocationKind
+{
+    Fixed,
+    Flex,
+}
+
+public enum SpriteForgeSamplingMode
+{
+    Stretch,
+    Tile,
+    Crop,
+}
+
+public enum SpriteForgeCenterPolicy
+{
+    AnalyticFill,
+    StretchRegion,
+    TileRegion,
+}
+
+public sealed record SpriteForgeEdgeSegment
+{
+    public required string Id { get; init; }
+    public required string RegionId { get; init; }
+    public SpriteForgeAllocationKind Allocation { get; init; }
+    public int MinimumLength { get; init; }
+    public int Weight { get; init; }
+    public SpriteForgeSamplingMode Sampling { get; init; }
+}
+
+public sealed record SpriteForgeEdgeProgram
+{
+    public IReadOnlyList<SpriteForgeEdgeSegment> Segments { get; init; } = [];
+    public int MinimumLength => Segments.Sum(segment => segment.MinimumLength);
+}
+
+public sealed record SpriteForgeProgrammablePanel
+{
+    public required string Id { get; init; }
+    public required string TopLeftRegionId { get; init; }
+    public required string TopRightRegionId { get; init; }
+    public required string BottomRightRegionId { get; init; }
+    public required string BottomLeftRegionId { get; init; }
+    public SpriteForgeEdgeProgram Top { get; init; } = new();
+    public SpriteForgeEdgeProgram Right { get; init; } = new();
+    public SpriteForgeEdgeProgram Bottom { get; init; } = new();
+    public SpriteForgeEdgeProgram Left { get; init; } = new();
+    public SpriteForgeCenterPolicy CenterPolicy { get; init; }
+    public string? CenterRegionId { get; init; }
+    public float BorderScale { get; init; } = 1f;
+    public int PaddingLeft { get; init; }
+    public int PaddingTop { get; init; }
+    public int PaddingRight { get; init; }
+    public int PaddingBottom { get; init; }
+    public int MinimumWidth { get; init; }
+    public int MinimumHeight { get; init; }
 }
 
 public enum SpriteForgeTileMode
