@@ -1,5 +1,8 @@
 # Dominatus.Actuators.Standard M2 — allowlisted process actuators
 
+Current execution contract: [async effects and agent suspension](ASYNC-ACTUATION.md).
+Dispatch may be incomplete; consume completion evidence on subsequent world ticks.
+
 ## Purpose
 
 M2 adds **typed process execution** to `Dominatus.Actuators.Standard` while keeping process execution behind explicit policy boundaries.

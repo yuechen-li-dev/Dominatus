@@ -9,6 +9,17 @@ namespace Dominatus.Llm.OptFlow;
 
 public static class Llm
 {
+    // The untyped completion is authoritative, including runtime cancellation/faults that
+    // have no typed payload. Waiting only on the convenience typed event can strand a step.
+    private static bool TryConsumeCompletion<T>(AiCtx ctx, ref EventCursor cursor, ActuationId id,
+        out ActuationCompleted<T> completed) where T : class
+    {
+        if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted e) => e.Id.Equals(id), out var result))
+        { completed = default; return false; }
+        completed = new(result.Id, result.Ok, result.Error, result.Payload as T);
+        return true;
+    }
+
     public const string LineSpeakerContextKey = "__speaker";
     public const string NarrateNarratorContextKey = "__narrator";
     public const string NarrateStyleContextKey = "__narrationStyle";
@@ -585,10 +596,7 @@ public static class Llm
             }
 
             var pendingId = new ActuationId(pendingIdValue);
-            if (!ctx.Events.TryConsume(
-                    ref cursor,
-                    (ActuationCompleted<string> e) => e.Id.Equals(pendingId),
-                    out var completed))
+            if (!TryConsumeCompletion<string>(ctx, ref cursor, pendingId, out var completed))
             {
                 return false;
             }
@@ -652,7 +660,7 @@ public static class Llm
             }
 
             var pendingId = new ActuationId(pendingIdValue);
-            if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted<string> e) => e.Id.Equals(pendingId), out var completed))
+            if (!TryConsumeCompletion<string>(ctx, ref cursor, pendingId, out var completed))
             {
                 return false;
             }
@@ -725,7 +733,7 @@ public static class Llm
             if (pendingIdValue == 0)
             {
                 var dispatch = ctx.Act.Dispatch(ctx, Command);
-                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok))
+                if (!dispatch.Accepted || (dispatch.Completed && !dispatch.Ok && dispatch.Payload is not LlmStreamSnapshot))
                 {
                     throw new InvalidOperationException($"Llm.Stream dispatch failed for stableId '{Command.Request.StableId}'. {dispatch.Error ?? "Actuation rejected."}");
                 }
@@ -735,12 +743,12 @@ public static class Llm
             }
 
             var pendingId = new ActuationId(pendingIdValue);
-            if (!ctx.Events.TryConsume(ref cursor, (ActuationCompleted<LlmStreamSnapshot> e) => e.Id.Equals(pendingId), out var completed))
+            if (!TryConsumeCompletion<LlmStreamSnapshot>(ctx, ref cursor, pendingId, out var completed))
             {
                 return false;
             }
 
-            if (!completed.Ok || completed.Payload is null)
+            if (completed.Payload is null)
             {
                 throw new InvalidOperationException($"Llm.Stream completion failed for stableId '{Command.Request.StableId}'. {completed.Error ?? "Missing stream snapshot."}");
             }
@@ -863,10 +871,7 @@ public static class Llm
             }
 
             var pendingId = new ActuationId(pendingIdValue);
-            if (!ctx.Events.TryConsume(
-                    ref cursor,
-                    (ActuationCompleted<LlmMagiDecisionResult> e) => e.Id.Equals(pendingId),
-                    out var completed))
+            if (!TryConsumeCompletion<LlmMagiDecisionResult>(ctx, ref cursor, pendingId, out var completed))
             {
                 return false;
             }
@@ -1127,10 +1132,7 @@ public static class Llm
             }
 
             var pendingId = new ActuationId(pendingIdValue);
-            if (!ctx.Events.TryConsume(
-                    ref cursor,
-                    (ActuationCompleted<LlmDecisionResult> e) => e.Id.Equals(pendingId),
-                    out var completed))
+            if (!TryConsumeCompletion<LlmDecisionResult>(ctx, ref cursor, pendingId, out var completed))
             {
                 return false;
             }

@@ -1,5 +1,8 @@
 # Dominatus.Pay author guide
 
+Current execution contract: [async effects and agent suspension](ASYNC-ACTUATION.md).
+Dispatch may be incomplete; consume completion evidence on subsequent world ticks.
+
 This guide is for future Dominatus maintainers, Codex runs, ChatGPT instances, and provider-adapter authors. It is not an end-user integration tutorial and it is not a legal, tax, PCI, or processor-compliance guide.
 
 Use this document when changing `Dominatus.Actuators.Payments`, adding provider adapter packages, reviewing payment-related pull requests, or handing payment work to a separate application/platform team.

@@ -9,6 +9,37 @@ namespace Dominatus.Llm.OptFlow.Tests;
 public sealed class LlmStreamingTests
 {
     [Fact]
+    public async Task Stream_chunks_are_visible_during_pending_io_only_after_owner_tick()
+    {
+        var provider = new GatedStream(); await using var host = new ActuatorHost();
+        host.Register(new LlmStreamActuationHandler(provider, new LlmStreamRecorder()));
+        var (world, ctx) = CreateWorldAndCtx(host); EventCursor cursor = default;
+        Assert.False(host.Dispatch(ctx, new LlmStreamCommand("gated", CreateRequest())).Completed);
+        Assert.False(ctx.Events.TryConsume<LlmStreamChunkAvailable>(ref cursor, null, out _));
+        host.Tick(world);
+        Assert.True(ctx.Events.TryConsume<LlmStreamChunkAvailable>(ref cursor, null, out var first)); Assert.Equal("first", first.Text);
+        provider.Release.SetResult(true);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (ctx.Agent.InFlightActuations.Count > 0)
+        { timeout.Token.ThrowIfCancellationRequested(); host.Tick(world); await Task.Yield(); }
+        Assert.True(ctx.Events.TryConsume<LlmStreamChunkAvailable>(ref cursor, null, out var last)); Assert.True(last.IsFinal);
+        EventCursor completion = default;
+        Assert.True(ctx.Events.TryConsume<ActuationCompleted<LlmStreamSnapshot>>(ref completion, null, out var result));
+        Assert.True(result.Ok); Assert.Equal("firstlast", result.Payload!.TextSoFar);
+    }
+    private sealed class GatedStream : ILlmStreamingClient
+    {
+        public readonly TaskCompletionSource<bool> Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async IAsyncEnumerable<LlmStreamDelta> StreamAsync(LlmTextRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            yield return new LlmStreamDelta("first");
+            await Release.Task.WaitAsync(ct);
+            yield return new LlmStreamDelta("last", "stop", true);
+        }
+    }
+
+    [Fact]
     public async Task StreamRecorder_RecordsChunksInOrder()
     {
         var request = CreateRequest();
@@ -161,20 +192,23 @@ public sealed class LlmStreamingTests
     }
 
     [Fact]
-    public void LlmStreamHandler_CompletesWithSnapshotPayload_AndPublishesChunkEvents()
+    public async Task LlmStreamHandler_CompletesWithSnapshotPayload_AndPublishesChunkEvents()
     {
         var request = CreateRequest();
         var hash = LlmRequestHasher.ComputeHash(request);
         var client = new FakeLlmStreamingClient();
         client.Configure(hash, new LlmStreamDelta("Hello"), new LlmStreamDelta(" world", "stop", true));
 
-        var host = new ActuatorHost();
+        await using var host = new ActuatorHost();
         host.Register(new LlmStreamActuationHandler(client, new LlmStreamRecorder()));
 
-        var (_, ctx) = CreateWorldAndCtx(host);
+        var (world, ctx) = CreateWorldAndCtx(host);
 
         var dispatch = host.Dispatch(ctx, new LlmStreamCommand("stream-1", request));
         Assert.True(dispatch.Accepted);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (ctx.Agent.InFlightActuations.Count > 0)
+        { timeout.Token.ThrowIfCancellationRequested(); host.Tick(world); await Task.Yield(); }
 
         var completionCursor = default(EventCursor);
         Assert.True(ctx.Agent.Events.TryConsume<ActuationCompleted<LlmStreamSnapshot>>(ref completionCursor, null, out var completed));

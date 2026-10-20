@@ -9,6 +9,26 @@ namespace Dominatus.Llm.OptFlow.Tests;
 public sealed class LlmMagiDecisionHandlerTests
 {
     [Fact]
+    public async Task Synchronous_advocate_throw_does_not_detach_its_pending_sibling()
+    {
+        var request = CreateRequest();
+        var aRequest = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
+        var a = GatedFakeLlmDecisionClient.Success(CreateDecisionResult(LlmDecisionRequestHasher.ComputeHash(aRequest)));
+        var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
+        var handler = new LlmMagiDecisionHandler(a, new SynchronouslyThrowingClient(), judge, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
+        var pending = DispatchAndGetCompletion(handler, request);
+        Assert.False(pending.IsCompleted); Assert.Equal(0, judge.CallCount);
+        a.Release();
+        var failure = await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(failure.Ok); Assert.Contains("advocateB", failure.Error); Assert.Equal(0, judge.CallCount);
+    }
+    private sealed class SynchronouslyThrowingClient : ILlmDecisionClient
+    {
+        public Task<LlmDecisionResult> ScoreOptionsAsync(LlmDecisionRequest request, string hash, CancellationToken ct)
+            => throw new InvalidOperationException("provider refused before returning a task");
+    }
+
+    [Fact]
     public async Task MagiHandler_StartsBothAdvocatesBeforeAwaitingEither()
     {
         var request = CreateRequest();
@@ -22,7 +42,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judgeClient = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judgeClient, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
 
-        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        var dispatchTask = DispatchAndGetCompletion(handler, request);
 
         await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(0, judgeClient.CallCount);
@@ -51,7 +71,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judgeClient = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judgeClient, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
 
-        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        var dispatchTask = DispatchAndGetCompletion(handler, request);
         await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
 
         aClient.Release();
@@ -84,7 +104,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judgeClient = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judgeClient, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
 
-        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        var dispatchTask = DispatchAndGetCompletion(handler, request);
         await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
 
         bClient.Release();
@@ -101,12 +121,12 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiLiveMode_CallsBothAdvocatesAndJudgeAndCompletes()
+    public async Task MagiLiveMode_CallsBothAdvocatesAndJudgeAndCompletes()
     {
         var request = CreateRequest();
         var (aClient, bClient, judgeClient, handler) = CreateLiveHandler(request);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
 
         Assert.True(completed.Ok);
         Assert.Equal(1, aClient.CallCount);
@@ -115,13 +135,13 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiRecordMode_OnMiss_CallsClientsWritesCassetteAndCompletes()
+    public async Task MagiRecordMode_OnMiss_CallsClientsWritesCassetteAndCompletes()
     {
         var request = CreateRequest();
         var cassette = new InMemoryLlmMagiCassette();
         var (aClient, bClient, judgeClient, handler) = CreateHandler(request, LlmCassetteMode.Record, cassette);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
 
         Assert.True(completed.Ok);
         Assert.Equal(1, aClient.CallCount);
@@ -131,13 +151,13 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiRecordMode_OnHit_UsesCassetteAndDoesNotCallClients()
+    public async Task MagiRecordMode_OnHit_UsesCassetteAndDoesNotCallClients()
     {
         var request = CreateRequest();
         var cassette = SeedCassette(request);
         var (aClient, bClient, judgeClient, handler) = CreateHandler(request, LlmCassetteMode.Record, cassette);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
 
         Assert.True(completed.Ok);
         Assert.Equal(0, aClient.CallCount);
@@ -146,13 +166,13 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiReplayMode_OnHit_UsesCassetteAndDoesNotCallClients()
+    public async Task MagiReplayMode_OnHit_UsesCassetteAndDoesNotCallClients()
     {
         var request = CreateRequest();
         var cassette = SeedCassette(request);
         var (aClient, bClient, judgeClient, handler) = CreateHandler(request, LlmCassetteMode.Replay, cassette);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
 
         Assert.True(completed.Ok);
         Assert.Equal(0, aClient.CallCount);
@@ -170,7 +190,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "unused"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, cassette, LlmCassetteMode.Replay);
 
-        var completion = DispatchAndGetCompletion(handler, request);
+        var completion = await DispatchAndGetCompletion(handler, request);
         Assert.True(completion.Ok);
         Assert.Equal(0, aClient.CallCount);
         Assert.Equal(0, bClient.CallCount);
@@ -181,24 +201,24 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiReplayMode_OnMiss_FailsLoudly()
+    public async Task MagiReplayMode_OnMiss_FailsLoudly()
     {
         var request = CreateRequest();
         var (_, _, _, handler) = CreateHandler(request, LlmCassetteMode.Replay, new InMemoryLlmMagiCassette());
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
         Assert.False(completed.Ok);
         Assert.Contains("Mode=Replay", completed.Error, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MagiStrictMode_OnHit_UsesCassetteAndDoesNotCallClients()
+    public async Task MagiStrictMode_OnHit_UsesCassetteAndDoesNotCallClients()
     {
         var request = CreateRequest();
         var cassette = SeedCassette(request);
         var (aClient, bClient, judgeClient, handler) = CreateHandler(request, LlmCassetteMode.Strict, cassette);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
 
         Assert.True(completed.Ok);
         Assert.Equal(0, aClient.CallCount);
@@ -216,7 +236,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "unused"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, cassette, LlmCassetteMode.Strict);
 
-        var completion = DispatchAndGetCompletion(handler, request);
+        var completion = await DispatchAndGetCompletion(handler, request);
         Assert.True(completion.Ok);
         Assert.Equal(0, aClient.CallCount);
         Assert.Equal(0, bClient.CallCount);
@@ -227,12 +247,12 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiStrictMode_OnMiss_FailsLoudly()
+    public async Task MagiStrictMode_OnMiss_FailsLoudly()
     {
         var request = CreateRequest();
         var (_, _, _, handler) = CreateHandler(request, LlmCassetteMode.Strict, new InMemoryLlmMagiCassette());
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
         Assert.False(completed.Ok);
         Assert.Contains("Mode=Strict", completed.Error, StringComparison.Ordinal);
     }
@@ -240,13 +260,13 @@ public sealed class LlmMagiDecisionHandlerTests
     [Theory]
     [InlineData(LlmCassetteMode.Replay)]
     [InlineData(LlmCassetteMode.Strict)]
-    public void MagiHandler_FailureDiagnosticsIncludeModeStableIdAndHash(LlmCassetteMode mode)
+    public async Task MagiHandler_FailureDiagnosticsIncludeModeStableIdAndHash(LlmCassetteMode mode)
     {
         var request = CreateRequest();
         var hash = LlmMagiRequestHasher.ComputeHash(request);
         var (_, _, _, handler) = CreateHandler(request, mode, new InMemoryLlmMagiCassette());
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
 
         Assert.False(completed.Ok);
         Assert.Contains($"Mode={mode}", completed.Error, StringComparison.Ordinal);
@@ -255,7 +275,7 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiHandler_RejectsInvalidAdvocateAResult()
+    public async Task MagiHandler_RejectsInvalidAdvocateAResult()
     {
         var request = CreateRequest();
         var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
@@ -275,12 +295,12 @@ public sealed class LlmMagiDecisionHandlerTests
             new InMemoryLlmMagiCassette(),
             LlmCassetteMode.Live);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
         Assert.False(completed.Ok);
     }
 
     [Fact]
-    public void MagiHandler_RejectsInvalidAdvocateBResult()
+    public async Task MagiHandler_RejectsInvalidAdvocateBResult()
     {
         var request = CreateRequest();
         var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
@@ -300,12 +320,12 @@ public sealed class LlmMagiDecisionHandlerTests
             new InMemoryLlmMagiCassette(),
             LlmCassetteMode.Live);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
         Assert.False(completed.Ok);
     }
 
     [Fact]
-    public void MagiHandler_RejectsInvalidJudgeResult()
+    public async Task MagiHandler_RejectsInvalidJudgeResult()
     {
         var request = CreateRequest();
         var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
@@ -317,12 +337,12 @@ public sealed class LlmMagiDecisionHandlerTests
             new InMemoryLlmMagiCassette(),
             LlmCassetteMode.Live);
 
-        var completed = DispatchAndGetCompletion(handler, request);
+        var completed = await DispatchAndGetCompletion(handler, request);
         Assert.False(completed.Ok);
     }
 
     [Fact]
-    public void MagiHandler_AdvocateAFailure_DoesNotCallJudge()
+    public async Task MagiHandler_AdvocateAFailure_DoesNotCallJudge()
     {
         var request = CreateRequest();
         var bReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
@@ -334,13 +354,13 @@ public sealed class LlmMagiDecisionHandlerTests
             new InMemoryLlmMagiCassette(),
             LlmCassetteMode.Live);
 
-        var completion = DispatchAndGetCompletion(handler, request);
+        var completion = await DispatchAndGetCompletion(handler, request);
         Assert.False(completion.Ok);
         Assert.Contains("advocateA", completion.Error, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MagiHandler_AdvocateBFailure_DoesNotCallJudge()
+    public async Task MagiHandler_AdvocateBFailure_DoesNotCallJudge()
     {
         var request = CreateRequest();
         var aReq = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
@@ -353,14 +373,14 @@ public sealed class LlmMagiDecisionHandlerTests
             new InMemoryLlmMagiCassette(),
             LlmCassetteMode.Live);
 
-        var completion = DispatchAndGetCompletion(handler, request);
+        var completion = await DispatchAndGetCompletion(handler, request);
         Assert.False(completion.Ok);
         Assert.Equal(0, judge.CallCount);
         Assert.Contains("advocateB", completion.Error, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MagiHandler_OneAdvocateFailure_DoesNotWriteCassette()
+    public async Task MagiHandler_OneAdvocateFailure_DoesNotWriteCassette()
     {
         var request = CreateRequest();
         var cassette = new InMemoryLlmMagiCassette();
@@ -373,7 +393,7 @@ public sealed class LlmMagiDecisionHandlerTests
             cassette,
             LlmCassetteMode.Record);
 
-        var completion = DispatchAndGetCompletion(handler, request);
+        var completion = await DispatchAndGetCompletion(handler, request);
         Assert.False(completion.Ok);
         Assert.False(cassette.TryGet(LlmMagiRequestHasher.ComputeHash(request), out _));
     }
@@ -391,7 +411,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
 
-        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        var dispatchTask = DispatchAndGetCompletion(handler, request);
         await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
         bClient.Release();
         aClient.Release();
@@ -414,7 +434,7 @@ public sealed class LlmMagiDecisionHandlerTests
     }
 
     [Fact]
-    public void MagiDecision_DispatchesThroughActuatorHostAndCompletesWithLlmMagiDecisionResult()
+    public async Task MagiDecision_DispatchesThroughActuatorHostAndCompletesWithLlmMagiDecisionResult()
     {
         var request = CreateRequest();
         var (_, _, _, handler) = CreateLiveHandler(request);
@@ -472,16 +492,20 @@ public sealed class LlmMagiDecisionHandlerTests
         return cassette;
     }
 
-    private static ActuationCompleted DispatchAndGetCompletion(LlmMagiDecisionHandler handler, LlmMagiRequest request)
+    private static async Task<ActuationCompleted> DispatchAndGetCompletion(LlmMagiDecisionHandler handler, LlmMagiRequest request)
     {
-        var host = new ActuatorHost();
+        await using var host = new ActuatorHost();
         host.Register(handler);
 
-        var (_, ctx) = CreateWorldAndCtx(host);
+        var (world, ctx) = CreateWorldAndCtx(host);
         var dispatch = host.Dispatch(ctx, request);
 
         Assert.True(dispatch.Accepted);
-        Assert.True(dispatch.Completed);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (ctx.Agent.InFlightActuations.Count > 0)
+        {
+            timeout.Token.ThrowIfCancellationRequested(); host.Tick(world); await Task.Yield();
+        }
 
         var cursor = default(EventCursor);
         Assert.True(ctx.Agent.Events.TryConsume<ActuationCompleted>(ref cursor, null, out var completion));
@@ -537,7 +561,7 @@ public sealed class LlmMagiDecisionHandlerTests
         var judge = new FakeLlmMagiJudgeClient(new LlmMagiJudgment("join", request.AdvocateA.Id, "ok"));
         var handler = new LlmMagiDecisionHandler(aClient, bClient, judge, new InMemoryLlmMagiCassette(), LlmCassetteMode.Live);
 
-        var dispatchTask = Task.Run(() => DispatchAndGetCompletion(handler, request));
+        var dispatchTask = DispatchAndGetCompletion(handler, request);
         await Task.WhenAll(aClient.Started.Task, bClient.Started.Task).WaitAsync(TimeSpan.FromSeconds(2));
 
         if (releaseAFirst)

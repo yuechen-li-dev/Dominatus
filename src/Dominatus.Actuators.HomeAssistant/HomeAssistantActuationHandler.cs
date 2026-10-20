@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace Dominatus.Actuators.HomeAssistant;
 
-public sealed class HomeAssistantActuationHandler :
+public sealed class HomeAssistantActuationHandler : AsyncActuationHandler,
     IActuationHandler<GetHomeAssistantStateCommand>,
     IActuationHandler<CallHomeAssistantServiceCommand>,
     IDisposable
@@ -14,7 +14,6 @@ public sealed class HomeAssistantActuationHandler :
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private readonly HomeAssistantRequestResolver _resolver;
     private readonly HttpClient _httpClient;
-    private readonly bool _disposeClient;
 
     public HomeAssistantActuationHandler(HomeAssistantActuatorOptions options, HttpMessageHandler? messageHandler = null)
     {
@@ -28,7 +27,6 @@ public sealed class HomeAssistantActuationHandler :
                 UseCookies = false,
                 UseDefaultCredentials = false
             });
-            _disposeClient = true;
         }
         else
         {
@@ -39,14 +37,20 @@ public sealed class HomeAssistantActuationHandler :
     }
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, GetHomeAssistantStateCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, GetHomeAssistantStateCommand cmd, CancellationToken cancellationToken)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_resolver.Options.Timeout);
+        cancellationToken = timeout.Token;
         try
         {
             var request = _resolver.Resolve(cmd);
             using var http = CreateRequest(HttpMethod.Get, request.Uri, content: null);
-            using var response = _httpClient.SendAsync(http, HttpCompletionOption.ResponseHeadersRead, ctx.Cancel).GetAwaiter().GetResult();
+            using var response = await _httpClient.SendAsync(http, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 
-            var text = ReadBoundedText(response.Content, _resolver.Options.MaxResponseBytes, ctx.Cancel);
+            var text = await ReadBoundedTextAsync(response.Content, _resolver.Options.MaxResponseBytes, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return Fail($"Home Assistant state read failed with status {(int)response.StatusCode} ({response.StatusCode}): {TrimForError(text)}");
 
@@ -60,7 +64,13 @@ public sealed class HomeAssistantActuationHandler :
     }
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, CallHomeAssistantServiceCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, CallHomeAssistantServiceCommand cmd, CancellationToken cancellationToken)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_resolver.Options.Timeout);
+        cancellationToken = timeout.Token;
         try
         {
             var request = _resolver.Resolve(cmd);
@@ -68,9 +78,9 @@ public sealed class HomeAssistantActuationHandler :
             content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
 
             using var http = CreateRequest(HttpMethod.Post, request.Uri, content);
-            using var response = _httpClient.SendAsync(http, HttpCompletionOption.ResponseHeadersRead, ctx.Cancel).GetAwaiter().GetResult();
+            using var response = await _httpClient.SendAsync(http, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 
-            var text = ReadBoundedText(response.Content, _resolver.Options.MaxResponseBytes, ctx.Cancel);
+            var text = await ReadBoundedTextAsync(response.Content, _resolver.Options.MaxResponseBytes, cancellationToken).ConfigureAwait(false);
             var result = new HomeAssistantServiceCallResult((int)response.StatusCode, response.IsSuccessStatusCode, text);
             return ActuatorHost.HandlerResult.CompletedWithPayload(result);
         }
@@ -82,8 +92,7 @@ public sealed class HomeAssistantActuationHandler :
 
     public void Dispose()
     {
-        if (_disposeClient)
-            _httpClient.Dispose();
+        _httpClient.Dispose();
     }
 
     private HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, HttpContent? content)
@@ -118,18 +127,18 @@ public sealed class HomeAssistantActuationHandler :
         return new HomeAssistantEntityStateResult(entityId, state, json);
     }
 
-    private static string ReadBoundedText(HttpContent content, long maxResponseBytes, CancellationToken cancellationToken)
+    private static async Task<string> ReadBoundedTextAsync(HttpContent content, long maxResponseBytes, CancellationToken cancellationToken)
     {
         if (content.Headers.ContentLength is long len && len > maxResponseBytes)
             throw new InvalidOperationException($"Home Assistant response body exceeds MaxResponseBytes ({maxResponseBytes}).");
 
-        using var stream = content.ReadAsStream(cancellationToken);
+        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
 
         var chunk = new byte[8192];
         while (true)
         {
-            var read = stream.Read(chunk, 0, chunk.Length);
+            var read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken).ConfigureAwait(false);
             if (read <= 0)
                 break;
 

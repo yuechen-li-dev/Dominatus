@@ -23,41 +23,41 @@ public sealed class LlmStreamStepTests
     [Fact] public void LlmStream_RejectsMissingStoreTextKey() => Assert.Throws<ArgumentException>(() => Llm.Stream("id", "intent", "persona", "stream", b => b.Add("k", "v"), new BbKey<string>(" ")));
 
     [Fact]
-    public void LlmStream_StoresFinalText()
+    public async Task LlmStream_StoresFinalText()
     {
         var client = NewClient("s-1", new LlmStreamDelta("Hello"), new LlmStreamDelta(" world", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Step(streamId: "s-1"), ctx);
+        await ExecuteStepAsync(Step(streamId: "s-1"), ctx);
         Assert.Equal("Hello world", ctx.Bb.GetOrDefault(TextKey, ""));
     }
 
     [Fact]
-    public void LlmStream_StoresStreamIdAndStatus_WhenConfigured()
+    public async Task LlmStream_StoresStreamIdAndStatus_WhenConfigured()
     {
         var client = NewClient("s-2", new LlmStreamDelta("x", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Step(streamId: "s-2", storeStatus: true, storeStreamId: true), ctx);
+        await ExecuteStepAsync(Step(streamId: "s-2", storeStatus: true, storeStreamId: true), ctx);
         Assert.Equal("s-2", ctx.Bb.GetOrDefault(StreamIdKey, ""));
         Assert.Equal("Completed", ctx.Bb.GetOrDefault(StatusKey, ""));
     }
 
     [Fact]
-    public void LlmStream_StoresSnapshotJson_WhenConfigured()
+    public async Task LlmStream_StoresSnapshotJson_WhenConfigured()
     {
         var client = NewClient("s-3", new LlmStreamDelta("json", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Step(streamId: "s-3", storeSnapshot: true), ctx);
+        await ExecuteStepAsync(Step(streamId: "s-3", storeSnapshot: true), ctx);
         using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(SnapshotJsonKey, ""));
         Assert.Equal("s-3", doc.RootElement.GetProperty("streamId").GetString());
         Assert.Equal("Completed", doc.RootElement.GetProperty("status").GetString());
     }
 
     [Fact]
-    public void LlmStream_PublishesChunkEvents()
+    public async Task LlmStream_PublishesChunkEvents()
     {
         var client = NewClient("s-4", new LlmStreamDelta("a"), new LlmStreamDelta("b", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Step(streamId: "s-4"), ctx);
+        await ExecuteStepAsync(Step(streamId: "s-4"), ctx);
         var cursor = default(EventCursor);
         Assert.True(ctx.Agent.Events.TryConsume<LlmStreamChunkAvailable>(ref cursor, null, out var e1));
         Assert.Equal(0, e1.Index);
@@ -66,29 +66,29 @@ public sealed class LlmStreamStepTests
     }
 
     [Fact]
-    public void LlmStream_ReentryAfterCompletedStream_DoesNotRedispatchProvider()
+    public async Task LlmStream_ReentryAfterCompletedStream_DoesNotRedispatchProvider()
     {
         var client = NewClient("s-5", new LlmStreamDelta("once", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
         var step = Step(streamId: "s-5", storeSnapshot: true, storeStatus: true, storeStreamId: true);
-        ExecuteStep(step, ctx);
-        ExecuteStep(step, ctx);
+        await ExecuteStepAsync(step, ctx);
+        await ExecuteStepAsync(step, ctx);
         Assert.Equal(1, client.CallCount);
     }
 
     [Fact]
-    public void LlmStream_ReentryAfterCompletedStream_RestoresOutputs()
+    public async Task LlmStream_ReentryAfterCompletedStream_RestoresOutputs()
     {
         var client = NewClient("s-6", new LlmStreamDelta("cached", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
         var step = Step(streamId: "s-6", storeSnapshot: true, storeStatus: true, storeStreamId: true);
-        ExecuteStep(step, ctx);
+        await ExecuteStepAsync(step, ctx);
         var snapshot = ctx.Bb.GetOrDefault(SnapshotJsonKey, "");
         ctx.Bb.Set(TextKey, string.Empty);
         ctx.Bb.Set(SnapshotJsonKey, string.Empty);
         ctx.Bb.Set(StreamIdKey, string.Empty);
         ctx.Bb.Set(StatusKey, string.Empty);
-        ExecuteStep(step, ctx);
+        await ExecuteStepAsync(step, ctx);
         Assert.Equal("cached", ctx.Bb.GetOrDefault(TextKey, ""));
         Assert.Equal(snapshot, ctx.Bb.GetOrDefault(SnapshotJsonKey, ""));
         Assert.Equal("s-6", ctx.Bb.GetOrDefault(StreamIdKey, ""));
@@ -96,7 +96,7 @@ public sealed class LlmStreamStepTests
     }
 
     [Fact]
-    public void LlmStream_FailedSnapshot_StoresPartialTextAndFailedStatus()
+    public async Task LlmStream_FailedSnapshot_StoresPartialTextAndFailedStatus()
     {
         var request = new LlmTextRequest("id", "intent", "persona", "{\"k\":\"x\"}", Llm.DefaultSampling, LlmTextRequest.DefaultPromptTemplateVersion, LlmTextRequest.DefaultOutputContractVersion);
         var hash = LlmRequestHasher.ComputeHash(request);
@@ -104,28 +104,28 @@ public sealed class LlmStreamStepTests
         client.Configure(hash, new LlmStreamDelta("partial"), new LlmStreamDelta(" trailing"));
         client.ConfigureThrowAfterChunk(hash, 1);
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Step(streamId: "s-7", storeStatus: true, contextValue: "x"), ctx);
+        await ExecuteStepAsync(Step(streamId: "s-7", storeStatus: true, contextValue: "x"), ctx);
         Assert.Equal("partial", ctx.Bb.GetOrDefault(TextKey, ""));
         Assert.Equal("Failed", ctx.Bb.GetOrDefault(StatusKey, ""));
     }
 
     [Fact]
-    public void LlmStream_CancelledSnapshot_StoresPartialTextAndCancelledStatus()
+    public async Task LlmStream_CancelledSnapshot_StoresPartialTextAndCancelledStatus()
     {
         var client = NewClient("s-8", new LlmStreamDelta("a"), new LlmStreamDelta("b"), new LlmStreamDelta("c"));
         client.ObserveCancellation = true;
         var (_, ctx) = CreateWorldAndCtx(client, cancelAfterMs: 15);
-        ExecuteStep(Step(streamId: "s-8", storeStatus: true), ctx);
+        await ExecuteStepAsync(Step(streamId: "s-8", storeStatus: true), ctx);
         Assert.Equal("Cancelled", ctx.Bb.GetOrDefault(StatusKey, ""));
     }
 
     [Fact]
-    public void LlmStream_WithContextPacket_StoresSnapshotJsonWithPacketMetadata()
+    public async Task LlmStream_WithContextPacket_StoresSnapshotJsonWithPacketMetadata()
     {
         var packet = NewPacket("Packet body");
         var client = NewClient("s-9", new LlmStreamDelta("ok", "stop", true), packet);
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Llm.Stream("id", "intent", "persona", "s-9", packet, TextKey, SnapshotJsonKey), ctx);
+        await ExecuteStepAsync(Llm.Stream("id", "intent", "persona", "s-9", packet, TextKey, SnapshotJsonKey), ctx);
         using var doc = JsonDocument.Parse(ctx.Bb.GetOrDefault(SnapshotJsonKey, ""));
         var metadata = doc.RootElement.GetProperty("contextPacket");
         Assert.Equal("PROJECT.dominatus", metadata.GetProperty("storeId").GetString());
@@ -133,7 +133,7 @@ public sealed class LlmStreamStepTests
     }
 
     [Fact]
-    public void LlmStream_WithSamePacket_HasStableRequestHash()
+    public async Task LlmStream_WithSamePacket_HasStableRequestHash()
     {
         var packet = NewPacket("same");
         var stableId = "id.same";
@@ -141,27 +141,27 @@ public sealed class LlmStreamStepTests
         var client1 = new FakeLlmStreamingClient();
         client1.Configure(hash, new LlmStreamDelta("ok", "stop", true));
         var (_, ctx1) = CreateWorldAndCtx(client1);
-        ExecuteStep(Llm.Stream(stableId, "intent", "persona", "s-10", packet, TextKey, SnapshotJsonKey), ctx1);
+        await ExecuteStepAsync(Llm.Stream(stableId, "intent", "persona", "s-10", packet, TextKey, SnapshotJsonKey), ctx1);
         var hash1 = JsonDocument.Parse(ctx1.Bb.GetOrDefault(SnapshotJsonKey, "")).RootElement.GetProperty("requestHash").GetString();
 
         var client2 = new FakeLlmStreamingClient();
         client2.Configure(hash, new LlmStreamDelta("ok", "stop", true));
         var (_, ctx2) = CreateWorldAndCtx(client2);
-        ExecuteStep(Llm.Stream(stableId, "intent", "persona", "s-10b", packet, TextKey, SnapshotJsonKey), ctx2);
+        await ExecuteStepAsync(Llm.Stream(stableId, "intent", "persona", "s-10b", packet, TextKey, SnapshotJsonKey), ctx2);
         var hash2 = JsonDocument.Parse(ctx2.Bb.GetOrDefault(SnapshotJsonKey, "")).RootElement.GetProperty("requestHash").GetString();
         Assert.Equal(hash1, hash2);
     }
 
     [Fact]
-    public void LlmStream_WithDifferentPacket_ChangesRequestHash()
+    public async Task LlmStream_WithDifferentPacket_ChangesRequestHash()
     {
         var client = new FakeLlmStreamingClient();
         client.Configure(LlmRequestHasher.ComputeHash(BuildPacketRequest(NewPacket("a"), "id.diff.1")), new LlmStreamDelta("ok", "stop", true));
         client.Configure(LlmRequestHasher.ComputeHash(BuildPacketRequest(NewPacket("b"), "id.diff.2")), new LlmStreamDelta("ok", "stop", true));
         var (_, ctx) = CreateWorldAndCtx(client);
-        ExecuteStep(Llm.Stream("id.diff.1", "intent", "persona", "s-11", NewPacket("a"), TextKey, SnapshotJsonKey), ctx);
+        await ExecuteStepAsync(Llm.Stream("id.diff.1", "intent", "persona", "s-11", NewPacket("a"), TextKey, SnapshotJsonKey), ctx);
         var hashA = JsonDocument.Parse(ctx.Bb.GetOrDefault(SnapshotJsonKey, "")).RootElement.GetProperty("requestHash").GetString();
-        ExecuteStep(Llm.Stream("id.diff.2", "intent", "persona", "s-11b", NewPacket("b"), TextKey, SnapshotJsonKey), ctx);
+        await ExecuteStepAsync(Llm.Stream("id.diff.2", "intent", "persona", "s-11b", NewPacket("b"), TextKey, SnapshotJsonKey), ctx);
         var hashB = JsonDocument.Parse(ctx.Bb.GetOrDefault(SnapshotJsonKey, "")).RootElement.GetProperty("requestHash").GetString();
         Assert.NotEqual(hashA, hashB);
     }
@@ -220,11 +220,16 @@ public sealed class LlmStreamStepTests
         return (world, ctx);
     }
 
-    private static void ExecuteStep(AiStep step, AiCtx ctx)
+    private static async Task ExecuteStepAsync(AiStep step, AiCtx ctx)
     {
         var wait = Assert.IsAssignableFrom<IWaitEvent>(step);
         var cursor = default(EventCursor);
-        if (!wait.TryConsume(ctx, ref cursor)) wait.TryConsume(ctx, ref cursor);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!wait.TryConsume(ctx, ref cursor))
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            ((ActuatorHost)ctx.Act).Tick(ctx.World); await Task.Yield();
+        }
     }
 
     private static IEnumerator<AiStep> RootNode(AiCtx _) { yield break; }

@@ -15,6 +15,8 @@ public static class Program
             "stderr" => WriteStderr(args),
             "exit" => ExitCode(args),
             "sleep" => Sleep(args),
+            "pid-sleep" => PidSleep(args),
+            "flood-sleep" => PidSleep(args, flood: true),
             "cwd" => PrintCwd(),
             "env" => PrintEnv(args),
             _ => 2
@@ -39,6 +41,15 @@ public static class Program
             return 3;
 
         return code;
+    }
+
+    private static int PidSleep(string[] args, bool flood = false)
+    {
+        File.WriteAllText(args[1] + ".tmp", Environment.ProcessId.ToString());
+        File.Move(args[1] + ".tmp", args[1]);
+        if (flood) { Console.Out.Write(new string('x', 10000)); Console.Out.Flush(); }
+        Thread.Sleep(30000);
+        return 0;
     }
 
     private static int Sleep(string[] args)

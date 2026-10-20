@@ -22,7 +22,7 @@ public sealed class LlmStreamRecorder
 
         try
         {
-            await foreach (var delta in client.StreamAsync(request, cancellationToken))
+            await foreach (var delta in client.StreamAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 var chunk = new LlmStreamChunk(streamId, nextChunkIndex, delta.Text, delta.IsFinal, delta.FinishReason);
                 nextChunkIndex++;

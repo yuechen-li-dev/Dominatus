@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace Dominatus.Actuators.Standard;
 
-public sealed class HttpActuationHandler :
+public sealed class HttpActuationHandler : AsyncActuationHandler,
     IActuationHandler<HttpGetTextCommand>,
     IActuationHandler<HttpPostJsonCommand>,
     IActuationHandler<HttpPostTextCommand>,
@@ -17,7 +17,6 @@ public sealed class HttpActuationHandler :
     private readonly HttpClient _httpClient;
     private readonly long _maxRequestBytes;
     private readonly long _maxResponseBytes;
-    private readonly bool _disposeClient;
 
     public HttpActuationHandler(HttpActuatorOptions options, HttpMessageHandler? messageHandler = null)
     {
@@ -34,7 +33,6 @@ public sealed class HttpActuationHandler :
                 UseCookies = false,
                 UseDefaultCredentials = false
             });
-            _disposeClient = true;
         }
         else
         {
@@ -45,39 +43,47 @@ public sealed class HttpActuationHandler :
     }
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, HttpGetTextCommand cmd)
-        => HandleCommand(() => SendAndReadAsync(HttpMethod.Get, cmd.Endpoint, cmd.Path, cmd.Query, cmd.Headers, content: null, ctx.Cancel));
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, HttpGetTextCommand cmd, CancellationToken cancellationToken)
+        => await HandleCommandAsync(async () => await SendAndReadAsync(HttpMethod.Get, cmd.Endpoint, cmd.Path, cmd.Query, cmd.Headers, content: null, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, HttpPostJsonCommand cmd)
-        => HandleCommand(() =>
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, HttpPostJsonCommand cmd, CancellationToken cancellationToken)
+        => await HandleCommandAsync(async () =>
         {
             ArgumentNullException.ThrowIfNull(cmd);
             ValidateJson(cmd.Json);
             var content = BuildUtf8Content(cmd.Json, "application/json");
-            return SendAndReadAsync(HttpMethod.Post, cmd.Endpoint, cmd.Path, cmd.Query, cmd.Headers, content, ctx.Cancel);
-        });
+            return await SendAndReadAsync(HttpMethod.Post, cmd.Endpoint, cmd.Path, cmd.Query, cmd.Headers, content, cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, HttpPostTextCommand cmd)
-        => HandleCommand(() =>
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, HttpPostTextCommand cmd, CancellationToken cancellationToken)
+        => await HandleCommandAsync(async () =>
         {
             ArgumentNullException.ThrowIfNull(cmd);
             if (string.IsNullOrWhiteSpace(cmd.ContentType))
                 throw new InvalidOperationException("ContentType is required.");
 
             var content = BuildUtf8Content(cmd.Text ?? string.Empty, cmd.ContentType);
-            return SendAndReadAsync(HttpMethod.Post, cmd.Endpoint, cmd.Path, cmd.Query, cmd.Headers, content, ctx.Cancel);
-        });
+            return await SendAndReadAsync(HttpMethod.Post, cmd.Endpoint, cmd.Path, cmd.Query, cmd.Headers, content, cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
     public void Dispose()
     {
-        if (_disposeClient)
-            _httpClient.Dispose();
+        _httpClient.Dispose();
     }
 
-    private ActuatorHost.HandlerResult HandleCommand(Func<HttpTextResult> action)
+    private static async ValueTask<ActuatorHost.HandlerResult> HandleCommandAsync(Func<Task<HttpTextResult>> action)
     {
         try
         {
-            var result = action();
+            var result = await action().ConfigureAwait(false);
             return ActuatorHost.HandlerResult.CompletedWithPayload(result);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or JsonException or HttpRequestException or OperationCanceledException)
@@ -86,7 +92,7 @@ public sealed class HttpActuationHandler :
         }
     }
 
-    private HttpTextResult SendAndReadAsync(
+    private async Task<HttpTextResult> SendAndReadAsync(
         HttpMethod method,
         string endpoint,
         string path,
@@ -95,10 +101,14 @@ public sealed class HttpActuationHandler :
         HttpContent? content,
         CancellationToken cancellationToken)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_resolver.Options.Timeout);
+        cancellationToken = timeout.Token;
+        using var ownedContent = content;
         using var request = CreateRequest(method, endpoint, path, query, headers, content);
-        using var response = _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).GetAwaiter().GetResult();
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 
-        var text = ReadBoundedText(response.Content, _maxResponseBytes, cancellationToken);
+        var text = await ReadBoundedTextAsync(response.Content, _maxResponseBytes, cancellationToken).ConfigureAwait(false);
         var resultHeaders = CollectHeaders(response);
 
         return new HttpTextResult((int)response.StatusCode, response.IsSuccessStatusCode, text, resultHeaders);
@@ -151,18 +161,18 @@ public sealed class HttpActuationHandler :
         }
     }
 
-    private static string ReadBoundedText(HttpContent content, long maxResponseBytes, CancellationToken cancellationToken)
+    private static async Task<string> ReadBoundedTextAsync(HttpContent content, long maxResponseBytes, CancellationToken cancellationToken)
     {
         if (content.Headers.ContentLength is long len && len > maxResponseBytes)
             throw new InvalidOperationException($"HTTP response body exceeds MaxResponseBytes ({maxResponseBytes}).");
 
-        using var stream = content.ReadAsStream(cancellationToken);
+        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
 
         var chunk = new byte[8192];
         while (true)
         {
-            var read = stream.Read(chunk, 0, chunk.Length);
+            var read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken).ConfigureAwait(false);
             if (read <= 0)
                 break;
 

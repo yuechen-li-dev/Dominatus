@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Dominatus.Actuators.Standard;
 
-public sealed class ProcessActuationHandler : IActuationHandler<RunProcessCommand>
+public sealed class ProcessActuationHandler : AsyncActuationHandler<RunProcessCommand>
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private readonly ProcessRequestResolver _resolver;
@@ -12,12 +12,12 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
     public ProcessActuationHandler(ProcessActuatorOptions options)
         => _resolver = new ProcessRequestResolver(options ?? throw new ArgumentNullException(nameof(options)));
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, RunProcessCommand cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, RunProcessCommand cmd, CancellationToken cancellationToken)
     {
         try
         {
             var resolved = _resolver.Resolve(cmd);
-            var result = RunProcess(resolved, ctx.Cancel);
+            var result = await RunProcessAsync(resolved, cancellationToken).ConfigureAwait(false);
             return Ok(result);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException)
@@ -26,75 +26,44 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
         }
     }
 
-    private ProcessResult RunProcess(ResolvedProcessRequest request, CancellationToken cancellationToken)
+    private async Task<ProcessResult> RunProcessAsync(ResolvedProcessRequest request, CancellationToken cancellationToken)
     {
         if (!File.Exists(request.ExecutablePath))
             throw new InvalidOperationException($"Executable not found for process '{request.ProcessName}': {request.ExecutablePath}");
-
         if (!Directory.Exists(request.WorkingDirectory))
             throw new InvalidOperationException($"Working directory does not exist: {request.WorkingDirectory}");
-
-        using var process = new Process();
-        process.StartInfo = BuildStartInfo(request);
-
-        if (!process.Start())
-            throw new InvalidOperationException($"Failed to start process '{request.ProcessName}'.");
-
-        var stdoutTask = ReadBoundedTextAsync(process.StandardOutput.BaseStream, _resolver.Options.MaxStdoutBytes, "stdout", CancellationToken.None);
-        var stderrTask = ReadBoundedTextAsync(process.StandardError.BaseStream, _resolver.Options.MaxStderrBytes, "stderr", CancellationToken.None);
-
-        using var timeoutCts = new CancellationTokenSource(request.Timeout);
-        using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-        var waitTask = process.WaitForExitAsync(combinedCts.Token);
-
-        while (!waitTask.IsCompleted)
+        cancellationToken.ThrowIfCancellationRequested();
+        using var timeout = new CancellationTokenSource(request.Timeout);
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        using var process = new Process { StartInfo = BuildStartInfo(request) };
+        if (!process.Start()) throw new InvalidOperationException($"Failed to start process '{request.ProcessName}'.");
+        var stdoutTask = ReadBoundedTextAsync(process.StandardOutput.BaseStream, _resolver.Options.MaxStdoutBytes, "stdout", combined.Token);
+        var stderrTask = ReadBoundedTextAsync(process.StandardError.BaseStream, _resolver.Options.MaxStderrBytes, "stderr", combined.Token);
+        var exitTask = process.WaitForExitAsync(combined.Token);
+        try
         {
-            var completed = Task.WhenAny(waitTask, stdoutTask, stderrTask).GetAwaiter().GetResult();
-
-            if (completed == stdoutTask || completed == stderrTask)
+            // Remove completed tasks: an early pipe EOF must not cause a busy loop.
+            var pending = new List<Task> { exitTask, stdoutTask, stderrTask };
+            while (pending.Count > 0)
             {
-                if (completed.IsFaulted && completed.Exception?.InnerException is OutputLimitExceededException limitEx)
-                {
-                    StopProcessAndDrain(process, stdoutTask, stderrTask);
-                    throw new InvalidOperationException(limitEx.Message);
-                }
+                var finished = await Task.WhenAny(pending).ConfigureAwait(false);
+                pending.Remove(finished);
+                await finished.ConfigureAwait(false);
+                combined.Token.ThrowIfCancellationRequested();
             }
+            return new ProcessResult(process.ExitCode, TimedOut: false,
+                await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false));
         }
-
-        try
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
         {
-            waitTask.GetAwaiter().GetResult();
+            await StopProcessAndDrainAsync(process, combined, exitTask, stdoutTask, stderrTask).ConfigureAwait(false);
+            return new ProcessResult(-1, TimedOut: true,
+                await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false));
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch
         {
-            StopProcessAndDrain(process, stdoutTask, stderrTask);
+            await StopProcessAndDrainAsync(process, combined, exitTask, stdoutTask, stderrTask).ConfigureAwait(false);
             throw;
-        }
-        catch (OperationCanceledException)
-        {
-            StopProcessAndDrain(process, stdoutTask, stderrTask);
-            var timeoutStdout = AwaitCompletedText(stdoutTask);
-            var timeoutStderr = AwaitCompletedText(stderrTask);
-            return new ProcessResult(-1, TimedOut: true, timeoutStdout, timeoutStderr);
-        }
-
-        WaitForProcessExit(process);
-        var stdout = AwaitCompletedText(stdoutTask);
-        var stderr = AwaitCompletedText(stderrTask);
-
-        return new ProcessResult(process.ExitCode, TimedOut: false, stdout, stderr);
-    }
-
-    private static string AwaitCompletedText(Task<string> task)
-    {
-        try
-        {
-            return task.GetAwaiter().GetResult();
-        }
-        catch (OutputLimitExceededException ex)
-        {
-            throw new InvalidOperationException(ex.Message);
         }
     }
 
@@ -127,12 +96,14 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
 
         while (true)
         {
-            var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken).ConfigureAwait(false);
+            int read;
+            try { read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
             if (read <= 0)
                 break;
 
             if (buffer.Length + read > maxBytes)
-                throw new OutputLimitExceededException($"Process {streamName} exceeds cap ({maxBytes} bytes).");
+                throw new InvalidOperationException($"Process {streamName} exceeds cap ({maxBytes} bytes).");
 
             buffer.Write(chunk, 0, read);
         }
@@ -153,47 +124,20 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
         }
     }
 
-    private static void StopProcessAndDrain(Process process, Task<string> stdoutTask, Task<string> stderrTask)
+    private static async Task StopProcessAndDrainAsync(Process process, CancellationTokenSource cancellation, params Task[] tasks)
     {
         TryKillProcessTree(process);
-        WaitForProcessExit(process);
-        AwaitCleanup(stdoutTask);
-        AwaitCleanup(stderrTask);
-    }
-
-    private static void WaitForProcessExit(Process process)
-    {
-        const int ExitTimeoutMs = 5000;
-
-        if (process.HasExited)
+        cancellation.Cancel();
+        // Await the uncanceled exit separately. Every redirected read and exit task remains owned.
+        try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+        catch (TimeoutException ex)
         {
-            process.WaitForExit();
-            return;
+            throw new InvalidOperationException($"Process '{process.StartInfo.FileName}' did not exit within 5000ms of termination.", ex);
         }
-
-        if (!process.WaitForExit(ExitTimeoutMs))
-            throw new InvalidOperationException($"Process '{process.StartInfo.FileName}' did not exit within {ExitTimeoutMs}ms of termination.");
-
-        process.WaitForExit();
-    }
-
-    private static void AwaitCleanup(Task<string> task)
-    {
-        try
+        finally
         {
-            task.GetAwaiter().GetResult();
-        }
-        catch (OutputLimitExceededException)
-        {
-            // Expected when we're cleaning up after an output-cap violation.
-        }
-        catch (OperationCanceledException)
-        {
-            // Streams may be interrupted by process termination.
-        }
-        catch (IOException)
-        {
-            // Redirected pipe teardown can surface as I/O after termination.
+            try { await Task.WhenAll(tasks).ConfigureAwait(false); }
+            catch (Exception) { /* The original failure is reported after all sibling tasks are observed. */ }
         }
     }
 
@@ -203,5 +147,4 @@ public sealed class ProcessActuationHandler : IActuationHandler<RunProcessComman
     private static ActuatorHost.HandlerResult Fail(string message)
         => new(Accepted: true, Completed: true, Ok: false, Error: message);
 
-    private sealed class OutputLimitExceededException(string message) : Exception(message);
 }

@@ -1,5 +1,8 @@
 # Dominatus.Actuators.Standard M1 — Allowlisted HTTP Actuators
 
+Current execution contract: [async effects and agent suspension](ASYNC-ACTUATION.md).
+Dispatch may be incomplete; consume completion evidence on subsequent world ticks.
+
 ## Purpose
 
 M1 adds safe, typed HTTP text actuators to `Dominatus.Actuators.Standard` using .NET's built-in HTTP stack (`HttpClient`/`HttpMessageHandler`) while preserving strict effect-boundary controls.

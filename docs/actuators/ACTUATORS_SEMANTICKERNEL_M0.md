@@ -1,5 +1,8 @@
 # Dominatus.Actuators.SemanticKernel M0
 
+Current execution contract: [async effects and agent suspension](ASYNC-ACTUATION.md).
+Dispatch may be incomplete; consume completion evidence on subsequent world ticks.
+
 ## Purpose
 `Dominatus.Actuators.SemanticKernel` exposes **allowlisted Semantic Kernel plugin functions** as typed Dominatus actuations.
 

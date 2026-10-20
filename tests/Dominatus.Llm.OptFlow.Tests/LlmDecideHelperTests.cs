@@ -14,6 +14,40 @@ public sealed class LlmDecideHelperTests
     private static readonly BbKey<string> RationaleKey = new("decision.rationale");
     private static readonly BbKey<string> ResultJsonKey = new("decision.resultJson");
 
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Pending_decision_binds_evidence_or_reports_cancellation_without_stranding_the_step(bool cancel)
+    {
+        var (world, original) = CreateWorldAndCtx(new FakeLlmDecisionClient(CreateResult(BuildRequestHash())), LlmCassetteMode.Live);
+        await using var host = (ActuatorHost)original.Act;
+        var client = new PendingDecisionClient(); var cassette = new InMemoryLlmDecisionCassette();
+        host.Register(new LlmDecisionScoringHandler(client, cassette, LlmCassetteMode.Record));
+        using var cancellation = new CancellationTokenSource();
+        var ctx = new AiCtx(world, original.Agent, original.Events, cancellation.Token, world.View, world.Mail, host);
+        var step = Assert.IsAssignableFrom<IWaitEvent>(CreateStep()); EventCursor cursor = default;
+        Assert.False(step.TryConsume(ctx, ref cursor)); Assert.Single(ctx.Agent.InFlightActuations);
+        if (cancel) cancellation.Cancel();
+        client.Source.SetResult(CreateResult(BuildRequestHash()));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (ctx.Agent.InFlightActuations.Count > 0)
+        { timeout.Token.ThrowIfCancellationRequested(); host.Tick(world); await Task.Yield(); }
+        if (cancel)
+        {
+            Assert.Throws<InvalidOperationException>(() => step.TryConsume(ctx, ref cursor));
+            Assert.False(cassette.TryGet(BuildRequestHash(), out _)); Assert.False(ctx.Bb.TryGet(ChosenKey, out _));
+        }
+        else
+        {
+            Assert.True(step.TryConsume(ctx, ref cursor)); Assert.Equal("negotiate", ctx.Bb.GetOrDefault(ChosenKey, ""));
+            Assert.True(cassette.TryGet(BuildRequestHash(), out _));
+        }
+    }
+    private sealed class PendingDecisionClient : ILlmDecisionClient
+    {
+        public readonly TaskCompletionSource<LlmDecisionResult> Source = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Deliberately ignores cancellation: the boundary must reject late success.
+        public Task<LlmDecisionResult> ScoreOptionsAsync(LlmDecisionRequest request, string hash, CancellationToken ct) => Source.Task;
+    }
+
     [Fact]
     public void LlmOption_CreatesDecisionOption()
     {

@@ -286,6 +286,37 @@ public sealed class PaymentTests
         }
     }
 
+    [Theory]
+    [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)]
+    public async Task Every_payment_command_defers_and_propagates_host_cancellation(int index)
+    {
+        var provider = new PendingPaymentProvider();
+        await using var host = NewHost(provider); var ctx = NewCtx(host);
+        IActuationCommand[] commands = [Checkout("k"), Intent("k"), new CapturePaymentCommand("fake", "k", "p"),
+            new RefundPaymentCommand("fake", "k", "p"), new CancelPaymentCommand("fake", "k", "p"), new GetPaymentStatusCommand("fake", "p")];
+        Assert.False(host.Dispatch(ctx, commands[index]).Completed);
+        Assert.Single(ctx.Agent.InFlightActuations);
+        await host.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(provider.Canceled); Assert.Empty(ctx.Agent.InFlightActuations);
+    }
+
+    private sealed class PendingPaymentProvider : IPaymentProvider
+    {
+        public string ProviderId => "fake";
+        public bool Canceled;
+        private async ValueTask<T> Pending<T>(CancellationToken ct)
+        {
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return default!; }
+            finally { Canceled = ct.IsCancellationRequested; }
+        }
+        public ValueTask<CreateCheckoutSessionResult> CreateCheckoutSessionAsync(CreateCheckoutSessionCommand command, CancellationToken ct) => Pending<CreateCheckoutSessionResult>(ct);
+        public ValueTask<CreatePaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentCommand command, CancellationToken ct) => Pending<CreatePaymentIntentResult>(ct);
+        public ValueTask<CapturePaymentResult> CapturePaymentAsync(CapturePaymentCommand command, CancellationToken ct) => Pending<CapturePaymentResult>(ct);
+        public ValueTask<RefundPaymentResult> RefundPaymentAsync(RefundPaymentCommand command, CancellationToken ct) => Pending<RefundPaymentResult>(ct);
+        public ValueTask<CancelPaymentResult> CancelPaymentAsync(CancelPaymentCommand command, CancellationToken ct) => Pending<CancelPaymentResult>(ct);
+        public ValueTask<GetPaymentStatusResult> GetPaymentStatusAsync(GetPaymentStatusCommand command, CancellationToken ct) => Pending<GetPaymentStatusResult>(ct);
+    }
+
     private sealed class SecretFailProvider : IPaymentProvider
     {
         public string ProviderId => "secretfail";

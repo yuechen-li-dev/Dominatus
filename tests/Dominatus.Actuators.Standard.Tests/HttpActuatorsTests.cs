@@ -11,6 +11,59 @@ namespace Dominatus.Actuators.Standard.Tests;
 
 public sealed class HttpActuatorsTests
 {
+    [Theory]
+    [InlineData("get")]
+    [InlineData("json")]
+    [InlineData("text")]
+    public async Task Pending_transport_defers_every_command_and_finishes_on_tick(string kind)
+    {
+        var reply = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var handler = NewHttpHandler((_, ct) => reply.Task.WaitAsync(ct));
+        await using var host = new ActuatorHost();
+        host.Register<HttpGetTextCommand>(handler); host.Register<HttpPostJsonCommand>(handler); host.Register<HttpPostTextCommand>(handler);
+        var ctx = NewCtx(host);
+        IActuationCommand command = kind switch
+        {
+            "json" => new HttpPostJsonCommand("api", "submit", "{}"),
+            "text" => new HttpPostTextCommand("api", "submit", "hello"),
+            _ => new HttpGetTextCommand("api", "status")
+        };
+        var dispatch = host.Dispatch(ctx, command); Assert.False(dispatch.Completed);
+        reply.SetResult(HttpResponse(HttpStatusCode.OK, "async evidence"));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (ctx.Agent.InFlightActuations.Count > 0)
+        { timeout.Token.ThrowIfCancellationRequested(); host.Tick(ctx.World); await Task.Yield(); }
+        EventCursor cursor = default;
+        Assert.True(ctx.Events.TryConsume<ActuationCompleted<HttpTextResult>>(ref cursor, null, out var result));
+        Assert.True(result.Ok); Assert.Equal("async evidence", result.Payload!.Text);
+    }
+
+    [Fact]
+    public async Task Timeout_covers_response_body_after_headers_have_arrived()
+    {
+        using var handler = NewHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StreamContent(new PendingReadStream()) },
+            BaseOptions with { Timeout = TimeSpan.FromMilliseconds(50) });
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), default)
+            .AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(result.Ok);
+    }
+
+    private sealed class PendingReadStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return 0; }
+        public override int Read(byte[] buffer, int offset, int count) => throw new InvalidOperationException("Synchronous body reads are forbidden.");
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
     [Fact]
     public void HttpOptions_RejectsNoEndpoints()
     {
@@ -139,10 +192,10 @@ public sealed class HttpActuatorsTests
     }
 
     [Fact]
-    public void HttpGetText_ReturnsStatusTextAndHeaders()
+    public async Task HttpGetText_ReturnsStatusTextAndHeaders()
     {
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.OK, "hello", headers: new Dictionary<string, string[]> { ["X-Test"] = ["1"] }));
-        var result = handler.Handle(null!, NewCtx(), default, new HttpGetTextCommand("api", "status"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), CancellationToken.None);
 
         var payload = Assert.IsType<HttpTextResult>(result.Payload);
         Assert.True(result.Ok);
@@ -152,10 +205,10 @@ public sealed class HttpActuatorsTests
     }
 
     [Fact]
-    public void HttpGetText_ReturnsNonSuccessStatusAsResult()
+    public async Task HttpGetText_ReturnsNonSuccessStatusAsResult()
     {
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.NotFound, "missing"));
-        var result = handler.Handle(null!, NewCtx(), default, new HttpGetTextCommand("api", "missing"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "missing"), CancellationToken.None);
 
         var payload = Assert.IsType<HttpTextResult>(result.Payload);
         Assert.True(result.Ok);
@@ -164,27 +217,27 @@ public sealed class HttpActuatorsTests
     }
 
     [Fact]
-    public void HttpGetText_RejectsResponseOverMaxBytes()
+    public async Task HttpGetText_RejectsResponseOverMaxBytes()
     {
         var options = BaseOptions with { MaxResponseBytes = 3 };
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.OK, "hello"), options);
 
-        var result = handler.Handle(null!, NewCtx(), default, new HttpGetTextCommand("api", "status"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("MaxResponseBytes", result.Error);
     }
 
     [Fact]
-    public void HttpGetText_TransportExceptionFails()
+    public async Task HttpGetText_TransportExceptionFails()
     {
         var handler = NewHttpHandler(_ => throw new HttpRequestException("boom"));
-        var result = handler.Handle(null!, NewCtx(), default, new HttpGetTextCommand("api", "status"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("boom", result.Error);
     }
 
     [Fact]
-    public void HttpGetText_TimeoutFails()
+    public async Task HttpGetText_TimeoutFails()
     {
         var handler = NewHttpHandler(async (_, ct) =>
         {
@@ -192,12 +245,12 @@ public sealed class HttpActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "late");
         }, BaseOptions with { Timeout = TimeSpan.FromMilliseconds(30) });
 
-        var result = handler.Handle(null!, NewCtx(), default, new HttpGetTextCommand("api", "status"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), CancellationToken.None);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void HttpGetText_CancellationFailsOrPropagatesConsistently()
+    public async Task HttpGetText_CancellationFailsOrPropagatesConsistently()
     {
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -207,12 +260,12 @@ public sealed class HttpActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "nope");
         });
 
-        var result = handler.Handle(null!, NewCtx(cancellationToken: cts.Token), default, new HttpGetTextCommand("api", "status"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), cancellationToken: cts.Token);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void HttpPostJson_SendsApplicationJsonBody()
+    public async Task HttpPostJson_SendsApplicationJsonBody()
     {
         HttpRequestMessage? seen = null;
         var handler = NewHttpHandler(req =>
@@ -221,13 +274,13 @@ public sealed class HttpActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "ok");
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostJsonCommand("api", "submit", "{\"a\":1}"));
+        var result = await handler.HandleAsync(default, new HttpPostJsonCommand("api", "submit", "{\"a\":1}"), CancellationToken.None);
         Assert.True(result.Ok);
         Assert.Equal("application/json", seen!.Content!.Headers.ContentType!.MediaType);
     }
 
     [Fact]
-    public void HttpPostJson_RejectsMalformedJsonBeforeTransport()
+    public async Task HttpPostJson_RejectsMalformedJsonBeforeTransport()
     {
         var called = false;
         var handler = NewHttpHandler(_ =>
@@ -236,30 +289,30 @@ public sealed class HttpActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "ok");
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostJsonCommand("api", "submit", "{"));
+        var result = await handler.HandleAsync(default, new HttpPostJsonCommand("api", "submit", "{"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.False(called);
     }
 
     [Fact]
-    public void HttpPostJson_RejectsRequestOverMaxBytes()
+    public async Task HttpPostJson_RejectsRequestOverMaxBytes()
     {
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.OK, "ok"), BaseOptions with { MaxRequestBytes = 2 });
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostJsonCommand("api", "submit", "{\"a\":1}"));
+        var result = await handler.HandleAsync(default, new HttpPostJsonCommand("api", "submit", "{\"a\":1}"), CancellationToken.None);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void HttpPostJson_ReturnsResponseText()
+    public async Task HttpPostJson_ReturnsResponseText()
     {
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.Created, "created"));
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostJsonCommand("api", "submit", "{\"a\":1}"));
+        var result = await handler.HandleAsync(default, new HttpPostJsonCommand("api", "submit", "{\"a\":1}"), CancellationToken.None);
         var payload = Assert.IsType<HttpTextResult>(result.Payload);
         Assert.Equal("created", payload.Text);
     }
 
     [Fact]
-    public void HttpPostText_SendsConfiguredContentType()
+    public async Task HttpPostText_SendsConfiguredContentType()
     {
         HttpRequestMessage? seen = null;
         var handler = NewHttpHandler(req =>
@@ -268,29 +321,29 @@ public sealed class HttpActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "ok");
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostTextCommand("api", "submit", "hello", "text/markdown"));
+        var result = await handler.HandleAsync(default, new HttpPostTextCommand("api", "submit", "hello", "text/markdown"), CancellationToken.None);
         Assert.True(result.Ok);
         Assert.Equal("text/markdown", seen!.Content!.Headers.ContentType!.MediaType);
     }
 
     [Fact]
-    public void HttpPostText_RejectsEmptyContentType()
+    public async Task HttpPostText_RejectsEmptyContentType()
     {
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.OK, "ok"));
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostTextCommand("api", "submit", "hello", " "));
+        var result = await handler.HandleAsync(default, new HttpPostTextCommand("api", "submit", "hello", " "), CancellationToken.None);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void HttpPostText_RejectsRequestOverMaxBytes()
+    public async Task HttpPostText_RejectsRequestOverMaxBytes()
     {
         var handler = NewHttpHandler(_ => HttpResponse(HttpStatusCode.OK, "ok"), BaseOptions with { MaxRequestBytes = 2 });
-        var result = handler.Handle(null!, NewCtx(), default, new HttpPostTextCommand("api", "submit", "hello"));
+        var result = await handler.HandleAsync(default, new HttpPostTextCommand("api", "submit", "hello"), CancellationToken.None);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void HttpRedirect_DefaultDoesNotAutoFollow()
+    public async Task HttpRedirect_DefaultDoesNotAutoFollow()
     {
         var handler = NewHttpHandler(_ =>
         {
@@ -302,7 +355,7 @@ public sealed class HttpActuatorsTests
             return response;
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, new HttpGetTextCommand("api", "status"));
+        var result = await handler.HandleAsync(default, new HttpGetTextCommand("api", "status"), CancellationToken.None);
         var payload = Assert.IsType<HttpTextResult>(result.Payload);
         Assert.Equal(302, payload.StatusCode);
     }

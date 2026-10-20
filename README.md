@@ -32,6 +32,8 @@ Dominatus therefore keeps the runtime loop deterministic and typed. Provider cal
 
 ### For backend and automation developers
 
+- [Async effects and agent suspension](docs/actuators/ASYNC-ACTUATION.md) � the shared contract for C# `await`, `Ai.Act`/`Ai.Await`, streaming, cancellation and resource ownership.
+
 - [Standard actuators](docs/actuators/ACTUATORS_STANDARD_M0.md) — sandboxed files, HTTP, process, calendar, and web-safety building blocks.
 - [Payments author guide](docs/actuators/ACTUATORS_PAYMENTS_AUTHOR_GUIDE.md) — provider-neutral payment commands, fake provider, Stripe, PayPal, idempotency, webhook events, and no-hidden-fee doctrine.
 - [Audio actuators](docs/actuators/ACTUATORS_AUDIO_M0.md) — provider-neutral audio generation, fake WAV output, ElevenLabs, local/open TTS seam, and explicit provenance metadata.

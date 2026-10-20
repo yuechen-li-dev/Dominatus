@@ -172,12 +172,12 @@ public sealed class ProcessActuatorsTests
     }
 
     [Fact]
-    public void ProcessTestTool_CanRunStdoutSmoke()
+    public async Task ProcessTestTool_CanRunStdoutSmoke()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path));
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "smoke"));
+        var result = await handler.HandleAsync(default, ToolCommand("stdout", "smoke"), CancellationToken.None);
         var payload = AssertProcessOk(result, "smoke");
         Assert.Equal(0, payload.ExitCode);
         Assert.Equal("smoke", payload.Stdout);
@@ -185,12 +185,12 @@ public sealed class ProcessActuatorsTests
     }
 
     [Fact]
-    public void RunProcess_ReturnsExitCodeStdoutAndStderr()
+    public async Task RunProcess_ReturnsExitCodeStdoutAndStderr()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path));
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "hello"));
+        var result = await handler.HandleAsync(default, ToolCommand("stdout", "hello"), CancellationToken.None);
         var payload = AssertProcessOk(result, "hello");
         Assert.Equal(0, payload.ExitCode);
         Assert.Equal("hello", payload.Stdout);
@@ -198,29 +198,29 @@ public sealed class ProcessActuatorsTests
     }
 
     [Fact]
-    public void RunProcess_NonZeroExitCodeReturnsProcessResult()
+    public async Task RunProcess_NonZeroExitCodeReturnsProcessResult()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path));
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("exit", "7"));
+        var result = await handler.HandleAsync(default, ToolCommand("exit", "7"), CancellationToken.None);
         var payload = AssertProcessOk(result, "7");
         Assert.Equal(7, payload.ExitCode);
         Assert.False(payload.TimedOut);
     }
 
     [Fact]
-    public void RunProcess_UnknownProcessFails()
+    public async Task RunProcess_UnknownProcessFails()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path));
 
-        var result = handler.Handle(null!, NewCtx(), default, new RunProcessCommand("missing", []));
+        var result = await handler.HandleAsync(default, new RunProcessCommand("missing", []), CancellationToken.None);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void RunProcess_MissingExecutableFails()
+    public async Task RunProcess_MissingExecutableFails()
     {
         using var dir = new TempDir();
         var options = BaseOptions(dir.Path) with
@@ -229,59 +229,59 @@ public sealed class ProcessActuatorsTests
         };
         var handler = NewHandler(options);
 
-        var result = handler.Handle(null!, NewCtx(), default, new RunProcessCommand("tool", []));
+        var result = await handler.HandleAsync(default, new RunProcessCommand("tool", []), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("Executable not found", result.Error);
     }
 
     [Fact]
-    public void RunProcess_UsesWorkingDirectory()
+    public async Task RunProcess_UsesWorkingDirectory()
     {
         using var dir = new TempDir();
         var nested = Path.Combine(dir.Path, "nested");
         Directory.CreateDirectory(nested);
         var handler = NewHandler(BaseOptions(dir.Path));
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("cwd", WorkingDirectory: "nested"));
+        var result = await handler.HandleAsync(default, ToolCommand("cwd", WorkingDirectory: "nested"), CancellationToken.None);
         var payload = AssertProcessOk(result, "nested");
         Assert.Equal(Path.GetFullPath(nested), payload.Stdout);
     }
 
     [Fact]
-    public void RunProcess_PassesArgumentsWithoutShell()
+    public async Task RunProcess_PassesArgumentsWithoutShell()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path));
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "a && b | c"));
+        var result = await handler.HandleAsync(default, ToolCommand("stdout", "a && b | c"), CancellationToken.None);
         var payload = AssertProcessOk(result, "a && b | c");
         Assert.Equal("a && b | c", payload.Stdout);
     }
 
     [Fact]
-    public void RunProcess_RejectsStdoutOverCap()
+    public async Task RunProcess_RejectsStdoutOverCap()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path) with { MaxStdoutBytes = 3 });
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stdout", "hello"));
+        var result = await handler.HandleAsync(default, ToolCommand("stdout", "hello"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("stdout", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void RunProcess_RejectsStderrOverCap()
+    public async Task RunProcess_RejectsStderrOverCap()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path) with { MaxStderrBytes = 3 });
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("stderr", "hello"));
+        var result = await handler.HandleAsync(default, ToolCommand("stderr", "hello"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("stderr", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void RunProcess_TimeoutReturnsTimedOutResultOrFailure_AsDocumented()
+    public async Task RunProcess_TimeoutReturnsTimedOutResultOrFailure_AsDocumented()
     {
         using var dir = new TempDir();
         var handler = NewHandler(BaseOptions(dir.Path) with
@@ -290,34 +290,43 @@ public sealed class ProcessActuatorsTests
             MaxTimeout = TimeSpan.FromSeconds(1)
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, ToolCommand("sleep", "1000"));
+        var result = await handler.HandleAsync(default, ToolCommand("sleep", "1000"), CancellationToken.None);
         var payload = AssertProcessOk(result, "timeout");
         Assert.True(payload.TimedOut);
         Assert.Equal(-1, payload.ExitCode);
     }
 
     [Fact]
-    public void RunProcess_CancellationHandledConsistently()
+    public async Task RunProcess_CancellationHandledConsistently()
     {
         using var dir = new TempDir();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         var handler = NewHandler(BaseOptions(dir.Path));
-        var result = handler.Handle(null!, NewCtx(cts.Token), default, ToolCommand("sleep", "1000"));
+        var result = await handler.HandleAsync(default, ToolCommand("sleep", "1000"), cts.Token);
         Assert.False(result.Ok);
     }
 
     [Fact]
-    public void ActuatorHost_RunProcess_CompletesWithProcessResult()
+    public async Task ActuatorHost_RunProcess_CompletesWithProcessResult()
     {
         using var dir = new TempDir();
         var host = new ActuatorHost();
         host.RegisterStandardProcessActuators(BaseOptions(dir.Path));
 
-        var dispatch = host.Dispatch(NewCtx(host), ToolCommand("stdout", "ok"));
-        Assert.True(dispatch.Ok);
-        Assert.IsType<ProcessResult>(dispatch.Payload);
+        await using var owned = host;
+        var ctx = NewCtx(host);
+        var dispatch = host.Dispatch(ctx, ToolCommand("stdout", "ok"));
+        Assert.True(dispatch.Accepted);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (ctx.Agent.InFlightActuations.Count > 0)
+        {
+            timeout.Token.ThrowIfCancellationRequested(); host.Tick(ctx.World); await Task.Yield();
+        }
+        EventCursor cursor = default;
+        Assert.True(ctx.Agent.Events.TryConsume<ActuationCompleted<ProcessResult>>(ref cursor, null, out var completion));
+        Assert.True(completion.Ok); Assert.Equal("ok", completion.Payload!.Stdout);
     }
 
     [Fact]
@@ -329,6 +338,38 @@ public sealed class ProcessActuatorsTests
 
         var dispatch = host.Dispatch(NewCtx(host), new RunProcessCommand("tool", [], WorkingDirectoryRoot: "workspace", WorkingDirectory: "../oops"));
         Assert.False(dispatch.Ok);
+    }
+
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("dispose")]
+    [InlineData("output-limit")]
+    public async Task Pending_processes_are_reaped_on_cancellation_disposal_and_output_limit(string action)
+    {
+        using var dir = new TempDir();
+        await using var host = new ActuatorHost();
+        host.RegisterStandardProcessActuators(BaseOptions(dir.Path) with { MaxStdoutBytes = 32 });
+        using var cancellation = new CancellationTokenSource();
+        var ctx = NewCtx(host, cancellation.Token);
+        var pidFile = Path.Combine(dir.Path, "child.pid");
+        var command = ToolCommand(action == "output-limit" ? "flood-sleep" : "pid-sleep", pidFile);
+        Assert.False(host.Dispatch(ctx, command).Completed);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (!File.Exists(pidFile) || new FileInfo(pidFile).Length == 0)
+            await Task.Delay(5, deadline.Token);
+        var pid = int.Parse(await File.ReadAllTextAsync(pidFile, deadline.Token));
+        if (action == "dispose") await host.DisposeAsync();
+        else
+        {
+            if (action == "cancel") cancellation.Cancel();
+            while (ctx.Agent.InFlightActuations.Count > 0)
+            { deadline.Token.ThrowIfCancellationRequested(); host.Tick(ctx.World); await Task.Yield(); }
+            EventCursor cursor = default;
+            Assert.True(ctx.Events.TryConsume<ActuationCompleted>(ref cursor, null, out var result));
+            Assert.False(result.Ok);
+        }
+        try { using var child = Process.GetProcessById(pid); Assert.True(child.HasExited); }
+        catch (ArgumentException) { /* Reaped before lookup. */ }
     }
 
     private static ProcessActuationHandler NewHandler(ProcessActuatorOptions options)

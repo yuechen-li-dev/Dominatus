@@ -10,7 +10,7 @@ public static class StandardHttpActuatorRegistration
             throw new ArgumentNullException(nameof(host));
 
         var handler = new HttpActuationHandler(options, messageHandler);
-        host.Register<HttpGetTextCommand>(handler);
+        host.Register<HttpGetTextCommand>(handler, ownsHandler: true);
         host.Register<HttpPostJsonCommand>(handler);
         host.Register<HttpPostTextCommand>(handler);
         return host;

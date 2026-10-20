@@ -2,13 +2,14 @@ using Dominatus.Core.Runtime;
 
 namespace Dominatus.Llm.OptFlow;
 
-public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
+public sealed class LlmMagiDecisionHandler : AsyncActuationHandler<LlmMagiRequest>
 {
     private readonly ILlmDecisionClient _advocateAClient;
     private readonly ILlmDecisionClient _advocateBClient;
     private readonly ILlmMagiJudgeClient _judgeClient;
     private readonly ILlmMagiCassette _cassette;
     private readonly LlmCassetteMode _mode;
+    private readonly object _cassetteGate = new();
 
     public LlmMagiDecisionHandler(
         ILlmDecisionClient advocateAClient,
@@ -24,16 +25,16 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
         _mode = mode;
     }
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, LlmMagiRequest cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, LlmMagiRequest cmd, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(cmd);
 
         var requestHash = LlmMagiRequestHasher.ComputeHash(cmd);
 
         try
         {
-            var result = Resolve(cmd, requestHash, ctx.Cancel);
+            var result = await ResolveAsync(cmd, requestHash, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             return ActuatorHost.HandlerResult.CompletedWithPayload(result);
         }
         catch (Exception ex)
@@ -46,11 +47,11 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
         }
     }
 
-    private LlmMagiDecisionResult Resolve(LlmMagiRequest request, string requestHash, CancellationToken cancellationToken)
+    private async ValueTask<LlmMagiDecisionResult> ResolveAsync(LlmMagiRequest request, string requestHash, CancellationToken cancellationToken)
     {
         if (_mode is LlmCassetteMode.Replay or LlmCassetteMode.Strict)
         {
-            if (!_cassette.TryGet(requestHash, out var replayResult))
+            if (!TryGet(requestHash, out var replayResult))
             {
                 throw new InvalidOperationException("Cassette entry not found.");
             }
@@ -59,23 +60,26 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
             return replayResult;
         }
 
-        if (_mode is LlmCassetteMode.Record && _cassette.TryGet(requestHash, out var recorded))
+        if (_mode is LlmCassetteMode.Record && TryGet(requestHash, out var recorded))
         {
             LlmMagiResultValidator.ValidateDecisionResultAgainstRequest(request, requestHash, recorded);
             return recorded;
         }
 
+        if (_mode is not (LlmCassetteMode.Live or LlmCassetteMode.Record))
+            throw new InvalidOperationException($"Unsupported cassette mode '{_mode}'.");
+
         var advocateARequest = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateA);
         var advocateAHash = LlmDecisionRequestHasher.ComputeHash(advocateARequest);
         var advocateBRequest = LlmMagiResultValidator.BuildAdvocateRequest(request, request.AdvocateB);
         var advocateBHash = LlmDecisionRequestHasher.ComputeHash(advocateBRequest);
-        var advocateATask = _advocateAClient.ScoreOptionsAsync(advocateARequest, advocateAHash, cancellationToken);
-        var advocateBTask = _advocateBClient.ScoreOptionsAsync(advocateBRequest, advocateBHash, cancellationToken);
+        var advocateATask = ScoreAdvocateAsync(_advocateAClient, advocateARequest, advocateAHash, cancellationToken);
+        var advocateBTask = ScoreAdvocateAsync(_advocateBClient, advocateBRequest, advocateBHash, cancellationToken);
 
-        WaitForAdvocates(advocateATask, advocateBTask);
+        await WaitForAdvocatesAsync(advocateATask, advocateBTask).ConfigureAwait(false);
 
-        var advocateAResult = advocateATask.GetAwaiter().GetResult();
-        var advocateBResult = advocateBTask.GetAwaiter().GetResult();
+        var advocateAResult = await advocateATask.ConfigureAwait(false);
+        var advocateBResult = await advocateBTask.ConfigureAwait(false);
 
         if (advocateAResult is null)
         {
@@ -90,9 +94,9 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
         LlmDecisionResultValidator.ValidateAgainstRequest(advocateARequest, advocateAHash, advocateAResult);
         LlmDecisionResultValidator.ValidateAgainstRequest(advocateBRequest, advocateBHash, advocateBResult);
 
-        var judgment = _judgeClient.JudgeAsync(request, requestHash, advocateAResult, advocateBResult, cancellationToken)
-            .GetAwaiter()
-            .GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+        var judgment = await _judgeClient.JudgeAsync(request, requestHash, advocateAResult, advocateBResult, cancellationToken)
+            .ConfigureAwait(false);
 
         if (judgment is null)
         {
@@ -114,20 +118,29 @@ public sealed class LlmMagiDecisionHandler : IActuationHandler<LlmMagiRequest>
 
         if (_mode is LlmCassetteMode.Record)
         {
-            _cassette.Put(requestHash, request, result);
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_cassetteGate) _cassette.Put(requestHash, request, result);
         }
 
         return result;
     }
 
+    private bool TryGet(string hash, out LlmMagiDecisionResult result)
+    { lock (_cassetteGate) return _cassette.TryGet(hash, out result); }
+
     private static string BuildFailureMessage(LlmCassetteMode mode, string stableId, string requestHash, string reason)
         => $"LlmMagi decision failed (Mode={mode}, StableId={stableId}, RequestHash={requestHash}). {reason}";
 
-    private static void WaitForAdvocates(Task<LlmDecisionResult> advocateATask, Task<LlmDecisionResult> advocateBTask)
+    // Wrap synchronous provider throws into an owned task so the other advocate is still observed.
+    private static async Task<LlmDecisionResult> ScoreAdvocateAsync(ILlmDecisionClient client,
+        LlmDecisionRequest request, string hash, CancellationToken cancellationToken)
+        => await client.ScoreOptionsAsync(request, hash, cancellationToken).ConfigureAwait(false);
+
+    private static async Task WaitForAdvocatesAsync(Task<LlmDecisionResult> advocateATask, Task<LlmDecisionResult> advocateBTask)
     {
         try
         {
-            Task.WhenAll(advocateATask, advocateBTask).GetAwaiter().GetResult();
+            await Task.WhenAll(advocateATask, advocateBTask).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

@@ -1,5 +1,8 @@
 # Dominatus.Actuators.HomeAssistant (M0)
 
+Current execution contract: [async effects and agent suspension](ASYNC-ACTUATION.md).
+Dispatch may be incomplete; consume completion evidence on subsequent world ticks.
+
 ## Purpose
 
 `Dominatus.Actuators.HomeAssistant` is a typed, allowlisted REST actuator pack for Dominatus.
@@ -89,7 +92,7 @@ HomeAssistantServiceCallResult(StatusCode, IsSuccessStatusCode, Json)
 
 ## HTTP behavior and completion strategy
 
-- Uses synchronous bounded completion within `ActuatorHost` handler calls.
+- Uses asynchronous bounded completion through `AsyncActuationHandler`; the owner tick publishes results.
 - Honors configured timeout.
 - Request/response bodies are size-capped (`MaxRequestBytes`, `MaxResponseBytes`).
 - No redirects, no cookies, no default credentials.

@@ -1,5 +1,8 @@
 # Dominatus.Actuators.Audio M0
 
+Current execution contract: [async effects and agent suspension](ASYNC-ACTUATION.md).
+Dispatch may be incomplete; consume completion evidence on subsequent world ticks.
+
 Dominatus.Actuators.Audio is the provider-neutral audio actuator family. M0 focuses on commands, validation, provider routing, artifact writing, deterministic fake generation, open metadata sidecars, and tests. It does not include live provider SDKs, network calls, voice cloning, speech-to-text, music generation, telemetry, DRM, or playback engines.
 
 ## Commands

@@ -11,6 +11,24 @@ namespace Dominatus.Actuators.HomeAssistant.Tests;
 
 public sealed class HomeAssistantActuatorsTests
 {
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Both_commands_defer_and_cancel_the_transport_on_host_shutdown(bool service)
+    {
+        CancellationToken transportToken = default;
+        using var handler = NewHandler(async (_, ct) =>
+        {
+            transportToken = ct; await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        await using var host = new ActuatorHost();
+        host.Register<GetHomeAssistantStateCommand>(handler); host.Register<CallHomeAssistantServiceCommand>(handler);
+        var ctx = NewCtx(host);
+        IActuationCommand command = service ? new CallHomeAssistantServiceCommand("light", "turn_on", "{}")
+            : new GetHomeAssistantStateCommand("light.office_lamp");
+        Assert.False(host.Dispatch(ctx, command).Completed);
+        await host.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(transportToken.IsCancellationRequested); Assert.Empty(ctx.Agent.InFlightActuations);
+    }
     [Fact] public void HomeAssistantOptions_RejectsNullBaseUri() => Assert.Throws<ArgumentNullException>(() => new HomeAssistantRequestResolver(BaseOptions with { BaseUri = null! }));
     [Fact] public void HomeAssistantOptions_RejectsRelativeBaseUri() => Assert.Throws<ArgumentException>(() => new HomeAssistantRequestResolver(BaseOptions with { BaseUri = new Uri("/relative", UriKind.Relative) }));
     [Fact] public void HomeAssistantOptions_RejectsUserInfoBaseUri() => Assert.Throws<ArgumentException>(() => new HomeAssistantRequestResolver(BaseOptions with { BaseUri = new Uri("http://user:pass@ha.local:8123/") }));
@@ -99,7 +117,7 @@ public sealed class HomeAssistantActuatorsTests
         => Assert.Throws<InvalidOperationException>(() => NewResolver(BaseOptions with { MaxRequestBytes = 5 }).Resolve(new CallHomeAssistantServiceCommand("light", "turn_on", "{\"entity_id\":\"light.office_lamp\"}")));
 
     [Fact]
-    public void GetState_SendsBearerTokenAndAcceptJson()
+    public async Task GetState_SendsBearerTokenAndAcceptJson()
     {
         HttpRequestMessage? seen = null;
         using var handler = NewHandler(req =>
@@ -108,7 +126,7 @@ public sealed class HomeAssistantActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "{\"entity_id\":\"light.office_lamp\",\"state\":\"on\"}");
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, new GetHomeAssistantStateCommand("light.office_lamp"));
+        var result = await handler.HandleAsync(default, new GetHomeAssistantStateCommand("light.office_lamp"), CancellationToken.None);
         Assert.True(result.Ok);
         Assert.Equal("Bearer", seen!.Headers.Authorization!.Scheme);
         Assert.Equal("token-123", seen.Headers.Authorization.Parameter);
@@ -116,7 +134,7 @@ public sealed class HomeAssistantActuatorsTests
     }
 
     [Fact]
-    public void GetState_UsesApiStatesEndpoint()
+    public async Task GetState_UsesApiStatesEndpoint()
     {
         HttpRequestMessage? seen = null;
         using var handler = NewHandler(req =>
@@ -125,12 +143,12 @@ public sealed class HomeAssistantActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "{\"entity_id\":\"light.office_lamp\",\"state\":\"on\"}");
         }, BaseOptions with { BaseUri = new Uri("http://homeassistant.local:8123/") });
 
-        _ = handler.Handle(null!, NewCtx(), default, new GetHomeAssistantStateCommand("light.office_lamp"));
+        _ = await handler.HandleAsync(default, new GetHomeAssistantStateCommand("light.office_lamp"), CancellationToken.None);
         Assert.Equal("http://homeassistant.local:8123/api/states/light.office_lamp", seen!.RequestUri!.ToString());
     }
 
     [Fact]
-    public void CallService_SendsBearerTokenAndJsonContent()
+    public async Task CallService_SendsBearerTokenAndJsonContent()
     {
         HttpRequestMessage? seen = null;
         using var handler = NewHandler(req =>
@@ -139,14 +157,14 @@ public sealed class HomeAssistantActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "[]");
         });
 
-        var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{\"entity_id\":\"light.office_lamp\"}"));
+        var result = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{\"entity_id\":\"light.office_lamp\"}"), CancellationToken.None);
         Assert.True(result.Ok);
         Assert.Equal("Bearer", seen!.Headers.Authorization!.Scheme);
         Assert.Equal("application/json", seen.Content!.Headers.ContentType!.MediaType);
     }
 
     [Fact]
-    public void CallService_UsesApiServicesEndpoint()
+    public async Task CallService_UsesApiServicesEndpoint()
     {
         HttpRequestMessage? seen = null;
         using var handler = NewHandler(req =>
@@ -155,62 +173,62 @@ public sealed class HomeAssistantActuatorsTests
             return HttpResponse(HttpStatusCode.OK, "[]");
         });
 
-        _ = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
+        _ = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"), CancellationToken.None);
         Assert.Equal("http://homeassistant.local:8123/api/services/light/turn_on", seen!.RequestUri!.ToString());
     }
 
     [Fact]
-    public void Handler_DoesNotLeakTokenInFailureMessages()
+    public async Task Handler_DoesNotLeakTokenInFailureMessages()
     {
         var handler = NewHandler(_ => throw new HttpRequestException("network error"));
-        var result = handler.Handle(null!, NewCtx(), default, new GetHomeAssistantStateCommand("light.office_lamp"));
+        var result = await handler.HandleAsync(default, new GetHomeAssistantStateCommand("light.office_lamp"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.DoesNotContain("token-123", result.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void GetState_ReturnsEntityStateResult()
+    public async Task GetState_ReturnsEntityStateResult()
     {
         using var handler = NewHandler(_ => HttpResponse(HttpStatusCode.OK, "{\"entity_id\":\"light.office_lamp\",\"state\":\"on\"}"));
-        var result = handler.Handle(null!, NewCtx(), default, new GetHomeAssistantStateCommand("light.office_lamp"));
+        var result = await handler.HandleAsync(default, new GetHomeAssistantStateCommand("light.office_lamp"), CancellationToken.None);
         var payload = Assert.IsType<HomeAssistantEntityStateResult>(result.Payload);
         Assert.Equal("light.office_lamp", payload.EntityId);
         Assert.Equal("on", payload.State);
     }
 
     [Fact]
-    public void GetState_NonSuccessFailsClearly()
+    public async Task GetState_NonSuccessFailsClearly()
     {
         using var handler = NewHandler(_ => HttpResponse(HttpStatusCode.NotFound, "missing"));
-        var result = handler.Handle(null!, NewCtx(), default, new GetHomeAssistantStateCommand("light.office_lamp"));
+        var result = await handler.HandleAsync(default, new GetHomeAssistantStateCommand("light.office_lamp"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("404", result.Error);
     }
 
     [Fact]
-    public void GetState_ResponseOverMaxBytesFails()
+    public async Task GetState_ResponseOverMaxBytesFails()
     {
         using var handler = NewHandler(_ => HttpResponse(HttpStatusCode.OK, "{\"entity_id\":\"light.office_lamp\",\"state\":\"on\"}"), BaseOptions with { MaxResponseBytes = 4 });
-        var result = handler.Handle(null!, NewCtx(), default, new GetHomeAssistantStateCommand("light.office_lamp"));
+        var result = await handler.HandleAsync(default, new GetHomeAssistantStateCommand("light.office_lamp"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("MaxResponseBytes", result.Error);
     }
 
     [Fact]
-    public void CallService_ReturnsStatusAndJson()
+    public async Task CallService_ReturnsStatusAndJson()
     {
         using var handler = NewHandler(_ => HttpResponse(HttpStatusCode.OK, "[{\"result\":\"ok\"}]"));
-        var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
+        var result = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"), CancellationToken.None);
         var payload = Assert.IsType<HomeAssistantServiceCallResult>(result.Payload);
         Assert.Equal(200, payload.StatusCode);
         Assert.Equal("[{\"result\":\"ok\"}]", payload.Json);
     }
 
     [Fact]
-    public void CallService_NonSuccessReturnsResult()
+    public async Task CallService_NonSuccessReturnsResult()
     {
         using var handler = NewHandler(_ => HttpResponse(HttpStatusCode.BadRequest, "{\"error\":\"bad\"}"));
-        var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
+        var result = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"), CancellationToken.None);
         Assert.True(result.Ok);
         var payload = Assert.IsType<HomeAssistantServiceCallResult>(result.Payload);
         Assert.False(payload.IsSuccessStatusCode);
@@ -218,30 +236,30 @@ public sealed class HomeAssistantActuatorsTests
     }
 
     [Fact]
-    public void CallService_ResponseOverMaxBytesFails()
+    public async Task CallService_ResponseOverMaxBytesFails()
     {
         using var handler = NewHandler(_ => HttpResponse(HttpStatusCode.OK, "{}"), BaseOptions with { MaxResponseBytes = 1 });
-        var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
+        var result = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("MaxResponseBytes", result.Error);
     }
 
     [Fact]
-    public void TransportExceptionFailsClearly()
+    public async Task TransportExceptionFailsClearly()
     {
         var handler = NewHandler(_ => throw new HttpRequestException("boom"));
-        var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
+        var result = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("boom", result.Error);
     }
 
     [Fact]
-    public void TimeoutFailsClearly()
+    public async Task TimeoutFailsClearly()
     {
         using var handler = NewHandler((_, _) =>
             Task.FromException<HttpResponseMessage>(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.")));
 
-        var result = handler.Handle(null!, NewCtx(), default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"));
+        var result = await handler.HandleAsync(default, new CallHomeAssistantServiceCommand("light", "turn_on", "{}"), CancellationToken.None);
         Assert.False(result.Ok);
         Assert.Contains("timed out", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(BaseOptions.AccessToken, result.Error, StringComparison.OrdinalIgnoreCase);

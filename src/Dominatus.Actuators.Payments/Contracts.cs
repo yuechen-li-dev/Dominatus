@@ -575,7 +575,7 @@ public sealed class FakePaymentProvider : IPaymentProvider
         string? Disclosure);
 }
 
-public sealed class PaymentActuationHandler :
+public sealed class PaymentActuationHandler : AsyncActuationHandler,
     IActuationHandler<CreateCheckoutSessionCommand>,
     IActuationHandler<CreatePaymentIntentCommand>,
     IActuationHandler<CapturePaymentCommand>,
@@ -590,83 +590,47 @@ public sealed class PaymentActuationHandler :
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     }
 
-    public ActuatorHost.HandlerResult Handle(
-        ActuatorHost host,
-        AiCtx ctx,
-        ActuationId id,
-        CreateCheckoutSessionCommand cmd)
-    {
-        return Safe(() => _registry.Get(cmd.ProviderId)
-            .CreateCheckoutSessionAsync(cmd, ctx.Cancel)
-            .GetAwaiter()
-            .GetResult());
-    }
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, CreateCheckoutSessionCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
 
-    public ActuatorHost.HandlerResult Handle(
-        ActuatorHost host,
-        AiCtx ctx,
-        ActuationId id,
-        CreatePaymentIntentCommand cmd)
-    {
-        return Safe(() => _registry.Get(cmd.ProviderId)
-            .CreatePaymentIntentAsync(cmd, ctx.Cancel)
-            .GetAwaiter()
-            .GetResult());
-    }
+    public ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, CreateCheckoutSessionCommand cmd, CancellationToken cancellationToken)
+        => SafeAsync(() => _registry.Get(cmd.ProviderId).CreateCheckoutSessionAsync(cmd, cancellationToken));
 
-    public ActuatorHost.HandlerResult Handle(
-        ActuatorHost host,
-        AiCtx ctx,
-        ActuationId id,
-        CapturePaymentCommand cmd)
-    {
-        return Safe(() => _registry.Get(cmd.ProviderId)
-            .CapturePaymentAsync(cmd, ctx.Cancel)
-            .GetAwaiter()
-            .GetResult());
-    }
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, CreatePaymentIntentCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
 
-    public ActuatorHost.HandlerResult Handle(
-        ActuatorHost host,
-        AiCtx ctx,
-        ActuationId id,
-        RefundPaymentCommand cmd)
-    {
-        return Safe(() => _registry.Get(cmd.ProviderId)
-            .RefundPaymentAsync(cmd, ctx.Cancel)
-            .GetAwaiter()
-            .GetResult());
-    }
+    public ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, CreatePaymentIntentCommand cmd, CancellationToken cancellationToken)
+        => SafeAsync(() => _registry.Get(cmd.ProviderId).CreatePaymentIntentAsync(cmd, cancellationToken));
 
-    public ActuatorHost.HandlerResult Handle(
-        ActuatorHost host,
-        AiCtx ctx,
-        ActuationId id,
-        CancelPaymentCommand cmd)
-    {
-        return Safe(() => _registry.Get(cmd.ProviderId)
-            .CancelPaymentAsync(cmd, ctx.Cancel)
-            .GetAwaiter()
-            .GetResult());
-    }
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, CapturePaymentCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
 
-    public ActuatorHost.HandlerResult Handle(
-        ActuatorHost host,
-        AiCtx ctx,
-        ActuationId id,
-        GetPaymentStatusCommand cmd)
-    {
-        return Safe(() => _registry.Get(cmd.ProviderId)
-            .GetPaymentStatusAsync(cmd, ctx.Cancel)
-            .GetAwaiter()
-            .GetResult());
-    }
+    public ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, CapturePaymentCommand cmd, CancellationToken cancellationToken)
+        => SafeAsync(() => _registry.Get(cmd.ProviderId).CapturePaymentAsync(cmd, cancellationToken));
 
-    private static ActuatorHost.HandlerResult Safe<T>(Func<T> call)
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, RefundPaymentCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, RefundPaymentCommand cmd, CancellationToken cancellationToken)
+        => SafeAsync(() => _registry.Get(cmd.ProviderId).RefundPaymentAsync(cmd, cancellationToken));
+
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, CancelPaymentCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, CancelPaymentCommand cmd, CancellationToken cancellationToken)
+        => SafeAsync(() => _registry.Get(cmd.ProviderId).CancelPaymentAsync(cmd, cancellationToken));
+
+    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, GetPaymentStatusCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, GetPaymentStatusCommand cmd, CancellationToken cancellationToken)
+        => SafeAsync(() => _registry.Get(cmd.ProviderId).GetPaymentStatusAsync(cmd, cancellationToken));
+
+    private static async ValueTask<ActuatorHost.HandlerResult> SafeAsync<T>(Func<ValueTask<T>> call)
     {
         try
         {
-            return ActuatorHost.HandlerResult.CompletedWithPayload(call());
+            return ActuatorHost.HandlerResult.CompletedWithPayload(await call().ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is ArgumentException
             or ArgumentOutOfRangeException

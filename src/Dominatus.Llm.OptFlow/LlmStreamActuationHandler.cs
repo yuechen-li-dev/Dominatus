@@ -2,7 +2,7 @@ using Dominatus.Core.Runtime;
 
 namespace Dominatus.Llm.OptFlow;
 
-public sealed class LlmStreamActuationHandler : IActuationHandler<LlmStreamCommand>
+public sealed class LlmStreamActuationHandler : AsyncActuationHandler<LlmStreamCommand>
 {
     private readonly ILlmStreamingClient _client;
     private readonly LlmStreamRecorder _recorder;
@@ -13,15 +13,15 @@ public sealed class LlmStreamActuationHandler : IActuationHandler<LlmStreamComma
         _recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
     }
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, LlmStreamCommand cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, LlmStreamCommand cmd, CancellationToken cancellationToken)
     {
-        var snapshot = _recorder.RunAsync(
+        var snapshot = await _recorder.RunAsync(
             cmd.StreamId,
             cmd.Request,
             _client,
-            chunk => ctx.Agent.Events.Publish(new LlmStreamChunkAvailable(chunk.StreamId, chunk.Index, chunk.Text, chunk.IsFinal, chunk.FinishReason)),
-            ctx.Cancel).GetAwaiter().GetResult();
+            chunk => context.Report(new LlmStreamChunkAvailable(chunk.StreamId, chunk.Index, chunk.Text, chunk.IsFinal, chunk.FinishReason)),
+            cancellationToken).ConfigureAwait(false);
 
-        return ActuatorHost.HandlerResult.CompletedWithPayload(snapshot);
+        return ActuatorHost.HandlerResult.CompletedWithPayload(snapshot, ok: snapshot.Status == LlmStreamStatus.Completed, error: snapshot.Error);
     }
 }

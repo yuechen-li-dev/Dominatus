@@ -2,11 +2,12 @@ using Dominatus.Core.Runtime;
 
 namespace Dominatus.Llm.OptFlow;
 
-public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionRequest>
+public sealed class LlmDecisionScoringHandler : AsyncActuationHandler<LlmDecisionRequest>
 {
     private readonly ILlmDecisionClient _client;
     private readonly ILlmDecisionCassette _cassette;
     private readonly LlmCassetteMode _mode;
+    private readonly object _cassetteGate = new();
 
     public LlmDecisionScoringHandler(
         ILlmDecisionClient client,
@@ -18,16 +19,16 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
         _mode = mode;
     }
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, LlmDecisionRequest cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, LlmDecisionRequest cmd, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(cmd);
 
         string requestHash = LlmDecisionRequestHasher.ComputeHash(cmd);
 
         try
         {
-            var result = Resolve(cmd, requestHash, ctx.Cancel);
+            var result = await ResolveAsync(cmd, requestHash, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             return ActuatorHost.HandlerResult.CompletedWithPayload(result);
         }
         catch (Exception ex)
@@ -41,11 +42,11 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
         }
     }
 
-    private LlmDecisionResult Resolve(LlmDecisionRequest request, string requestHash, CancellationToken cancellationToken)
+    private async ValueTask<LlmDecisionResult> ResolveAsync(LlmDecisionRequest request, string requestHash, CancellationToken cancellationToken)
     {
         if (_mode is LlmCassetteMode.Replay or LlmCassetteMode.Strict)
         {
-            if (!_cassette.TryGet(requestHash, out var replayResult))
+            if (!TryGet(requestHash, out var replayResult))
             {
                 throw new InvalidOperationException("Cassette entry not found.");
             }
@@ -54,7 +55,7 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
             return replayResult;
         }
 
-        if (_mode is LlmCassetteMode.Record && _cassette.TryGet(requestHash, out var recordedResult))
+        if (_mode is LlmCassetteMode.Record && TryGet(requestHash, out var recordedResult))
         {
             LlmDecisionResultValidator.ValidateAgainstRequest(request, requestHash, recordedResult);
             return recordedResult;
@@ -62,10 +63,9 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
 
         if (_mode is LlmCassetteMode.Live or LlmCassetteMode.Record)
         {
-            var providerResult = _client
+            var providerResult = await _client
                 .ScoreOptionsAsync(request, requestHash, cancellationToken)
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
 
             if (providerResult is null)
             {
@@ -76,7 +76,8 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
 
             if (_mode is LlmCassetteMode.Record)
             {
-                _cassette.Put(requestHash, request, providerResult);
+                cancellationToken.ThrowIfCancellationRequested();
+                lock (_cassetteGate) _cassette.Put(requestHash, request, providerResult);
             }
 
             return providerResult;
@@ -84,6 +85,9 @@ public sealed class LlmDecisionScoringHandler : IActuationHandler<LlmDecisionReq
 
         throw new InvalidOperationException($"Unsupported cassette mode '{_mode}'.");
     }
+
+    private bool TryGet(string hash, out LlmDecisionResult result)
+    { lock (_cassetteGate) return _cassette.TryGet(hash, out result); }
 
     private static string BuildFailureMessage(LlmCassetteMode mode, string stableId, string requestHash, string reason)
         => $"LlmDecision scoring failed (Mode={mode}, StableId={stableId}, RequestHash={requestHash}). {reason}";

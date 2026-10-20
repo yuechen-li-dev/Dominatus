@@ -13,6 +13,7 @@ public sealed partial class ActuatorHost : IAiActuator, ITickableActuator, IDisp
 
     private readonly Dictionary<Type, IHandler> _handlers = new();
     private readonly List<IActuationPolicy> _policies = new();
+    private readonly HashSet<IDisposable> _ownedHandlers = new(ReferenceEqualityComparer.Instance);
 
     // Deferred completions: emitted later as ActuationCompleted into the target agent's event bus.
     private readonly List<PendingCompletion> _pending = new();
@@ -52,7 +53,21 @@ public sealed partial class ActuatorHost : IAiActuator, ITickableActuator, IDisp
     }
 
     public void Register<TCmd>(IActuationHandler<TCmd> handler) where TCmd : notnull, IActuationCommand
-        => _handlers[typeof(TCmd)] = new HandlerAdapter<TCmd>(handler);
+        => Register(handler, ownsHandler: false);
+
+    /// <summary>Register an adapter and optionally transfer its resource ownership to the host.
+    /// Shared/caller-provided adapters remain borrowed by default.</summary>
+    public void Register<TCmd>(IActuationHandler<TCmd> handler, bool ownsHandler) where TCmd : notnull, IActuationCommand
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(handler);
+        if (ownsHandler)
+        {
+            if (handler is not IDisposable disposable) throw new ArgumentException("An owned handler must implement IDisposable.", nameof(handler));
+            _ownedHandlers.Add(disposable);
+        }
+        _handlers[typeof(TCmd)] = new HandlerAdapter<TCmd>(handler);
+    }
 
     public void AddPolicy(IActuationPolicy policy)
     {

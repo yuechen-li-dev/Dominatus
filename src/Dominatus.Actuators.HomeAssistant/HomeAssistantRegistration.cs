@@ -13,7 +13,7 @@ public static class HomeAssistantActuatorRegistration
             throw new ArgumentNullException(nameof(host));
 
         var handler = new HomeAssistantActuationHandler(options, messageHandler);
-        host.Register<GetHomeAssistantStateCommand>(handler);
+        host.Register<GetHomeAssistantStateCommand>(handler, ownsHandler: true);
         host.Register<CallHomeAssistantServiceCommand>(handler);
         return host;
     }

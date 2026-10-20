@@ -1,10 +1,39 @@
 using System.Text.Json;
 using Dominatus.Actuators.Audio;
 using Dominatus.Core.Hfsm;
+using Dominatus.Core.Nodes;
 using Dominatus.Core.Runtime;
 
 public sealed class AudioTests
 {
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Both_audio_commands_defer_and_cancel_without_writing_artifacts(bool soundEffect)
+    {
+        var provider = new PendingAudioProvider();
+        await using var host = new ActuatorHost();
+        host.RegisterAudioActuators(new AudioProviderRegistry().Register(provider));
+        var world = new AiWorld(host);
+        var graph = new HfsmGraph { Root = "Root" };
+        graph.Add(new HfsmStateDef { Id = "Root", Node = static _ => Enumerable.Empty<AiStep>().GetEnumerator() });
+        var agent = new AiAgent(new HfsmInstance(graph)); world.Add(agent);
+        var ctx = new AiCtx(world, agent, agent.Events, default, world.View, world.Mail, host);
+        IActuationCommand command = soundEffect ? Sfx() : Tts();
+        Assert.False(host.Dispatch(ctx, command).Completed);
+        await host.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(provider.Canceled); Assert.Empty(agent.InFlightActuations);
+    }
+    private sealed class PendingAudioProvider : IAudioProvider
+    {
+        public string ProviderId => "fake";
+        public bool Canceled;
+        private async ValueTask<T> Pending<T>(CancellationToken ct)
+        {
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return default!; }
+            finally { Canceled = ct.IsCancellationRequested; }
+        }
+        public ValueTask<TextToSpeechResult> TextToSpeechAsync(TextToSpeechCommand command, CancellationToken ct) => Pending<TextToSpeechResult>(ct);
+        public ValueTask<GenerateSoundEffectResult> GenerateSoundEffectAsync(GenerateSoundEffectCommand command, CancellationToken ct) => Pending<GenerateSoundEffectResult>(ct);
+    }
     [Fact] public void AudioProviderRegistry_RejectsDuplicateProviders() { var r = new AudioProviderRegistry().Register(new FakeAudioProvider("fake")); Assert.Throws<InvalidOperationException>(() => r.Register(new FakeAudioProvider("FAKE"))); }
     [Fact] public void AudioProviderRegistry_GetsProviderCaseInsensitive() { var p = new FakeAudioProvider("fake"); Assert.Same(p, new AudioProviderRegistry().Register(p).GetRequired("FAKE")); }
     [Fact] public void TextToSpeechCommand_RequiresProvider() => Assert.Throws<ArgumentException>(() => AudioValidation.Validate(Tts() with { ProviderId = "" }));

@@ -4,6 +4,76 @@ namespace Dominatus.Core.Tests;
 
 public sealed class AsyncActuationTests
 {
+    private sealed class OwnedReader : AsyncActuationHandler<ReadCommand>, IDisposable
+    {
+        public int Disposals;
+        public bool Finished;
+        public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, ReadCommand command, CancellationToken ct)
+        {
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return ActuatorHost.HandlerResult.CompletedOk(); }
+            finally { Finished = true; }
+        }
+        public void Dispose() { Assert.True(Finished); Disposals++; }
+    }
+
+    [Fact]
+    public async Task Owned_resources_are_disposed_once_after_work_finishes_and_borrowed_handlers_stay_borrowed()
+    {
+        await using var host = new ActuatorHost(); var owned = new OwnedReader();
+        host.Register(owned, ownsHandler: true); host.Register(owned, ownsHandler: true);
+        var (_, _, ctx) = Context(host); host.Dispatch(ctx, new ReadCommand());
+        await host.DisposeAsync(); Assert.Equal(1, owned.Disposals);
+        await using var borrower = new ActuatorHost(); var borrowed = new OwnedReader();
+        borrower.Register(borrowed); await borrower.DisposeAsync(); Assert.Equal(0, borrowed.Disposals);
+    }
+    private sealed record Progress(int Index);
+    private sealed class StreamingReader : AsyncActuationHandler<ReadCommand>
+    {
+        public AsyncActuationContext Invocation;
+        public readonly TaskCompletionSource<bool> Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource<bool> Reported = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, ReadCommand command, CancellationToken ct)
+        {
+            Invocation = context;
+            await Release.Task.WaitAsync(ct);
+            context.Report(new Progress(1)); context.Report(new Progress(2)); Reported.SetResult(true);
+            return ActuatorHost.HandlerResult.CompletedWithPayload("done");
+        }
+    }
+
+    [Fact]
+    public async Task Progress_is_queued_until_tick_in_order_and_closed_after_completion()
+    {
+        await using var host = new ActuatorHost(); var reader = new StreamingReader(); host.Register(reader);
+        var (world, agent, ctx) = Context(host); EventCursor progress = default, completion = default;
+        Assert.False(host.Dispatch(ctx, new ReadCommand()).Completed);
+        reader.Release.SetResult(true); await reader.Reported.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(agent.Events.TryConsume<Progress>(ref progress, null, out _));
+        await Drain(host, world, agent);
+        Assert.True(agent.Events.TryConsume<Progress>(ref progress, null, out var first)); Assert.Equal(1, first.Index);
+        Assert.True(agent.Events.TryConsume<Progress>(ref progress, null, out var last)); Assert.Equal(2, last.Index);
+        Assert.True(agent.Events.TryConsume<ActuationCompleted>(ref completion, null, out var result)); Assert.True(result.Ok);
+        reader.Invocation.Report(new Progress(3)); host.Tick(world);
+        Assert.False(agent.Events.TryConsume<Progress>(ref progress, null, out _));
+    }
+
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("remove")]
+    [InlineData("dispose")]
+    public async Task Queued_progress_is_suppressed_when_its_owner_is_canceled_removed_or_disposed(string action)
+    {
+        await using var host = new ActuatorHost(); var reader = new StreamingReader(); host.Register(reader);
+        using var cancel = new CancellationTokenSource();
+        var (world, agent, ctx) = Context(host, cancel.Token); EventCursor cursor = default;
+        host.Dispatch(ctx, new ReadCommand()); reader.Release.SetResult(true);
+        await reader.Reported.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (action == "cancel") cancel.Cancel();
+        if (action == "remove") world.Remove(agent);
+        if (action == "dispose") await host.DisposeAsync();
+        else await Drain(host, world, agent);
+        Assert.False(agent.Events.TryConsume<Progress>(ref cursor, null, out _));
+    }
     private sealed record ReadCommand : IActuationCommand;
     private sealed class Reader : AsyncActuationHandler<ReadCommand>
     {

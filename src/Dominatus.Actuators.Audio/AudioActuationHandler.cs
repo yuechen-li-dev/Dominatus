@@ -2,19 +2,41 @@ using Dominatus.Core.Runtime;
 
 namespace Dominatus.Actuators.Audio;
 
-public sealed class AudioActuationHandler : IActuationHandler<TextToSpeechCommand>, IActuationHandler<GenerateSoundEffectCommand>
+public sealed class AudioActuationHandler : AsyncActuationHandler, IActuationHandler<TextToSpeechCommand>, IActuationHandler<GenerateSoundEffectCommand>
 {
     private readonly AudioProviderRegistry _registry;
     public AudioActuationHandler(AudioProviderRegistry registry) => _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, TextToSpeechCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, TextToSpeechCommand cmd, CancellationToken cancellationToken)
     {
-        try { AudioValidation.Validate(cmd); var result = _registry.GetRequired(cmd.ProviderId).TextToSpeechAsync(cmd, ctx.Cancel).GetAwaiter().GetResult(); return ActuatorHost.HandlerResult.CompletedWithPayload(result); }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException or KeyNotFoundException or IOException or OperationCanceledException) { return ActuatorHost.HandlerResult.CompletedFailure(Sanitize(ex)); }
+        try
+        {
+            AudioValidation.Validate(cmd);
+            var result = await _registry.GetRequired(cmd.ProviderId).TextToSpeechAsync(cmd, cancellationToken).ConfigureAwait(false);
+            return ActuatorHost.HandlerResult.CompletedWithPayload(result);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException or KeyNotFoundException or IOException or OperationCanceledException)
+        {
+            return ActuatorHost.HandlerResult.CompletedFailure(Sanitize(ex));
+        }
     }
     public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, GenerateSoundEffectCommand cmd)
+        => DispatchAsync(host, ctx, id, (context, ct) => HandleAsync(context, cmd, ct));
+
+    public async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, GenerateSoundEffectCommand cmd, CancellationToken cancellationToken)
     {
-        try { AudioValidation.Validate(cmd); var result = _registry.GetRequired(cmd.ProviderId).GenerateSoundEffectAsync(cmd, ctx.Cancel).GetAwaiter().GetResult(); return ActuatorHost.HandlerResult.CompletedWithPayload(result); }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException or KeyNotFoundException or IOException or OperationCanceledException) { return ActuatorHost.HandlerResult.CompletedFailure(Sanitize(ex)); }
+        try
+        {
+            AudioValidation.Validate(cmd);
+            var result = await _registry.GetRequired(cmd.ProviderId).GenerateSoundEffectAsync(cmd, cancellationToken).ConfigureAwait(false);
+            return ActuatorHost.HandlerResult.CompletedWithPayload(result);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException or KeyNotFoundException or IOException or OperationCanceledException)
+        {
+            return ActuatorHost.HandlerResult.CompletedFailure(Sanitize(ex));
+        }
     }
     private static string SanitizedPrefix => "Audio actuation failed";
     public static string Sanitize(Exception ex)

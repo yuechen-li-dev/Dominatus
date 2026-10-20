@@ -40,17 +40,17 @@ public sealed class DryRunHomeAssistantThermostatActuator : IHomeAssistantThermo
     }
 }
 
-public sealed class HomeAssistantThermostatActuationHandler(IHomeAssistantThermostatActuator actuator) : IActuationHandler<HomeAssistantThermostatCommand>
+public sealed class HomeAssistantThermostatActuationHandler(IHomeAssistantThermostatActuator actuator) : AsyncActuationHandler<HomeAssistantThermostatCommand>
 {
     private readonly IHomeAssistantThermostatActuator _actuator = actuator ?? throw new ArgumentNullException(nameof(actuator));
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, HomeAssistantThermostatCommand cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, HomeAssistantThermostatCommand cmd, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(cmd);
 
         try
         {
-            _actuator.SendAsync(cmd, ctx.Cancel).GetAwaiter().GetResult();
+            await _actuator.SendAsync(cmd, cancellationToken).ConfigureAwait(false);
             return ActuatorHost.HandlerResult.CompletedOk();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
