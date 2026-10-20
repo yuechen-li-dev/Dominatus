@@ -6,6 +6,13 @@ Dominatus does not model each NPC as a persistent LLM instance. Dominatus agents
 
 ## The wrong model: LLMs as NPC souls
 
+For engineering/workspace agents, runtime ownership also permits an explicit
+multi-turn conversation with tool calls. The model may choose its own strategy
+and author proposed checks. "Bounded" describes authority and inspectable effects,
+not a requirement that every task be a single trivial option selection. See
+[conversation/tool turns](LLM_CONVERSATIONS.md). Long-lived task durability still
+belongs to the host runtime, independently of provider transcript retention.
+
 A common mistake is to treat each NPC as a long-running LLM session with hidden prompt memory and broad tool authority.
 
 That is **not** the Dominatus architecture.
