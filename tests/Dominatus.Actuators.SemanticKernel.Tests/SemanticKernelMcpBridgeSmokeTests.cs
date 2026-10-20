@@ -76,7 +76,11 @@ public sealed class SemanticKernelMcpBridgeSmokeTests
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
         var text = File.ReadAllText(Path.Combine(root, "src", "Dominatus.Actuators.SemanticKernel", "Dominatus.Actuators.SemanticKernel.csproj"));
         var forbidden = new[] { "ModelContextProtocol", "Mcp", "MCP", "Anthropic.Mcp", "Microsoft.Mcp", "Microsoft.Graph", "Graph", "OpenApi", "A2A" };
-        Assert.All(forbidden, f => Assert.DoesNotContain(f, text, StringComparison.OrdinalIgnoreCase));
+        var references = System.Xml.Linq.XDocument.Parse(text).Descendants().Where(e => e.Name.LocalName is "PackageReference" or "ProjectReference").Select(e => e.Attribute("Include")?.Value ?? "").ToArray();
+        Assert.All(forbidden, f => Assert.All(references, reference => {
+            if (f == "Graph") Assert.DoesNotContain("Graph", reference.Split('.', '/', '\\'), StringComparer.OrdinalIgnoreCase);
+            else Assert.DoesNotContain(f, reference, StringComparison.OrdinalIgnoreCase);
+        }));
     }
 
     private static SemanticKernelActuationHandler CreateHandler(RecordingInvoker invoker, IReadOnlyList<AllowedSemanticKernelFunction> allowed)

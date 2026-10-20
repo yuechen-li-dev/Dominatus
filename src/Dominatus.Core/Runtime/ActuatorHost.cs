@@ -7,7 +7,7 @@ namespace Dominatus.Core.Runtime;
 /// Generic command dispatcher ("tools/skills host").
 /// Commands can complete immediately or later via deferred completion events.
 /// </summary>
-public sealed class ActuatorHost : IAiActuator, ITickableActuator
+public sealed partial class ActuatorHost : IAiActuator, ITickableActuator, IDisposable, IAsyncDisposable
 {
     private long _nextId = 1;
 
@@ -62,6 +62,7 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
 
     public ActuationDispatchResult Dispatch(AiCtx ctx, IActuationCommand command)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var id = new ActuationId(_nextId++);
 
         for (int i = 0; i < _policies.Count; i++)
@@ -164,6 +165,7 @@ public sealed class ActuatorHost : IAiActuator, ITickableActuator
 
     public void Tick(AiWorld world)
     {
+        DrainAsyncCompletions(world);
         if (_pending.Count == 0) return;
 
         float now = world.Clock.Time;

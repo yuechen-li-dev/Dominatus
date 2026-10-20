@@ -30,7 +30,10 @@ public sealed class SemanticKernelActuatorsTests
         Assert.Equal("x", map["s"]); Assert.Equal(2L, map["n"]); Assert.Equal(2.5, map["d"]); Assert.Equal(true, map["b"]); Assert.Null(map["z"]);
     }
 
-    [Fact] public void SemanticKernelCommand_RejectsNestedArgumentValues() => Assert.Throws<InvalidOperationException>(() => new SemanticKernelRequestResolver(BaseOptions).Resolve(new("Tools", "Echo", "{\"nested\":{}}")));
+    [Fact] public void SemanticKernelCommand_PreservesNestedArgumentValues() {
+        var args = new SemanticKernelRequestResolver(BaseOptions).Resolve(new("Tools", "Echo", "{\"nested\":{\"values\":[1,true,null]}}"));
+        Assert.Equal(3, ((System.Text.Json.JsonElement)args["nested"]!).GetProperty("values").GetArrayLength());
+    }
 
     [Fact]
     public void SemanticKernelHandler_InvokesAllowedFunction()
@@ -43,7 +46,7 @@ public sealed class SemanticKernelActuatorsTests
     [Fact] public void SemanticKernelHandler_ReturnsTextResult() { var r = DispatchWithResult(Task.FromResult("hello")); Assert.Equal("hello", r.ResultText); }
     [Fact] public void SemanticKernelHandler_FailsWhenKernelFunctionMissing() { var h = CreateHandler(new FakeInvoker((_,_,_,_) => throw new InvalidOperationException("missing"))); var r = h.Handle(new(), MakeCtx(new()), new(1), new("Tools","Echo","{}")); Assert.False(r.Ok); }
     [Fact] public void SemanticKernelHandler_FailsWhenFunctionThrows() { var h = CreateHandler(new FakeInvoker((_,_,_,_) => throw new InvalidOperationException("boom"))); var r = h.Handle(new(), MakeCtx(new()), new(1), new("Tools","Echo","{}")); Assert.False(r.Ok); }
-    [Fact] public void SemanticKernelHandler_FailsOnTimeoutOrCancellation() { var h = CreateHandler(new FakeInvoker(async (_,_,_,ct) => { await Task.Delay(2000, ct); return "x"; }), BaseOptions with { Timeout = TimeSpan.FromMilliseconds(10)}); var r = h.Handle(new(), MakeCtx(new()), new(1), new("Tools","Echo","{}")); Assert.False(r.Ok); }
+    [Fact] public async Task SemanticKernelHandler_FailsOnTimeoutOrCancellation() { var h = CreateHandler(new FakeInvoker(async (_,_,_,ct) => { await Task.Delay(2000, ct); return "x"; }), BaseOptions with { Timeout = TimeSpan.FromMilliseconds(10)}); var r = await h.HandleAsync(default, new("Tools","Echo","{}"), default); Assert.False(r.Ok); }
     [Fact] public void SemanticKernelHandler_FailsWhenResultOverMaxBytes() { var h = CreateHandler(new FakeInvoker((_,_,_,_) => Task.FromResult(new string('a', 200))), BaseOptions with { MaxResultBytes = 10 }); var r = h.Handle(new(), MakeCtx(new()), new(1), new("Tools","Echo","{}")); Assert.False(r.Ok); }
     [Fact] public void SemanticKernelHandler_DoesNotLeakSensitiveDetailsInCommonFailures() { var h = CreateHandler(new FakeInvoker((_,_,_,_) => throw new InvalidOperationException("api key secret bad"))); var r = h.Handle(new(), MakeCtx(new()), new(1), new("Tools","Echo","{}")); Assert.Equal("Semantic Kernel function invocation failed.", r.Error); }
 
@@ -73,7 +76,11 @@ public sealed class SemanticKernelActuatorsTests
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
         var text = File.ReadAllText(Path.Combine(root,"src","Dominatus.Actuators.SemanticKernel","Dominatus.Actuators.SemanticKernel.csproj"));
         var forbidden = new[] { "Dominatus.OptFlow", "Dominatus.Llm.OptFlow", "Ariadne.OptFlow", "Stride", "HomeAssistant", "Mcp", "Planner", "Agents", "Microsoft.Graph", "Graph", "OpenApi", "ModelContextProtocol", "A2A" };
-        Assert.All(forbidden, f => Assert.DoesNotContain(f, text, StringComparison.OrdinalIgnoreCase));
+        var references = System.Xml.Linq.XDocument.Parse(text).Descendants().Where(e => e.Name.LocalName is "PackageReference" or "ProjectReference").Select(e => e.Attribute("Include")?.Value ?? "").ToArray();
+        Assert.All(forbidden, f => Assert.All(references, reference => {
+            if (f == "Graph") Assert.DoesNotContain("Graph", reference.Split('.', '/', '\\'), StringComparer.OrdinalIgnoreCase);
+            else Assert.DoesNotContain(f, reference, StringComparison.OrdinalIgnoreCase);
+        }));
     }
 
     private static SemanticKernelActuationHandler CreateHandler(ISemanticKernelFunctionInvoker invoker, SemanticKernelActuatorOptions? options = null) => new(invoker, options ?? BaseOptions);

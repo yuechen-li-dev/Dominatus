@@ -2,11 +2,12 @@ using Dominatus.Core.Runtime;
 
 namespace Dominatus.Llm.OptFlow;
 
-public sealed class LlmTextActuationHandler : IActuationHandler<LlmTextRequest>
+public sealed class LlmTextActuationHandler : AsyncActuationHandler<LlmTextRequest>
 {
     private readonly ILlmClient _client;
     private readonly ILlmCassette _cassette;
     private readonly LlmCassetteMode _mode;
+    private readonly object _cassetteGate = new();
 
     public LlmTextActuationHandler(
         ILlmClient client,
@@ -18,16 +19,16 @@ public sealed class LlmTextActuationHandler : IActuationHandler<LlmTextRequest>
         _mode = mode;
     }
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, LlmTextRequest cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, LlmTextRequest cmd, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(cmd);
 
         string requestHash = LlmRequestHasher.ComputeHash(cmd);
 
         try
         {
-            var result = Resolve(cmd, requestHash, ctx.Cancel);
+            var result = await ResolveAsync(cmd, requestHash, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             return ActuatorHost.HandlerResult.CompletedWithPayload(result.Text);
         }
@@ -42,11 +43,11 @@ public sealed class LlmTextActuationHandler : IActuationHandler<LlmTextRequest>
         }
     }
 
-    private LlmTextResult Resolve(LlmTextRequest request, string requestHash, CancellationToken cancellationToken)
+    private async ValueTask<LlmTextResult> ResolveAsync(LlmTextRequest request, string requestHash, CancellationToken cancellationToken)
     {
         if (_mode is LlmCassetteMode.Replay or LlmCassetteMode.Strict)
         {
-            if (!_cassette.TryGet(requestHash, out var replayResult))
+            if (!TryGet(requestHash, out var replayResult))
             {
                 throw new InvalidOperationException("Cassette entry not found.");
             }
@@ -54,17 +55,16 @@ public sealed class LlmTextActuationHandler : IActuationHandler<LlmTextRequest>
             return replayResult;
         }
 
-        if (_mode is LlmCassetteMode.Record && _cassette.TryGet(requestHash, out var recordedResult))
+        if (_mode is LlmCassetteMode.Record && TryGet(requestHash, out var recordedResult))
         {
             return recordedResult;
         }
 
         if (_mode is LlmCassetteMode.Live or LlmCassetteMode.Record)
         {
-            var providerResult = _client
+            var providerResult = await _client
                 .GenerateTextAsync(request, requestHash, cancellationToken)
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
 
             if (providerResult is null)
             {
@@ -78,13 +78,18 @@ public sealed class LlmTextActuationHandler : IActuationHandler<LlmTextRequest>
 
             if (_mode is LlmCassetteMode.Record)
             {
-                _cassette.Put(requestHash, request, providerResult);
+                lock (_cassetteGate) _cassette.Put(requestHash, request, providerResult);
             }
 
             return providerResult;
         }
 
         throw new InvalidOperationException($"Unsupported cassette mode '{_mode}'.");
+    }
+
+    private bool TryGet(string hash, out LlmTextResult result)
+    {
+        lock (_cassetteGate) return _cassette.TryGet(hash, out result);
     }
 
     private static string BuildFailureMessage(LlmCassetteMode mode, string stableId, string requestHash, string reason)

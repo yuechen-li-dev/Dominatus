@@ -36,7 +36,8 @@ internal sealed class KernelFunctionInvoker(Kernel kernel) : ISemanticKernelFunc
             skArgs[pair.Key] = pair.Value;
 
         var result = await kernel.InvokeAsync(pluginName, functionName, skArgs, cancellationToken).ConfigureAwait(false);
-        return result.ToString() ?? string.Empty;
+        var value = result.GetValue<object>();
+        return value is string text ? text : JsonSerializer.Serialize(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 }
 
@@ -94,7 +95,9 @@ internal sealed class SemanticKernelRequestResolver
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.Null => null,
-                _ => throw new InvalidOperationException($"Argument '{prop.Name}' has unsupported nested JSON value type '{prop.Value.ValueKind}'.")
+                // SK owns typed argument binding, including complex DTOs. Clone to outlive doc.
+                JsonValueKind.Object or JsonValueKind.Array => prop.Value.Clone(),
+                _ => throw new InvalidOperationException($"Argument '{prop.Name}' has unsupported JSON value type '{prop.Value.ValueKind}'.")
             };
         }
 
@@ -102,7 +105,7 @@ internal sealed class SemanticKernelRequestResolver
     }
 }
 
-public sealed class SemanticKernelActuationHandler : IActuationHandler<SemanticKernelFunctionCommand>
+public sealed class SemanticKernelActuationHandler : AsyncActuationHandler<SemanticKernelFunctionCommand>
 {
     private readonly SemanticKernelRequestResolver _resolver;
     private readonly ISemanticKernelFunctionInvoker _invoker;
@@ -119,21 +122,23 @@ public sealed class SemanticKernelActuationHandler : IActuationHandler<SemanticK
         _resolver = new SemanticKernelRequestResolver(options);
     }
 
-    public ActuatorHost.HandlerResult Handle(ActuatorHost host, AiCtx ctx, ActuationId id, SemanticKernelFunctionCommand cmd)
+    public override async ValueTask<ActuatorHost.HandlerResult> HandleAsync(AsyncActuationContext context, SemanticKernelFunctionCommand cmd, CancellationToken cancellationToken)
     {
         try
         {
             var args = _resolver.Resolve(cmd);
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.Cancel);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(_resolver.Options.Timeout);
 
-            var text = _invoker.InvokeAsync(cmd.PluginName, cmd.FunctionName, args, cts.Token).GetAwaiter().GetResult() ?? string.Empty;
+            cts.Token.ThrowIfCancellationRequested();
+            var text = await _invoker.InvokeAsync(cmd.PluginName, cmd.FunctionName, args, cts.Token).ConfigureAwait(false) ?? string.Empty;
+            cts.Token.ThrowIfCancellationRequested();
             if (Utf8.GetByteCount(text) > _resolver.Options.MaxResultBytes)
                 return Fail($"Semantic Kernel function result exceeds MaxResultBytes ({_resolver.Options.MaxResultBytes}).");
 
             return ActuatorHost.HandlerResult.CompletedWithPayload(new SemanticKernelFunctionResult(cmd.PluginName, cmd.FunctionName, text));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or JsonException or OperationCanceledException)
+        catch (Exception ex)
         {
             return Fail(Sanitize(ex));
         }
@@ -143,11 +148,13 @@ public sealed class SemanticKernelActuationHandler : IActuationHandler<SemanticK
 
     private static string Sanitize(Exception ex)
     {
+        if (ex is KernelException && ex.InnerException is InvalidOperationException or ArgumentException)
+            return Sanitize(ex.InnerException);
         if (ex is OperationCanceledException)
             return "Semantic Kernel function invocation timed out or was canceled.";
         if (ex.Message.Contains("key", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("secret", StringComparison.OrdinalIgnoreCase))
             return "Semantic Kernel function invocation failed.";
-        return ex.Message;
+        return ex is InvalidOperationException or JsonException or ArgumentException ? ex.Message : "Semantic Kernel function invocation failed.";
     }
 }
 
